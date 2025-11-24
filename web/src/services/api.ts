@@ -19,20 +19,35 @@ export const uploadFiles = async (files: File[]) => {
     return response.data;
 };
 
-export const processPO = async (supplierFile?: File, contributionFile?: File) => {
-    const formData = new FormData();
-    if (supplierFile) {
-        formData.append('supplier_file', supplierFile);
+export const poService = {
+    processPO: async (formData: FormData) => {
+        const response = await api.post('/po/process', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        return response.data;
+    },
+
+    getSuppliers: async () => {
+        try {
+            const response = await api.get('/po/suppliers');
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching suppliers:', error);
+            throw error;
+        }
+    },
+
+    getContributions: async () => {
+        try {
+            const response = await api.get('/po/contributions');
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching contributions:', error);
+            throw error;
+        }
     }
-    if (contributionFile) {
-        formData.append('contribution_file', contributionFile);
-    }
-    const response = await api.post('/po/process', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
-    });
-    return response.data;
 };
 
 export const getResults = async () => {

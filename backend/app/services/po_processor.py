@@ -286,18 +286,23 @@ class POProcessor:
 
             # Calculate adjusted sales
             if 'Padang Daily Sales' in df.columns:
+                # Convert to numeric, coercing errors to NaN, then fill with 0
+                df['Padang Daily Sales'] = pd.to_numeric(df['Padang Daily Sales'], errors='coerce').fillna(0)
                 df['Daily Sales'] = np.where(
                     df['Is in Padang'] == 1,
-                    df['Padang Daily Sales'].fillna(0) * contribution_ratio,
+                    df['Padang Daily Sales'] * contribution_ratio,
                     df.get('Orig Daily Sales', 0)
                 )
                 
             if 'Padang Max Daily Sales' in df.columns:
+                # Convert to numeric, coercing errors to NaN, then fill with 0
+                df['Padang Max Daily Sales'] = pd.to_numeric(df['Padang Max Daily Sales'], errors='coerce').fillna(0)
                 df['Max. Daily Sales'] = np.where(
                     df['Is in Padang'] == 1,
-                    df['Padang Max Daily Sales'].fillna(0) * contribution_ratio,
+                    df['Padang Max Daily Sales'] * contribution_ratio,
                     df.get('Orig Max. Daily Sales', 0)
                 )
+
 
             # Drop intermediate columns
             columns_to_drop = ['Padang Daily Sales', 'Padang Max Daily Sales', 'Orig Daily Sales', 'Orig Max. Daily Sales']
@@ -547,3 +552,24 @@ class POProcessor:
             "data": final_result.to_dict(orient="records"),
             "summary": summary
         }
+
+    def get_supplier_data(self) -> List[Dict[str, Any]]:
+        """Retrieve supplier data as a list of dictionaries."""
+        # Look for supplier file in uploads
+        # Common names: supplier_data.csv, or any file with 'supplier' in name?
+        # For now, let's stick to the one used in processing or a specific name
+        # In process_files, we look for 'supplier_data.csv' or passed path.
+        # Let's check for 'supplier_data.csv' in uploads
+        supplier_path = self.upload_dir / "supplier_data.csv"
+        if supplier_path.exists():
+            df = self.load_supplier_data(supplier_path)
+            return df.fillna("").to_dict(orient="records")
+        return []
+
+    def get_contribution_data(self) -> List[Dict[str, Any]]:
+        """Retrieve contribution data as a list of dictionaries."""
+        contrib_path = self.upload_dir / "store_contribution.csv"
+        if contrib_path.exists():
+            df = self.load_store_contribution(contrib_path)
+            return df.fillna("").to_dict(orient="records")
+        return []

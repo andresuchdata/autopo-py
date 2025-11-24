@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, X, FileSpreadsheet, File as FileIcon } from 'lucide-react';
+import { Upload, X, FileSpreadsheet, File as FileIcon, FileText } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -67,38 +67,39 @@ export function FileUpload({ onFilesSelected, accept, multiple = true, label = "
                     onChange={handleFileInput}
                     accept={accept}
                     multiple={multiple}
-                    id={`file-upload-${label}`}
+                    id={`file - upload - ${label} `}
                 />
-                <label htmlFor={`file-upload-${label}`} className="cursor-pointer flex flex-col items-center">
+                <label htmlFor={`file - upload - ${label} `} className="cursor-pointer flex flex-col items-center">
                     <Upload className="w-12 h-12 text-gray-400 mb-4" />
                     <p className="text-lg font-medium text-gray-700">Drop files here or click to upload</p>
                     <p className="text-sm text-gray-500 mt-1">
-                        {accept ? `Supported formats: ${accept}` : 'All files accepted'}
+                        {accept ? `Supported formats: ${accept} ` : 'All files accepted'}
                     </p>
                 </label>
             </div>
 
             {selectedFiles.length > 0 && (
-                <div className="mt-4 space-y-2">
-                    {selectedFiles.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm">
-                            <div className="flex items-center space-x-3">
-                                {file.name.endsWith('.xlsx') || file.name.endsWith('.csv') ? (
-                                    <FileSpreadsheet className="w-5 h-5 text-green-600" />
-                                ) : (
-                                    <FileIcon className="w-5 h-5 text-gray-500" />
-                                )}
-                                <span className="text-sm font-medium text-gray-700 truncate max-w-xs">{file.name}</span>
-                                <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
-                            </div>
-                            <button
-                                onClick={() => removeFile(index)}
-                                className="p-1 hover:bg-gray-100 rounded-full text-gray-500 hover:text-red-500 transition-colors"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                    ))}
+                <div className="mt-4">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Selected Files ({selectedFiles.length})</h4>
+                    <div className="max-h-40 overflow-y-auto border border-gray-100 rounded-lg">
+                        <ul className="divide-y divide-gray-100">
+                            {selectedFiles.map((file, index) => (
+                                <li key={index} className="flex items-center justify-between p-2 hover:bg-gray-50 text-xs">
+                                    <div className="flex items-center truncate">
+                                        <FileText className="w-3 h-3 text-blue-500 mr-2 flex-shrink-0" />
+                                        <span className="text-gray-600 truncate max-w-[200px]">{file.name}</span>
+                                        <span className="text-gray-400 ml-2">({(file.size / 1024).toFixed(1)} KB)</span>
+                                    </div>
+                                    <button
+                                        onClick={() => removeFile(index)}
+                                        className="text-gray-400 hover:text-red-500 p-1"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
                 </div>
             )}
         </div>
