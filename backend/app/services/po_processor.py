@@ -6,6 +6,33 @@ from typing import List, Dict, Any, Optional
 import shutil
 import re
 
+# Monkey-patch openpyxl to handle 'NAN' and 'INF' strings in numeric cells
+# This fixes Excel files where cells are marked as numeric but contain text like 'NAN' or 'INF'
+try:
+    from openpyxl.worksheet import _reader
+    
+    # Store original function
+    _original_cast_number = _reader._cast_number
+    
+    def _patched_cast_number(value):
+        """Patched version that handles NAN/INF strings gracefully."""
+        if isinstance(value, str):
+            value_upper = value.upper().strip()
+            if value_upper in ('NAN', 'INF', '-INF', '#N/A', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#NULL!'):
+                return 0  # Return 0 for any Excel error or NAN/INF
+        try:
+            return _original_cast_number(value)
+        except (ValueError, TypeError):
+            # If conversion fails, return the string as-is
+            return str(value) if value is not None else ''
+    
+    # Apply the patch
+    _reader._cast_number = _patched_cast_number
+    print("✓ Applied openpyxl monkey-patch for NAN/INF handling")
+except Exception as e:
+    print(f"⚠ Warning: Could not apply openpyxl patch: {e}")
+
+
 class POProcessor:
     def __init__(self, upload_dir: str = "data/uploads", output_dir: str = "data/output"):
         self.upload_dir = Path(upload_dir)
@@ -19,26 +46,41 @@ class POProcessor:
         (self.output_dir / "emergency").mkdir(parents=True, exist_ok=True)
 
     def get_store_name_from_filename(self, filename: str) -> str:
-        """Extract store name from filename, handling different patterns."""
-        # Remove file extension and split by spaces
-        name_parts = Path(filename).stem.split()
+        """Extract store name from filename, looking for text after 'glam'."""
+        # Remove file extension
+        name = Path(filename).stem
         
-        # Handle cases like "002 Miss Glam Pekanbaru.csv" -> "Pekanbaru"
-        # or "01 Miss Glam Padang.csv" -> "Padang"
-        if len(name_parts) >= 3 and name_parts[1].lower() == 'miss' and name_parts[2].lower() == 'glam':
-            return ' '.join(name_parts[3:]).strip().upper()
-        elif len(name_parts) >= 2 and name_parts[0].lower() == 'miss' and name_parts[1].lower() == 'glam':
-            return ' '.join(name_parts[2:]).strip().upper()
-        # Fallback: take everything after the first space
-        elif ' ' in filename:
-            return ' '.join(name_parts[1:]).strip().upper()
-        return name_parts[0].upper()
+        # Use regex to find "glam" (case-insensitive) followed by the location
+        # Pattern: optional number/dot/space, then "miss", then "glam", then capture everything after
+        match = re.search(r'glam\s+(.+)', name, re.IGNORECASE)
+        
+        if match:
+            # Extract the location part (everything after "glam ")
+            location = match.group(1).strip()
+            # Clean up: remove leading numbers, dots, spaces
+            location = re.sub(r'^[\d\.\s]+', '', location).strip()
+            return location.upper()
+        
+        # Fallback: if "glam" not found, try to extract from "Miss Glam X" pattern
+        parts = name.split()
+        for i, part in enumerate(parts):
+            if part.lower() == 'glam' and i + 1 < len(parts):
+                # Return everything after "glam"
+                return ' '.join(parts[i+1:]).strip().upper()
+        
+        # Last resort: return the whole name without extension
+        return name.upper()
 
     def read_csv_file(self, file_path: Path) -> Optional[pd.DataFrame]:
         # Handle Excel files
         if file_path.suffix.lower() in ['.xlsx', '.xls']:
             try:
-                return pd.read_excel(file_path)
+                # Read Excel with default engine (openpyxl for xlsx)
+                # Use dtype=str AND na_filter=False to prevent pandas/openpyxl from trying to 
+                # interpret 'NAN'/'INF' strings as special values
+                # We will handle type conversion and NA values in clean_po_data
+                df = pd.read_excel(file_path, dtype=str, na_filter=False)
+                return df
             except Exception as e:
                 print(f"Error reading Excel file {file_path}: {e}")
                 return None
@@ -161,17 +203,29 @@ class POProcessor:
             for col in numeric_columns:
                 if col in df.columns:
                     try:
-                        # First convert to string, clean, then to numeric
+                        # Handle string conversion carefully
+                        # 1. Convert to string
+                        # 2. Replace 'NAN', 'INF' (case insensitive) with '0'
+                        # 3. Remove non-numeric chars except . , -
+                        # 4. Replace , with .
+                        # 5. Convert to float
+                        
+                        # Fill NA first to avoid 'nan' string
+                        df[col] = df[col].fillna(0)
+                        
+                        df[col] = df[col].astype(str).str.upper()
+                        df[col] = df[col].replace(['NAN', 'INF', '-INF', 'NONE', 'NULL'], '0')
+                        
                         df[col] = (
                             df[col]
-                            .astype(str)
                             .str.replace(r'[^\d.,-]', '', regex=True)  # Remove non-numeric except .,-
                             .str.replace(',', '.', regex=False)         # Convert commas to decimal points
                             .replace('', '0')                           # Empty strings to '0'
                             .astype(float)                              # Convert to float
                             .fillna(0)                                  # Fill any remaining NaNs with 0
                         )
-                    except Exception:
+                    except Exception as e:
+                        # print(f"Warning: Failed to convert column {col} to numeric: {e}")
                         df[col] = 0  # Set to 0 if conversion fails
 
             # Add contribution percentage and calculate costs
@@ -303,7 +357,11 @@ class POProcessor:
         ]
         for col in supplier_columns:
             if col in merged_df.columns:
-                merged_df[col] = merged_df[col].fillna('' if merged_df[col].dtype == 'object' else 0)
+                if merged_df[col].dtype == 'object':
+                    merged_df[col] = merged_df[col].fillna('')
+                else:
+                    # For numeric columns, fill with 0
+                    merged_df[col] = merged_df[col].fillna(0)
         
         return merged_df
 
