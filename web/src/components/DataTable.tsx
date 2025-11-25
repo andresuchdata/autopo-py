@@ -224,7 +224,7 @@ export function DataTable<T extends Record<string, any>>({
                         {paginatedData.map((item, idx) => (
                             <tr key={idx} className="hover:bg-gray-50 transition-colors">
                                 {columns.map((col) => (
-                                    <td key={String(col.key)} className="px-6 py-3 whitespace-nowrap text-sm">
+                                    <td key={String(col.key)} className="px-6 py-3 whitespace-nowrap text-sm text-gray-900">
                                         <div className={clsx(
                                             col.type === 'number' || col.type === 'currency' ? "text-right" : "text-left",
                                             col.highlight === 'blue' && "font-bold text-blue-600",

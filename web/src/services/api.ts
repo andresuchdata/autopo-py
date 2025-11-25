@@ -47,6 +47,26 @@ export const poService = {
             console.error('Error fetching contributions:', error);
             throw error;
         }
+    },
+
+    getStores: async () => {
+        try {
+            const response = await api.get('/po/stores');
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching stores:', error);
+            throw error;
+        }
+    },
+
+    getStoreResults: async (storeName: string) => {
+        try {
+            const response = await api.get(`/po/stores/${encodeURIComponent(storeName)}/results`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error fetching results for store ${storeName}:`, error);
+            throw error;
+        }
     }
 };
 

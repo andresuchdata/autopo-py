@@ -29,9 +29,10 @@ interface ResultItem {
 
 interface ResultsTableProps {
     data: ResultItem[];
+    storeName?: string;
 }
 
-export function ResultsTable({ data }: ResultsTableProps) {
+export function ResultsTable({ data, storeName }: ResultsTableProps) {
     // Columns configuration
     const columns: ColumnDef<ResultItem>[] = [
         { key: 'Brand', label: 'Brand', type: 'text' },
@@ -52,12 +53,16 @@ export function ResultsTable({ data }: ResultsTableProps) {
         { key: 'emergency_po_cost', label: 'Emerg. PO Cost', type: 'currency' },
     ];
 
+    const exportFilename = storeName
+        ? `autopo_results_${storeName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.csv`
+        : 'autopo_results.csv';
+
     return (
         <DataTable
             data={data}
             columns={columns}
             title="Processing Results"
-            filename="autopo_results.csv"
+            filename={exportFilename}
         />
     );
 }
