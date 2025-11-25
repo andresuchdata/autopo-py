@@ -174,14 +174,18 @@ def save_to_csv(df: pd.DataFrame, output_path: Path) -> None:
 
 
 def save_to_m2_format(df: pd.DataFrame, output_path: Path) -> None:
-    df_output = df[["Toko", "SKU", "HPP", "final_updated_regular_po_qty"]].copy()
+    # Filter to only include rows with regular PO qty > 0
+    df_filtered = df[df["final_updated_regular_po_qty"] > 0].copy()
+    df_output = df_filtered[["Toko", "SKU", "HPP", "final_updated_regular_po_qty"]].copy()
     if "SKU" in df_output.columns:
         df_output["SKU"] = df_output["SKU"].apply(lambda x: f"{x}")
     df_output.to_csv(output_path, index=False, sep=";", decimal=",", encoding="utf-8-sig")
 
 
 def save_to_emergency_format(df: pd.DataFrame, output_path: Path) -> None:
-    df_output = df[["Brand", "SKU", "Nama", "Toko", "HPP", "emergency_po_qty", "emergency_po_cost"]].copy()
+    # Filter to only include rows with emergency PO qty > 0
+    df_filtered = df[df["emergency_po_qty"] > 0].copy()
+    df_output = df_filtered[["Brand", "SKU", "Nama", "Toko", "HPP", "emergency_po_qty", "emergency_po_cost"]].copy()
     if "SKU" in df_output.columns:
         df_output["SKU"] = df_output["SKU"].apply(lambda x: f"{x}")
     df_output.to_csv(output_path, index=False, sep=";", decimal=",", encoding="utf-8-sig")

@@ -111,18 +111,25 @@ export function DataTable<T extends Record<string, any>>({
         const rows = processedData.map(item =>
             columns.map(c => {
                 const val = item[c.key as string];
-                if (typeof val === 'string' && val.includes(',')) return `"${val}"`;
-                return val;
+                // Handle strings with commas, quotes, or newlines
+                if (typeof val === 'string' && (val.includes(',') || val.includes('"') || val.includes('\n'))) {
+                    return `"${val.replace(/"/g, '""')}"`;
+                }
+                return val ?? '';
             }).join(',')
         );
-        const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join("\n");
-        const encodedUri = encodeURI(csvContent);
+        const csvContent = [headers, ...rows].join("\n");
+
+        // Use Blob API for better compatibility
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
         link.setAttribute("download", filename);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
     return (
