@@ -102,3 +102,26 @@ async def get_contributions():
         return {"data": contributions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading contributions: {str(e)}")
+
+@router.get("/stores")
+async def get_stores():
+    """Get list of all processed stores."""
+    try:
+        stores = processor.get_store_list()
+        return {"data": stores}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading stores: {str(e)}")
+
+@router.get("/stores/{store_name}/results")
+async def get_store_results(store_name: str):
+    """Get results for a specific store."""
+    try:
+        results = processor.get_store_results(store_name)
+        if not results:
+            raise HTTPException(status_code=404, detail=f"No results found for store: {store_name}")
+        return {"data": results}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading store results: {str(e)}")
+

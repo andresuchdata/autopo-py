@@ -530,9 +530,40 @@ class POProcessor:
         if not processed_data:
             return {"status": "error", "message": f"No data processed. Errors: {'; '.join(errors)}"}
 
-        final_result = pd.concat(processed_data, ignore_index=True)
+        # Save individual store results and build store list
+        store_list = []
+        all_data = []
         
-        # Save result
+        for i, store_df in enumerate(processed_data):
+            # Get store location from the dataframe
+            location = store_df['Location'].iloc[0] if 'Location' in store_df.columns and len(store_df) > 0 else f"Store_{i+1}"
+            
+            # Clean location name for filename
+            safe_location = location.replace(' ', '_').replace('/', '_').upper()
+            
+            # Save individual store result
+            store_file = self.output_dir / f"result_{safe_location}.csv"
+            store_df.to_csv(store_file, index=False, sep=';', encoding='utf-8-sig')
+            
+            # Add to store list
+            store_list.append({
+                "name": location,
+                "safe_name": safe_location,
+                "filename": filenames[i] if i < len(filenames) else f"file_{i+1}",
+                "row_count": len(store_df),
+                "timestamp": pd.Timestamp.now().isoformat()
+            })
+            
+            all_data.append(store_df)
+        
+        # Save store list as JSON
+        import json
+        stores_file = self.output_dir / "stores.json"
+        with open(stores_file, 'w', encoding='utf-8') as f:
+            json.dump(store_list, f, indent=2, ensure_ascii=False)
+        
+        # Also save merged result for backward compatibility
+        final_result = pd.concat(all_data, ignore_index=True)
         output_file = self.output_dir / "result.csv"
         final_result.to_csv(output_file, index=False, sep=';', encoding='utf-8-sig')
         
@@ -549,27 +580,61 @@ class POProcessor:
         
         return {
             "status": "success",
+            "message": f"Processed {len(filenames)} files successfully",
             "data": final_result.to_dict(orient="records"),
-            "summary": summary
+            "summary": summary,
+            "stores": store_list
         }
 
     def get_supplier_data(self) -> List[Dict[str, Any]]:
         """Retrieve supplier data as a list of dictionaries."""
-        # Look for supplier file in uploads
-        # Common names: supplier_data.csv, or any file with 'supplier' in name?
-        # For now, let's stick to the one used in processing or a specific name
-        # In process_files, we look for 'supplier_data.csv' or passed path.
-        # Let's check for 'supplier_data.csv' in uploads
         supplier_path = self.upload_dir / "supplier_data.csv"
         if supplier_path.exists():
-            df = self.load_supplier_data(supplier_path)
-            return df.fillna("").to_dict(orient="records")
+            try:
+                df = self.load_supplier_data(supplier_path)
+                return df.fillna("").to_dict(orient="records")
+            except Exception as e:
+                print(f"Error loading supplier data: {e}")
+                return []
         return []
 
     def get_contribution_data(self) -> List[Dict[str, Any]]:
         """Retrieve contribution data as a list of dictionaries."""
         contrib_path = self.upload_dir / "store_contribution.csv"
         if contrib_path.exists():
-            df = self.load_store_contribution(contrib_path)
-            return df.fillna("").to_dict(orient="records")
+            try:
+                df = self.load_store_contribution(contrib_path)
+                return df.fillna("").to_dict(orient="records")
+            except Exception as e:
+                print(f"Error loading contribution data: {e}")
+                return []
+        return []
+    
+    def get_store_list(self) -> List[Dict[str, Any]]:
+        """Retrieve list of processed stores from stores.json."""
+        import json
+        stores_file = self.output_dir / "stores.json"
+        if stores_file.exists():
+            try:
+                with open(stores_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading store list: {e}")
+                return []
+        return []
+    
+    def get_store_results(self, store_name: str) -> List[Dict[str, Any]]:
+        """Retrieve results for a specific store."""
+        # Clean store name to match saved filename
+        safe_name = store_name.replace(' ', '_').replace('/', '_').upper()
+        store_file = self.output_dir / f"result_{safe_name}.csv"
+        
+        if store_file.exists():
+            try:
+                df = pd.read_csv(store_file, sep=';', encoding='utf-8-sig')
+                df = df.replace([np.inf, -np.inf], 0).fillna(0)
+                return df.to_dict(orient="records")
+            except Exception as e:
+                print(f"Error loading store results for {store_name}: {e}")
+                return []
         return []
