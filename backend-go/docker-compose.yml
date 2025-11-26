@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: autopo-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-autopo}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-autopo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - autopo-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autopo-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-autopo}
+      - DB_SSLMODE=disable
+      - APP_UPLOAD_DIR=/app/data/uploads
+      - APP_DATA_DIR=/app/data/output
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data/uploads:/app/data/uploads
+      - ./data/output:/app/data/output
+    networks:
+      - autopo-network
+    restart: unless-stopped
+
+networks:
+  autopo-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
