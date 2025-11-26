@@ -1,0 +1,233 @@
+[
+  {
+    "name": "PADANG",
+    "safe_name": "PADANG",
+    "filename": "1. Miss Glam Padang.xlsx",
+    "row_count": 6810,
+    "timestamp": "2025-11-25T12:41:13.475220"
+  },
+  {
+    "name": "PEKANBARU",
+    "safe_name": "PEKANBARU",
+    "filename": "2. Miss Glam Pekanbaru.xlsx",
+    "row_count": 5988,
+    "timestamp": "2025-11-25T12:41:13.549242"
+  },
+  {
+    "name": "JAMBI",
+    "safe_name": "JAMBI",
+    "filename": "3. Miss Glam Jambi.xlsx",
+    "row_count": 5246,
+    "timestamp": "2025-11-25T12:41:13.612238"
+  },
+  {
+    "name": "BUKITTINGGI",
+    "safe_name": "BUKITTINGGI",
+    "filename": "4. Miss Glam Bukittinggi.xlsx",
+    "row_count": 5333,
+    "timestamp": "2025-11-25T12:41:13.676024"
+  },
+  {
+    "name": "PANAM",
+    "safe_name": "PANAM",
+    "filename": "5. Miss Glam Panam.xlsx",
+    "row_count": 5293,
+    "timestamp": "2025-11-25T12:41:13.741922"
+  },
+  {
+    "name": "MUARO BUNGO",
+    "safe_name": "MUARO_BUNGO",
+    "filename": "6. Miss Glam Muaro Bungo.xlsx",
+    "row_count": 4914,
+    "timestamp": "2025-11-25T12:41:13.803854"
+  },
+  {
+    "name": "LAMPUNG",
+    "safe_name": "LAMPUNG",
+    "filename": "7. Miss Glam Lampung.xlsx",
+    "row_count": 4447,
+    "timestamp": "2025-11-25T12:41:13.860146"
+  },
+  {
+    "name": "BENGKULU",
+    "safe_name": "BENGKULU",
+    "filename": "8. Miss Glam Bengkulu.xlsx",
+    "row_count": 3972,
+    "timestamp": "2025-11-25T12:41:13.911083"
+  },
+  {
+    "name": "MEDAN",
+    "safe_name": "MEDAN",
+    "filename": "9. Miss Glam Medan.xlsx",
+    "row_count": 5782,
+    "timestamp": "2025-11-25T12:41:13.979511"
+  },
+  {
+    "name": "PALEMBANG",
+    "safe_name": "PALEMBANG",
+    "filename": "10. Miss Glam Palembang.xlsx",
+    "row_count": 4894,
+    "timestamp": "2025-11-25T12:41:14.039765"
+  },
+  {
+    "name": "DAMAR",
+    "safe_name": "DAMAR",
+    "filename": "11. Miss Glam Damar.xlsx",
+    "row_count": 6705,
+    "timestamp": "2025-11-25T12:41:14.119892"
+  },
+  {
+    "name": "BANGKA",
+    "safe_name": "BANGKA",
+    "filename": "12. Miss Glam Bangka.xlsx",
+    "row_count": 4559,
+    "timestamp": "2025-11-25T12:41:14.175726"
+  },
+  {
+    "name": "PAYAKUMBUH",
+    "safe_name": "PAYAKUMBUH",
+    "filename": "13. Miss Glam Payakumbuh.xlsx",
+    "row_count": 5324,
+    "timestamp": "2025-11-25T12:41:14.242070"
+  },
+  {
+    "name": "SOLOK",
+    "safe_name": "SOLOK",
+    "filename": "14. Miss Glam Solok.xlsx",
+    "row_count": 4672,
+    "timestamp": "2025-11-25T12:41:14.299151"
+  },
+  {
+    "name": "TEMBILAHAN",
+    "safe_name": "TEMBILAHAN",
+    "filename": "15. Miss Glam Tembilahan.xlsx",
+    "row_count": 4368,
+    "timestamp": "2025-11-25T12:41:14.354007"
+  },
+  {
+    "name": "LUBUK LINGGAU",
+    "safe_name": "LUBUK_LINGGAU",
+    "filename": "16. Miss Glam Lubuk Linggau.xlsx",
+    "row_count": 4418,
+    "timestamp": "2025-11-25T12:41:14.410810"
+  },
+  {
+    "name": "DUMAI",
+    "safe_name": "DUMAI",
+    "filename": "17. Miss Glam Dumai.xlsx",
+    "row_count": 4786,
+    "timestamp": "2025-11-25T12:41:14.468389"
+  },
+  {
+    "name": "KEDATON",
+    "safe_name": "KEDATON",
+    "filename": "18. Miss Glam Kedaton.xlsx",
+    "row_count": 4220,
+    "timestamp": "2025-11-25T12:41:14.522290"
+  },
+  {
+    "name": "RANTAU PRAPAT",
+    "safe_name": "RANTAU_PRAPAT",
+    "filename": "19. Miss Glam Rantau Prapat.xlsx",
+    "row_count": 4289,
+    "timestamp": "2025-11-25T12:41:14.574720"
+  },
+  {
+    "name": "TANJUNG PINANG",
+    "safe_name": "TANJUNG_PINANG",
+    "filename": "20. Miss Glam Tanjung Pinang.xlsx",
+    "row_count": 4047,
+    "timestamp": "2025-11-25T12:41:14.626065"
+  },
+  {
+    "name": "SUTOMO",
+    "safe_name": "SUTOMO",
+    "filename": "21. Miss Glam Sutomo.xlsx",
+    "row_count": 5728,
+    "timestamp": "2025-11-25T12:41:14.695531"
+  },
+  {
+    "name": "PASAMAN BARAT",
+    "safe_name": "PASAMAN_BARAT",
+    "filename": "22. Miss Glam Pasaman Barat.xlsx",
+    "row_count": 3859,
+    "timestamp": "2025-11-25T12:41:14.745789"
+  },
+  {
+    "name": "HALAT",
+    "safe_name": "HALAT",
+    "filename": "23. Miss Glam Halat.xlsx",
+    "row_count": 4819,
+    "timestamp": "2025-11-25T12:41:14.804865"
+  },
+  {
+    "name": "DURI",
+    "safe_name": "DURI",
+    "filename": "24. Miss Glam Duri.xlsx",
+    "row_count": 3974,
+    "timestamp": "2025-11-25T12:41:14.852613"
+  },
+  {
+    "name": "SUDIRMAN",
+    "safe_name": "SUDIRMAN",
+    "filename": "25. Miss Glam Sudirman.xlsx",
+    "row_count": 5663,
+    "timestamp": "2025-11-25T12:41:14.922125"
+  },
+  {
+    "name": "DR. MANSYUR",
+    "safe_name": "DR._MANSYUR",
+    "filename": "26. Miss Glam Dr. Mansyur.xlsx",
+    "row_count": 4978,
+    "timestamp": "2025-11-25T12:41:14.982811"
+  },
+  {
+    "name": "P. SIDIMPUAN",
+    "safe_name": "P._SIDIMPUAN",
+    "filename": "27. Miss Glam P. Sidimpuan.xlsx",
+    "row_count": 3777,
+    "timestamp": "2025-11-25T12:41:15.029132"
+  },
+  {
+    "name": "ACEH",
+    "safe_name": "ACEH",
+    "filename": "28. Miss Glam Aceh.xlsx",
+    "row_count": 3561,
+    "timestamp": "2025-11-25T12:41:15.071651"
+  },
+  {
+    "name": "MARPOYAN",
+    "safe_name": "MARPOYAN",
+    "filename": "29. Miss Glam Marpoyan.xlsx",
+    "row_count": 4629,
+    "timestamp": "2025-11-25T12:41:15.130077"
+  },
+  {
+    "name": "SEI PENUH",
+    "safe_name": "SEI_PENUH",
+    "filename": "30. Miss Glam Sei Penuh.xlsx",
+    "row_count": 3589,
+    "timestamp": "2025-11-25T12:41:15.174095"
+  },
+  {
+    "name": "MAYANG",
+    "safe_name": "MAYANG",
+    "filename": "31. Miss Glam Mayang.xlsx",
+    "row_count": 4275,
+    "timestamp": "2025-11-25T12:41:15.227894"
+  },
+  {
+    "name": "SOETA",
+    "safe_name": "SOETA",
+    "filename": "32. Miss Glam Soeta.xlsx",
+    "row_count": 4503,
+    "timestamp": "2025-11-25T12:41:15.280113"
+  },
+  {
+    "name": "BALIKPAPAN",
+    "safe_name": "BALIKPAPAN",
+    "filename": "33. Miss Glam Balikpapan.xlsx",
+    "row_count": 4509,
+    "timestamp": "2025-11-25T12:41:15.332926"
+  }
+]
