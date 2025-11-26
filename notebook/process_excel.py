@@ -221,9 +221,12 @@ if __name__ == "__main__":
                 print(f"✅ Successfully read {file_path.name} with {len(df)} rows")
                 # print(f"Columns: {list(df.columns)}")
 
+                df_output = df.copy().drop_duplicates(subset=['SKU'], keep='first')
+                print(f"Rows after de-duplicate: {len(df_output)}")
+
                 # Save to CSV
                 output_path = OUTPUT_CSV_DIR / f"{file_path.stem}.csv"
-                df.to_csv(output_path, index=False, sep=';', decimal=',')
+                df_output.to_csv(output_path, index=False, sep=';', decimal=',')
                 print(f"✅ Saved to {output_path}")
             else:
                 print(f"❌ Failed to read {file_path.name}")
