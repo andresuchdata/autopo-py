@@ -281,4 +281,5 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
->>>>>>> e925fdd868a9b5619121f364b4d177ed103f8c17
+
+.DS_Store
