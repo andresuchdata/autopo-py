@@ -42,12 +42,12 @@ export function Sidebar({
     return (
         <div
             className={clsx(
-                "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col h-full",
+                "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col h-screen fixed left-0 top-0 bottom-0 z-10",
                 collapsed ? "w-12" : "w-64"
             )}
         >
             {/* Header with Toggle */}
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0 bg-white">
                 {!collapsed && (
                     <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
                         Stores
@@ -68,13 +68,13 @@ export function Sidebar({
 
             {/* Store List */}
             {!collapsed && (
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto py-2">
                     {stores.length === 0 ? (
                         <div className="p-4 text-center text-sm text-gray-500">
                             No stores processed yet
                         </div>
                     ) : (
-                        <div className="p-2 space-y-1">
+                        <div className="px-2 space-y-1">
                             {stores.map((store) => (
                                 <button
                                     key={store.safe_name}
