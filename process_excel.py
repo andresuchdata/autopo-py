@@ -223,7 +223,7 @@ if __name__ == "__main__":
 
                 # Save to CSV
                 output_path = OUTPUT_CSV_DIR / f"{file_path.stem}.csv"
-                df.to_csv(output_path, index=False)
+                df.to_csv(output_path, index=False, sep=';', decimal=',')
                 print(f"✅ Saved to {output_path}")
             else:
                 print(f"❌ Failed to read {file_path.name}")
