@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Download, ChevronLeft, ChevronRight, ArrowUpDown, Search, Filter } from 'lucide-react';
 import { clsx } from 'clsx';
+import { exportToCsv, m2ExportConfig, emergencyExportConfig } from '../utils/exportUtils';
 
 export interface ColumnDef<T> {
     key: keyof T | string;
@@ -107,29 +108,15 @@ export function DataTable<T extends Record<string, any>>({
     };
 
     const exportCSV = () => {
-        const headers = columns.map(c => c.label).join(',');
-        const rows = processedData.map(item =>
-            columns.map(c => {
-                const val = item[c.key as string];
-                // Handle strings with commas, quotes, or newlines
-                if (typeof val === 'string' && (val.includes(',') || val.includes('"') || val.includes('\n'))) {
-                    return `"${val.replace(/"/g, '""')}"`;
-                }
-                return val ?? '';
-            }).join(',')
-        );
-        const csvContent = [headers, ...rows].join("\n");
+        exportToCsv(processedData, columns as any, filename);
+    };
 
-        // Use Blob API for better compatibility
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", filename);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+    const exportM2CSV = () => {
+        exportToCsv(data, m2ExportConfig.columns, m2ExportConfig.filename);
+    };
+
+    const exportEmergencyCSV = () => {
+        exportToCsv(data, emergencyExportConfig.columns, emergencyExportConfig.filename);
     };
 
     return (
@@ -154,10 +141,24 @@ export function DataTable<T extends Record<string, any>>({
                         </button>
                         <button
                             onClick={exportCSV}
-                            className="flex items-center px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            className="flex items-center px-3 py-1.5 text-sm bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
                         >
-                            <Download className="w-4 h-4 mr-2" />
-                            Export
+                            <Download className="w-4 h-4 mr-1.5" />
+                            Export Complete
+                        </button>
+                        <button
+                            onClick={exportM2CSV}
+                            className="flex items-center px-3 py-1.5 text-sm bg-blue-50 border border-blue-100 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                            <Download className="w-4 h-4 mr-1.5" />
+                            M2 Export
+                        </button>
+                        <button
+                            onClick={exportEmergencyCSV}
+                            className="flex items-center px-3 py-1.5 text-sm bg-red-50 border border-red-100 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+                        >
+                            <Download className="w-4 h-4 mr-1.5" />
+                            Emergency Export
                         </button>
                     </div>
                 </div>
