@@ -3,7 +3,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
@@ -11,52 +11,65 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog"
-	"github.com/yourusername/autopo/backend-go/internal/api/handlers"
-	"github.com/yourusername/autopo/backend-go/internal/api/middleware"
-	"github.com/yourusername/autopo/backend-go/internal/config"
-	"github.com/yourusername/autopo/backend-go/internal/repository/postgres"
-	"github.com/yourusername/autopo/backend-go/internal/service"
-	"github.com/yourusername/autopo/backend-go/pkg/logger"
+	_ "github.com/lib/pq"
+	"github.com/yourusername/autopo/internal/api"
+	"github.com/yourusername/autopo/internal/config"
+	"github.com/yourusername/autopo/internal/repository"
+	"github.com/yourusername/autopo/internal/service"
+	"github.com/yourusername/autopo/pkg/logger"
 )
 
 func main() {
 	// Load configuration
-	cfg := config.Load()
-
-	// Initialize logger
-	logger.SetLevel(cfg.Server.Mode)
-	if cfg.Server.Mode == "debug" {
-		gin.SetMode(gin.DebugMode)
-	} else {
-		gin.SetMode(gin.ReleaseMode)
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize database
-	db, err := postgres.NewDB(&cfg.Database)
+	// Initialize logger
+	logger.Init(cfg.Env == "production")
+
+	// Initialize database connection
+	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatal("Failed to connect to database", "error", err)
 	}
 	defer db.Close()
 
+	// Test database connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		logger.Fatal("Failed to ping database", "error", err)
+	}
+
+	// Initialize repositories
+	storeRepo := repository.NewStoreRepository(db)
+	brandRepo := repository.NewBrandRepository(db)
+	skuRepo := repository.NewSKURepository(db)
+	stockHealthRepo := repository.NewStockHealthRepository(db)
+
 	// Initialize services
-	poService := service.NewPOService(db)
+	services := &service.Services{
+		Store:       service.NewStoreService(storeRepo),
+		Brand:       service.NewBrandService(brandRepo),
+		SKU:         service.NewSKUService(skuRepo, brandRepo),
+		StockHealth: service.NewStockHealthService(stockHealthRepo, storeRepo, brandRepo, skuRepo),
+	}
 
 	// Initialize HTTP server
-	router := setupRouter(poService)
+	router := api.SetupRouter(services)
 	srv := &http.Server{
-		Addr:         ":" + cfg.Server.Port,
-		Handler:      router,
-		ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
-		WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+		Addr:    ":" + cfg.Port,
+		Handler: router,
 	}
 
 	// Start server in a goroutine
 	go func() {
-		logger.Log.Info().Str("port", cfg.Server.Port).Msg("Starting server")
+		logger.Info("Starting server", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Log.Fatal().Err(err).Msg("Failed to start server")
+			logger.Fatal("Failed to start server", "error", err)
 		}
 	}()
 
@@ -64,43 +77,16 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	logger.Log.Info().Msg("Shutting down server...")
+	logger.Info("Shutting down server...")
 
 	// The context is used to inform the server it has 5 seconds to finish
 	// the request it is currently handling
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.Log.Fatal().Err(err).Msg("Server forced to shutdown")
+		logger.Fatal("Server forced to shutdown", "error", err)
 	}
 
-	logger.Log.Info().Msg("Server exiting")
-}
-
-func setupRouter(poService *service.POService) *gin.Engine {
-	router := gin.New()
-
-	// Middleware
-	router.Use(
-		middleware.Logger(),
-		middleware.Recovery(),
-		middleware.CORS(),
-	)
-
-	// Health check
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
-
-	// API v1
-	v1 := router.Group("/api/v1")
-	{
-		poHandler := handlers.NewPOHandler(poService)
-		v1.POST("/upload", poHandler.UploadPO)
-		v1.GET("/stores", poHandler.GetStores)
-		v1.GET("/stores/:store/results", poHandler.GetStoreResults)
-	}
-
-	return router
+	logger.Info("Server exiting")
 }
