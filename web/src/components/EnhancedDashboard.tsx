@@ -159,8 +159,27 @@ export function EnhancedDashboard() {
     setIsLoadingItems(false);
   };
 
+  const formatValue = (value: number, title: string) => {
+    if (title.includes('Value')) {
+      // Format as currency for value chart
+      return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0
+      }).format(value);
+    } else if (title.includes('Stock')) {
+      // Format with thousand separators for stock
+      return new Intl.NumberFormat('id-ID').format(value);
+    }
+    return value;
+  };
+
   const renderPieChart = (data: any[], dataKey: string, nameKey: string, title: string) => {
     if (!data || data.length === 0) return null;
+    
+    // Calculate total for percentage calculation
+    const total = data.reduce((sum, item) => sum + (item.value || 0), 0);
     
     return (
       <Card>
@@ -179,9 +198,12 @@ export function EnhancedDashboard() {
                 paddingAngle={2}
                 dataKey={dataKey}
                 nameKey={nameKey}
-                label={({ name, percent }) => 
-                  `${name} ${(percent ? percent * 100 : 0).toFixed(0)}%`
-                }
+                label={(props) => {
+                  const { value, payload } = props;
+                  const percentage = total > 0 ? (value / total) * 100 : 0;
+                  return `${CONDITION_LABELS[payload.condition as keyof typeof CONDITION_LABELS].split(' ')[0]}\n${percentage.toFixed(0)}%`;
+                }}
+                labelLine={false}
               >
                 {data.map((entry, index) => (
                   <Cell 
@@ -191,12 +213,20 @@ export function EnhancedDashboard() {
                 ))}
               </Pie>
               <Tooltip 
-                formatter={(value: any, name: any, props: any) => [
-                  value,
-                  CONDITION_LABELS[props.payload.condition as keyof typeof CONDITION_LABELS] || name
-                ]}
+                formatter={(value: any, name: any, props: any) => {
+                  const percentage = total > 0 ? (props.value / total) * 100 : 0;
+                  return [
+                    `${formatValue(props.value, title)} (${percentage.toFixed(1)}%)`,
+                    CONDITION_LABELS[props.payload.condition as keyof typeof CONDITION_LABELS]
+                  ];
+                }}
               />
-              <Legend />
+              <Legend 
+                formatter={(value, entry: any, index) => {
+                  const condition = data[index]?.condition;
+                  return CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS];
+                }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </CardContent>
@@ -319,18 +349,24 @@ export function EnhancedDashboard() {
 
           {renderFilters()}
 
-          <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
-            {healthData?.byBrand?.length > 0 && renderPieChart(
-              healthData.byBrand,
-              'count',
-              'brand',
-              'Stock Condition by Brand'
+          <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
+            {data?.charts?.pieDataBySkuCount?.length > 0 && renderPieChart(
+              data?.charts?.pieDataBySkuCount || [],
+              'value',
+              'condition',
+              'SKU Count by Condition'
             )}
-            {healthData?.byStore?.length > 0 && renderPieChart(
-              healthData.byStore,
-              'count',
-              'store',
-              'Stock Condition by Store'
+            {data?.charts?.pieDataByStock?.length > 0 && renderPieChart(
+              data?.charts?.pieDataByStock || [],
+              'value',
+              'condition',
+              'Total Stock by Condition'
+            )}
+            {data?.charts?.pieDataByValue?.length > 0 && renderPieChart(
+              data?.charts.pieDataByValue,
+              'value',
+              'condition',
+              'Total Value by Condition (IDR)'
             )}
           </div>
         </TabsContent>
