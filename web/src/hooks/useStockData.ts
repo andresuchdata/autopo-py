@@ -31,12 +31,12 @@ export function useStockData() {
   const refresh = useCallback(async (date: string) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const result = await dashboardService.getDashboardData(date);
       console.log("useStockData", result);
 
-      if(!result) {
+      if (!result) {
         throw Error("Invalid or no data!")
       }
 
@@ -60,66 +60,73 @@ export function useStockData() {
       total: number;
       byCondition: Record<ConditionKey, number>;
     };
+    charts: {
+      conditionCounts: Record<ConditionKey, number>;
+      pieDataBySkuCount: { condition: ConditionKey; value: number }[];
+      pieDataByStock: { condition: ConditionKey; value: number }[];
+      pieDataByValue: { condition: ConditionKey; value: number }[];
+    };
   }
 
-// Get filtered summary based on brand and store filters
-const getFilteredSummary = useCallback((brand?: string, store?: string): FilteredSummary | null => {
-  if (!data) return null;
-  
-  // Start with all items
-  let filteredItems = [...data.summary.items];
-  
-  // Apply filters if provided
-  if (brand) {
-    filteredItems = filteredItems.filter(item => item.brand === brand);
-  }
-  
-  if (store) {
-    filteredItems = filteredItems.filter(item => item.store === store);
-  }
-  
-  // Group by brand
-  const byBrand = new Map<string, NormalizedHealthItem[]>();
-  // Group by store
-  const byStore = new Map<string, NormalizedHealthItem[]>();
-  
-  // Count by condition
-  const byCondition = {
-    overstock: 0,
-    healthy: 0,
-    low: 0,
-    nearly_out: 0,
-    out_of_stock: 0
-  } as Record<ConditionKey, number>;
-  
-  // Process all items once to build our data structures
-  filteredItems.forEach(item => {
+  // Get filtered summary based on brand and store filters
+  const getFilteredSummary = useCallback((brand?: string, store?: string): FilteredSummary | null => {
+    if (!data) return null;
+
+    // Start with all items
+    let filteredItems = [...data.summary.items];
+
+    // Apply filters if provided
+    if (brand) {
+      filteredItems = filteredItems.filter(item => item.brand === brand);
+    }
+
+    if (store) {
+      filteredItems = filteredItems.filter(item => item.store === store);
+    }
+
     // Group by brand
-    if (!byBrand.has(item.brand)) {
-      byBrand.set(item.brand, []);
-    }
-    byBrand.get(item.brand)?.push(item);
-    
+    const byBrand = new Map<string, NormalizedHealthItem[]>();
     // Group by store
-    if (!byStore.has(item.store)) {
-      byStore.set(item.store, []);
-    }
-    byStore.get(item.store)?.push(item);
-    
+    const byStore = new Map<string, NormalizedHealthItem[]>();
+
     // Count by condition
-    byCondition[item.condition] = (byCondition[item.condition] || 0) + 1;
-  });
-  
-  return {
-    items: filteredItems,
-    byBrand,
-    byStore,
-    summary: {
-      total: filteredItems.length,
-      byCondition
-    }
-  };
-}, [data]);
+    const byCondition = {
+      overstock: 0,
+      healthy: 0,
+      low: 0,
+      nearly_out: 0,
+      out_of_stock: 0
+    } as Record<ConditionKey, number>;
+
+    // Process all items once to build our data structures
+    filteredItems.forEach(item => {
+      // Group by brand
+      if (!byBrand.has(item.brand)) {
+        byBrand.set(item.brand, []);
+      }
+      byBrand.get(item.brand)?.push(item);
+
+      // Group by store
+      if (!byStore.has(item.store)) {
+        byStore.set(item.store, []);
+      }
+      byStore.get(item.store)?.push(item);
+
+      // Count by condition
+      byCondition[item.condition] = (byCondition[item.condition] || 0) + 1;
+    });
+
+    return {
+      items: filteredItems,
+      byBrand,
+      byStore,
+      summary: {
+        total: filteredItems.length,
+        byCondition
+      },
+      charts: dashboardService.prepareChartData(filteredItems)
+    };
+  }, [data]);
 
   // Get unique brands from data
   const getBrands = useCallback(() => {

@@ -84,43 +84,43 @@ export class DashboardService {
   }
 
   // In dashboardService.ts
-async getDashboardData(date: string, brand?: string, store?: string): Promise<DashboardData> {
-  const cacheKey = this.getCacheKey(date, brand, store);
-  const cachedData = this.cache.get(cacheKey);
-  
-  if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL_MS) {
-    return cachedData.data;
-  }
+  async getDashboardData(date: string, brand?: string, store?: string): Promise<DashboardData> {
+    const cacheKey = this.getCacheKey(date, brand, store);
+    const cachedData = this.cache.get(cacheKey);
 
-  try {
-    const data = await healthMonitorService.getData(date);
-    const normalizedItems = this.normalizeItems(data);
-    
-    // Apply filters if provided
-    let filteredItems = normalizedItems;
-    if (brand) {
-      filteredItems = filteredItems.filter(item => item.brand === brand);
+    if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL_MS) {
+      return cachedData.data;
     }
-    if (store) {
-      filteredItems = filteredItems.filter(item => item.store === store);
+
+    try {
+      const data = await healthMonitorService.getData(date);
+      const normalizedItems = this.normalizeItems(data);
+
+      // Apply filters if provided
+      let filteredItems = normalizedItems;
+      if (brand) {
+        filteredItems = filteredItems.filter(item => item.brand === brand);
+      }
+      if (store) {
+        filteredItems = filteredItems.filter(item => item.store === store);
+      }
+
+      const summary = this.calculateSummary(filteredItems);
+      const charts = this.prepareChartData(filteredItems);
+
+      const result = { summary, charts };
+
+      this.cache.set(cacheKey, {
+        data: result,
+        timestamp: Date.now()
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      throw error;
     }
-    
-    const summary = this.calculateSummary(filteredItems);
-    const charts = this.prepareChartData(filteredItems);
-    
-    const result = { summary, charts };
-    
-    this.cache.set(cacheKey, {
-      data: result,
-      timestamp: Date.now()
-    });
-    
-    return result;
-  } catch (error) {
-    console.error('Error fetching dashboard data:', error);
-    throw error;
   }
-}
 
   private normalizeItems(data: HealthMonitorData): NormalizedHealthItem[] {
     if (!data?.data?.length) return [];
@@ -221,7 +221,7 @@ async getDashboardData(date: string, brand?: string, store?: string): Promise<Da
     return summary;
   }
 
-  private prepareChartData(items: NormalizedHealthItem[]) {
+  public prepareChartData(items: NormalizedHealthItem[]) {
     // Initialize data structures for all conditions
     const conditionCounts = CONDITION_KEYS.reduce((acc, key) => {
       acc[key] = 0;
