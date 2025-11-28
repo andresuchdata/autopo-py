@@ -122,6 +122,10 @@ export class DashboardService {
     }
   }
 
+  async getAvailableDates(): Promise<string[]> {
+    return healthMonitorService.getAvailableDates();
+  }
+
   private normalizeItems(data: HealthMonitorData): NormalizedHealthItem[] {
     if (!data?.data?.length) return [];
 
