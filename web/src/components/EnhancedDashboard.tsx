@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import {  useState } from 'react';
+import { useState } from 'react';
 import { ConditionKey } from '@/services/dashboardService';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -71,7 +71,7 @@ export function EnhancedDashboard() {
     setIsLoadingItems(true);
     try {
       if (!filteredData) return;
-      
+
       // Get filtered items for the selected condition
       const items = filteredData.items
         .filter(item => item.condition === condition)
@@ -85,7 +85,7 @@ export function EnhancedDashboard() {
           days_of_cover: item.daysOfCover,
           condition: item.condition,
         }));
-      
+
       setStockItems(items);
       setIsDialogOpen(true);
     } catch (err) {
@@ -95,18 +95,22 @@ export function EnhancedDashboard() {
     }
   };
 
-  // Render the pie chart with filtered data
-  const renderPieChart = (data: any, dataKey: string, nameKey: string, title: string) => {
+  // Render a single pie chart
+  const renderPieChart = (
+    data: any[],
+    title: string,
+    valueFormatter?: (value: number) => string
+  ) => {
     if (!data || data.length === 0) return null;
-    
-    const total = data.reduce((sum: number, item: any) => sum + (item[dataKey] || 0), 0);
-    
+
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
+      <Card className="flex flex-col">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg font-semibold text-center">{title}</CardTitle>
         </CardHeader>
-        <CardContent className="h-[300px]">
+        <CardContent className="flex-1 min-h-[250px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -116,29 +120,32 @@ export function EnhancedDashboard() {
                 innerRadius={60}
                 outerRadius={80}
                 paddingAngle={2}
-                dataKey={dataKey}
-                nameKey={nameKey}
-                label={(props) => {
-                  const { value, payload } = props;
-                  const percentage = total > 0 ? (value / total) * 100 : 0;
-                  return `${CONDITION_LABELS[payload.condition as keyof typeof CONDITION_LABELS].split(' ')[0]}\n${percentage.toFixed(0)}%`;
-                }}
-                labelLine={false}
+                dataKey="value"
+                nameKey="condition"
               >
-                {data.map((entry: any, index: number) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={COLORS[entry.condition as keyof typeof COLORS] || '#999999'} 
+                {data.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={COLORS[entry.condition as keyof typeof COLORS] || '#999999'}
                   />
                 ))}
               </Pie>
-              <Tooltip 
-                formatter={(value: any, name: any, props: any) => [
-                  value,
+              <Tooltip
+                formatter={(value: number, name: string, props: any) => [
+                  valueFormatter ? valueFormatter(value) : value.toLocaleString(),
                   CONDITION_LABELS[props.payload.condition as keyof typeof CONDITION_LABELS]
                 ]}
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
               />
-              <Legend />
+              <Legend
+                verticalAlign="bottom"
+                height={36}
+                formatter={(value, entry: any) => {
+                  const item = data.find(d => d.condition === entry.payload.condition);
+                  const percent = item ? ((item.value / total) * 100).toFixed(0) : 0;
+                  return <span className="text-xs text-gray-600 ml-1">{`${CONDITION_LABELS[value as keyof typeof CONDITION_LABELS].split(' ')[0]} (${percent}%)`}</span>;
+                }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </CardContent>
@@ -148,14 +155,14 @@ export function EnhancedDashboard() {
 
   // Render filter controls
   const renderFilters = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div>
-        <Label htmlFor="brand-filter">Brand</Label>
+    <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white p-4 rounded-lg shadow-sm border">
+      <div className="flex-1">
+        <Label htmlFor="brand-filter" className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">Brand</Label>
         <Select
           value={filters.brand || ''}
-          onValueChange={(value) => handleFilterChange({ ...filters, brand: value || undefined })}
+          onValueChange={(value) => handleFilterChange({ ...filters, brand: value === 'all' ? undefined : value })}
         >
-          <SelectTrigger id="brand-filter">
+          <SelectTrigger id="brand-filter" className="w-full">
             <SelectValue placeholder="All Brands" />
           </SelectTrigger>
           <SelectContent>
@@ -168,13 +175,13 @@ export function EnhancedDashboard() {
           </SelectContent>
         </Select>
       </div>
-      <div>
-        <Label htmlFor="store-filter">Store</Label>
+      <div className="flex-1">
+        <Label htmlFor="store-filter" className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">Store</Label>
         <Select
           value={filters.store || ''}
-          onValueChange={(value) => handleFilterChange({ ...filters, store: value || undefined })}
+          onValueChange={(value) => handleFilterChange({ ...filters, store: value === 'all' ? undefined : value })}
         >
-          <SelectTrigger id="store-filter">
+          <SelectTrigger id="store-filter" className="w-full">
             <SelectValue placeholder="All Stores" />
           </SelectTrigger>
           <SelectContent>
@@ -188,10 +195,10 @@ export function EnhancedDashboard() {
         </Select>
       </div>
       <div className="flex items-end">
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={() => handleFilterChange({})}
-          className="w-full"
+          className="w-full md:w-auto whitespace-nowrap"
         >
           Clear Filters
         </Button>
@@ -199,40 +206,60 @@ export function EnhancedDashboard() {
     </div>
   );
 
-  // Render the dashboard
+  // Helper to format currency
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  if (loading && !data) {
+    return <div className="flex justify-center items-center h-96">Loading dashboard data...</div>;
+  }
+
+  if (error) {
+    return <div className="text-red-500 p-4 border border-red-200 rounded bg-red-50">Error: {error}</div>;
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Stock Health Dashboard</h2>
-        <div className="text-sm text-muted-foreground">
+    <div className="space-y-8 max-w-[1600px] mx-auto p-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Stock Health Dashboard</h2>
+          <p className="text-muted-foreground mt-1">Overview of inventory health across brands and stores.</p>
+        </div>
+        <div className="text-sm text-muted-foreground bg-gray-100 px-3 py-1 rounded-full">
           {lastUpdated && `Last updated: ${new Date(lastUpdated).toLocaleString()}`}
         </div>
       </div>
 
       {renderFilters()}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Summary Cards Row */}
+      <div className="grid gap-4 md:grid-cols-5">
         {Object.entries(COLORS).map(([condition, color]) => {
-          const items = filteredData?.items || [];
           const count = filteredData?.summary.byCondition[condition as ConditionKey] || 0;
-          const total = items.length || 1;
+          const total = filteredData?.summary.total || 1;
           const percentage = Math.round((count / total) * 100);
-          
+
           return (
-            <Card 
-              key={condition} 
-              className="cursor-pointer hover:bg-muted/50 transition-colors"
+            <Card
+              key={condition}
+              className="cursor-pointer hover:shadow-md transition-all border-t-4"
+              style={{ borderTopColor: color }}
               onClick={() => handleCardClick(condition as keyof typeof COLORS)}
             >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS]}
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS].split(' ')[0]}
                 </CardTitle>
-                <div className="h-4 w-4 rounded-full" style={{ backgroundColor: color }} />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{count}</div>
-                <p className="text-xs text-muted-foreground">
+              <CardContent className="p-4 pt-0">
+                <div className="text-2xl font-bold">{count.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground mt-1">
                   {percentage}% of total
                 </p>
               </CardContent>
@@ -241,36 +268,63 @@ export function EnhancedDashboard() {
         })}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
+      {/* Pie Charts Row */}
+      {filteredData?.charts && (
+        <div className="grid gap-6 md:grid-cols-3">
+          {renderPieChart(
+            filteredData.charts.pieDataBySkuCount,
+            "SKU Count Distribution"
+          )}
+          {renderPieChart(
+            filteredData.charts.pieDataByStock,
+            "Total Stock Quantity"
+          )}
+          {renderPieChart(
+            filteredData.charts.pieDataByValue,
+            "Total Value (HPP)",
+            formatCurrency
+          )}
+        </div>
+      )}
+
+      {/* Detailed Breakdowns */}
+      <div className="grid gap-6 md:grid-cols-2">
         {(() => {
           if (!filteredData) return null;
-          
+
           return (
             <>
-              {filteredData.byBrand && filteredData.byBrand.get(filters.brand?? '') && (
+              {filteredData.byBrand && filteredData.byBrand.size > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>By Brand</CardTitle>
+                    <CardTitle>Breakdown by Brand</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]">
+                    <div className="h-[400px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
-                          data={filteredData.byBrand.get(filters.brand?? '')}
+                          data={Array.from(filteredData.byBrand.entries()).map(([brand, items]) => {
+                            const counts = items.reduce((acc, item) => {
+                              acc[item.condition] = (acc[item.condition] || 0) + 1;
+                              return acc;
+                            }, {} as Record<string, number>);
+                            return { brand, ...counts };
+                          })}
                           layout="vertical"
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" />
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                           <XAxis type="number" />
-                          <YAxis dataKey="brand" type="category" width={100} />
-                          <Tooltip />
+                          <YAxis dataKey="brand" type="category" width={100} tick={{ fontSize: 12 }} />
+                          <Tooltip cursor={{ fill: 'transparent' }} />
                           <Legend />
                           {Object.entries(COLORS).map(([condition, color]) => (
-                            <Bar 
-                              key={condition} 
-                              dataKey={condition} 
-                              fill={color} 
-                              name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS]}
+                            <Bar
+                              key={condition}
+                              dataKey={condition}
+                              stackId="a"
+                              fill={color}
+                              name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS].split(' ')[0]}
                             />
                           ))}
                         </BarChart>
@@ -280,30 +334,37 @@ export function EnhancedDashboard() {
                 </Card>
               )}
 
-              {filteredData.byStore && (
+              {filteredData.byStore && filteredData.byStore.size > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>By Store</CardTitle>
+                    <CardTitle>Breakdown by Store</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]">
+                    <div className="h-[400px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
-                          data={filteredData.byStore.get(filters.store?? '')}
+                          data={Array.from(filteredData.byStore.entries()).map(([store, items]) => {
+                            const counts = items.reduce((acc, item) => {
+                              acc[item.condition] = (acc[item.condition] || 0) + 1;
+                              return acc;
+                            }, {} as Record<string, number>);
+                            return { store, ...counts };
+                          })}
                           layout="vertical"
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" />
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                           <XAxis type="number" />
-                          <YAxis dataKey="store" type="category" width={100} />
-                          <Tooltip />
+                          <YAxis dataKey="store" type="category" width={100} tick={{ fontSize: 12 }} />
+                          <Tooltip cursor={{ fill: 'transparent' }} />
                           <Legend />
                           {Object.entries(COLORS).map(([condition, color]) => (
-                            <Bar 
-                              key={condition} 
-                              dataKey={condition} 
-                              fill={color} 
-                              name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS]}
+                            <Bar
+                              key={condition}
+                              dataKey={condition}
+                              stackId="a"
+                              fill={color}
+                              name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS].split(' ')[0]}
                             />
                           ))}
                         </BarChart>
@@ -319,49 +380,50 @@ export function EnhancedDashboard() {
 
       {/* Item Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-4 w-4 rounded-full" style={{ backgroundColor: selectedCondition ? COLORS[selectedCondition] : 'gray' }} />
               {selectedCondition && CONDITION_LABELS[selectedCondition]}
             </DialogTitle>
             <DialogDescription>
               Showing {stockItems.length} items
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto border rounded-md">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 bg-white z-10">
                 <TableRow>
                   <TableHead>Store</TableHead>
                   <TableHead>SKU Code</TableHead>
                   <TableHead>SKU Name</TableHead>
                   <TableHead>Brand</TableHead>
-                  <TableHead>Stock</TableHead>
-                  <TableHead>Days of Cover</TableHead>
+                  <TableHead className="text-right">Stock</TableHead>
+                  <TableHead className="text-right">Days of Cover</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoadingItems ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-4">
-                      Loading...
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      Loading items...
                     </TableCell>
                   </TableRow>
                 ) : stockItems.length > 0 ? (
                   stockItems.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>{item.store_name}</TableCell>
-                      <TableCell>{item.sku_code}</TableCell>
-                      <TableCell>{item.sku_name}</TableCell>
+                    <TableRow key={item.id} className="hover:bg-muted/50">
+                      <TableCell className="font-medium">{item.store_name}</TableCell>
+                      <TableCell className="font-mono text-xs">{item.sku_code}</TableCell>
+                      <TableCell className="max-w-[300px] truncate" title={item.sku_name}>{item.sku_name}</TableCell>
                       <TableCell>{item.brand_name}</TableCell>
-                      <TableCell>{item.current_stock}</TableCell>
-                      <TableCell>{item.days_of_cover.toFixed(1)}</TableCell>
+                      <TableCell className="text-right font-mono">{item.current_stock}</TableCell>
+                      <TableCell className="text-right font-mono">{item.days_of_cover.toFixed(1)}</TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-4">
-                      No items found
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      No items found matching this criteria
                     </TableCell>
                   </TableRow>
                 )}
