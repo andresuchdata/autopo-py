@@ -3,7 +3,12 @@ import { cache } from '@/lib/cache';
 const API_BASE = '/api';
 
 export interface HealthMonitorData {
-  [key: string]: any;
+  data: Array<Record<string, any>>;
+  meta?: {
+    fields?: string[];
+    [key: string]: any;
+  };
+  errors?: any[];
 }
 
 export class HealthMonitorService {
@@ -21,23 +26,48 @@ export class HealthMonitorService {
 
   async getData(date: string): Promise<HealthMonitorData> {
     const cacheKey = `health-monitor-${date}`;
-    
+  
     // Try to get from cache first
-    const cached = await this.cache.get<HealthMonitorData>(cacheKey);
-    if (cached) return cached;
+    const cached = await this.cache.get<any>(cacheKey);
+    
+    if (cached) {
+      console.log(`[HealthMonitorService] Returning cached data for ${date}`, {
+        cacheKey,
+        cachedDataLength: Array.isArray(cached) ? cached.length : 'not an array',
+        cachedType: typeof cached,
+        isArray: Array.isArray(cached),
+        firstItem: Array.isArray(cached) && cached.length > 0 ? cached[0] : null
+      });
+
+      // Ensure we return the data in the correct format
+      return {
+        data: Array.isArray(cached) ? cached : [cached]
+      };
+    }
 
     // Fetch from API
+    console.log(`[HealthMonitorService] Cache miss for ${date}, fetching from API`);
     const response = await fetch(`${API_BASE}/health-monitor?date=${date}`);
     if (!response.ok) {
-      throw new Error('Failed to fetch health monitor data');
+      const error = await response.text().catch(() => 'Unknown error');
+      console.error(`[HealthMonitorService] API error (${response.status}):`, error);
+      throw new Error(`Failed to fetch health monitor data: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     const result = data.data || data;
 
+    // Ensure we're storing an array in the cache
+    const dataToCache = Array.isArray(result) ? result : [result];
+    
     // Cache the result
-    await this.cache.set(cacheKey, result);
-    return result;
+    console.log(`[HealthMonitorService] Caching data for ${date}`, {
+      dataLength: dataToCache.length,
+      cacheKey
+    });
+    await this.cache.set(cacheKey, dataToCache);
+    
+    return { data: dataToCache };
   }
 
   async getLatestDate(): Promise<string | null> {
