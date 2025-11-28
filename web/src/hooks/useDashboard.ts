@@ -5,16 +5,17 @@ import { healthMonitorService } from '@/services/healthMonitorService';
 
 export function useDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [filters, setFilters] = useState<{brand?: string; store?: string}>({});
-  const { 
-    data, 
-    loading, 
-    error, 
-    refresh, 
-    lastUpdated, 
+  const [filters, setFilters] = useState<{ brand?: string; store?: string }>({});
+  const {
+    data,
+    loading,
+    error,
+    refresh,
+    lastUpdated,
     getFilteredSummary,
     getBrands,
-    getStores
+    getStores,
+    availableDates
   } = useStockData();
 
   // Load the latest data on mount
@@ -60,6 +61,7 @@ export function useDashboard() {
     filters,
     brands,
     stores,
+    availableDates,
     onDateChange: handleDateChange,
     setFilters,
     refresh: () => selectedDate && refresh(selectedDate),

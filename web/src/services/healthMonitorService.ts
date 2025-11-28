@@ -15,7 +15,7 @@ export class HealthMonitorService {
   private static instance: HealthMonitorService;
   private cache = cache;
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): HealthMonitorService {
     if (!HealthMonitorService.instance) {
@@ -26,10 +26,10 @@ export class HealthMonitorService {
 
   async getData(date: string): Promise<HealthMonitorData> {
     const cacheKey = `health-monitor-${date}`;
-  
+
     // Try to get from cache first
     const cached = await this.cache.get<any>(cacheKey);
-    
+
     if (cached) {
       console.log(`[HealthMonitorService] Returning cached data for ${date}`, {
         cacheKey,
@@ -47,7 +47,8 @@ export class HealthMonitorService {
 
     // Fetch from API
     console.log(`[HealthMonitorService] Cache miss for ${date}, fetching from API`);
-    const response = await fetch(`${API_BASE}/health-monitor?date=${date}`);
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+    const response = await fetch(`${baseUrl}${API_BASE}/health-monitor?date=${date}`);
     if (!response.ok) {
       const error = await response.text().catch(() => 'Unknown error');
       console.error(`[HealthMonitorService] API error (${response.status}):`, error);
@@ -59,14 +60,14 @@ export class HealthMonitorService {
 
     // Ensure we're storing an array in the cache
     const dataToCache = Array.isArray(result) ? result : [result];
-    
+
     // Cache the result
     console.log(`[HealthMonitorService] Caching data for ${date}`, {
       dataLength: dataToCache.length,
       cacheKey
     });
     await this.cache.set(cacheKey, dataToCache);
-    
+
     return { data: dataToCache };
   }
 
@@ -81,7 +82,9 @@ export class HealthMonitorService {
       throw new Error('Health monitor folder ID is not configured');
     }
 
-    const response = await fetch(`${API_BASE}/drive?folderId=${folderId}`);
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+    const response = await fetch(`${baseUrl}${API_BASE}/drive?folderId=${folderId}`);
+
     if (!response.ok) {
       throw new Error('Failed to fetch health monitor files');
     }
@@ -98,6 +101,39 @@ export class HealthMonitorService {
     }
 
     return latestDate;
+  }
+
+  async getAvailableDates(): Promise<string[]> {
+    const cacheKey = 'available-health-monitor-dates';
+    const cached = await this.cache.get<string[]>(cacheKey);
+    if (cached) return cached;
+
+    // Get the folder ID for health_monitor from environment variables
+    const folderId = process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID;
+    if (!folderId) {
+      console.warn('Health monitor folder ID is not configured');
+      return [];
+    }
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+      const response = await fetch(`${baseUrl}${API_BASE}/drive?folderId=${folderId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch health monitor files');
+      }
+
+      const files = await response.json();
+      const dates = files
+        .map((file: { name: string }) => file.name.replace('.csv', ''))
+        .filter((date: string) => /^\d{8}$/.test(date))
+        .sort((a: string, b: string) => b.localeCompare(a));
+
+      await this.cache.set(cacheKey, dates); // Cache for 5 minutes (TTL handled by cache implementation or default)
+      return dates;
+    } catch (error) {
+      console.error('Error fetching available dates:', error);
+      return [];
+    }
   }
 }
 
