@@ -16,17 +16,36 @@ export class DashboardService {
     return {
       summary: this.calculateSummary(data),
       charts: this.prepareChartData(data),
+      rawData: data.data // Pass through raw data for the dashboard to use
     };
   }
 
   private calculateSummary(data: HealthMonitorData) {
     return {
-      totalItems: data.items?.length || 0,
+      totalItems: data.data?.length || 0,
     };
   }
 
   private prepareChartData(data: HealthMonitorData) {
-    return {};
+    const items = data.data || [];
+    
+    // Count items by condition
+    const conditionCounts = items.reduce((acc, item) => {
+      const condition = item.condition || 'unknown';
+      acc[condition] = (acc[condition] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Prepare data for pie chart
+    const pieData = Object.entries(conditionCounts).map(([name, value]) => ({
+      name,
+      value,
+    }));
+
+    return {
+      conditionCounts,
+      pieData,
+    };
   }
 }
 
