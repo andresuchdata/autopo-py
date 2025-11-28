@@ -10,11 +10,11 @@ const COLORS = {
 };
 
 const CONDITION_LABELS = {
-    'overstock': 'Biru (Long over stock)',
-    'healthy': 'Hijau (Sehat)',
-    'low': 'Kuning (Kurang)',
-    'nearly_out': 'Merah (Menuju habis)',
-    'out_of_stock': 'Hitam (Habis)'
+    'overstock': 'Long over stock',
+    'healthy': 'Sehat',
+    'low': 'Kurang',
+    'nearly_out': 'Menuju habis',
+    'out_of_stock': 'Habis'
 };
 
 interface SummaryCardsProps {
@@ -42,7 +42,7 @@ export function SummaryCards({ summary, onCardClick }: SummaryCardsProps) {
                     >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
                             <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                {CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS].split(' ')[0]}
+                                {CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS]}
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4 pt-0">
