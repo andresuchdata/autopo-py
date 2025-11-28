@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { dashboardService, NormalizedHealthItem, ConditionKey, ConditionCount } from '@/services/dashboardService';
 
 interface FilteredData {
@@ -27,6 +27,21 @@ export function useStockData() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+
+  // Fetch available dates on mount
+  // Fetch available dates on mount
+  useEffect(() => {
+    const fetchDates = async () => {
+      try {
+        const dates = await dashboardService.getAvailableDates();
+        setAvailableDates(dates);
+      } catch (err) {
+        console.error('Failed to fetch available dates:', err);
+      }
+    };
+    fetchDates();
+  }, []);
 
   const refresh = useCallback(async (date: string) => {
     setLoading(true);
@@ -150,6 +165,7 @@ export function useStockData() {
     error,
     lastUpdated,
     refresh,
+    availableDates,
     getFilteredSummary,
     getBrands,
     getStores
