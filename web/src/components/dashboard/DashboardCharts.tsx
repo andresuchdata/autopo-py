@@ -72,7 +72,7 @@ export function DashboardCharts({ charts, byBrand, byStore }: DashboardChartsPro
                                 formatter={(value, entry: any) => {
                                     const item = data.find(d => d.condition === entry.payload.condition);
                                     const percent = item ? ((item.value / total) * 100).toFixed(0) : 0;
-                                    return <span className="text-xs text-gray-600 ml-1">{`${CONDITION_LABELS[value as keyof typeof CONDITION_LABELS].split(' ')[0]} (${percent}%)`}</span>;
+                                    return <span className="text-xs text-gray-600 ml-1">{`${CONDITION_LABELS[value as keyof typeof CONDITION_LABELS]} (${percent}%)`}</span>;
                                 }}
                             />
                         </PieChart>
@@ -133,7 +133,7 @@ export function DashboardCharts({ charts, byBrand, byStore }: DashboardChartsPro
                                                 dataKey={condition}
                                                 stackId="a"
                                                 fill={color}
-                                                name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS].split(' ')[0]}
+                                                name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS]}
                                             />
                                         ))}
                                     </BarChart>
