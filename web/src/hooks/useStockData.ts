@@ -21,6 +21,8 @@ export function useStockData() {
     
     try {
       const result = await dashboardService.getDashboardData(date);
+      console.log("useStockData", result);
+
       setData(result);
       setLastUpdated(new Date());
       return result;
