@@ -116,8 +116,7 @@ export class HealthMonitorService {
     }
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
-      const response = await fetch(`${baseUrl}${API_BASE}/drive?folderId=${folderId}`);
+      const response = await fetch(`${API_BASE}/drive?folderId=${folderId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch health monitor files');
       }
