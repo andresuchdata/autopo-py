@@ -90,6 +90,7 @@ export function useStockData() {
     // Start with all items
     let filteredItems = [...data.summary.items];
 
+
     // Apply filters if provided
     if (brand.length > 0) {
       filteredItems = filteredItems.filter(item => brand.includes(item.brand));

@@ -17,7 +17,8 @@ async function getDriveClient() {
   return drive;
 }
 
-export const dynamic = 'force-dynamic';
+// This route is handled by Netlify Functions in production
+// and will be ignored in static export
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
