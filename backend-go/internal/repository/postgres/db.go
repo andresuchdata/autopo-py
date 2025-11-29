@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/rs/zerolog/log"
+	"github.com/yourusername/autopo-backend-go/internal/config"
 	"golang.org/x/sync/semaphore"
 )
 
