@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ConditionKey } from '@/services/dashboardService';
 import { useDashboard } from "@/hooks/useDashboard";
 import { DashboardFilters } from './dashboard/DashboardFilters';
@@ -28,15 +28,24 @@ export function EnhancedDashboard() {
     selectedDate,
     lastUpdated,
     onDateChange,
+    filters, // Applied filters from useDashboard
+    setFilters, // Function to update applied filters
     brands,
     stores,
     availableDates,
   } = useDashboard();
 
-  const [filters, setFilters] = useState<{ brand: string[]; store: string[] }>({
+  // Local state for UI filters (immediate update)
+  const [localFilters, setLocalFilters] = useState<{ brand: string[]; store: string[] }>({
     brand: [],
     store: [],
   });
+
+  // Sync local filters with applied filters on mount or when applied filters change externally
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
+
   const [isFiltering, setIsFiltering] = useState(false);
   const [filterTimeout, setFilterTimeout] = useState<NodeJS.Timeout | null>(null);
 
@@ -47,16 +56,19 @@ export function EnhancedDashboard() {
 
   // Handle filter changes with debounce
   const handleFilterChange = (newFilters: { brand: string[]; store: string[] }) => {
-    setIsFiltering(true);
+    // Update local UI state immediately
+    setLocalFilters(newFilters);
 
     if (filterTimeout) {
       clearTimeout(filterTimeout);
     }
 
     const timeout = setTimeout(() => {
+      setIsFiltering(true);
       setFilters(newFilters);
-      setIsFiltering(false);
-    }, 500);
+      // Small delay to let the UI update if needed, though usually sync
+      setTimeout(() => setIsFiltering(false), 100);
+    }, 1000); // 1 second debounce
 
     setFilterTimeout(timeout);
   };
@@ -113,7 +125,7 @@ export function EnhancedDashboard() {
       </div>
 
       <DashboardFilters
-        filters={filters}
+        filters={localFilters}
         onFilterChange={handleFilterChange}
         brands={brands}
         stores={stores}

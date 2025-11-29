@@ -5,7 +5,7 @@ import { healthMonitorService } from '@/services/healthMonitorService';
 
 export function useDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [filters, setFilters] = useState<{ brand?: string; store?: string }>({});
+  const [filters, setFilters] = useState<{ brand: string[]; store: string[] }>({ brand: [], store: [] });
   const {
     data,
     loading,
@@ -44,7 +44,7 @@ export function useDashboard() {
   // Get filtered data based on current filters
   const filteredData = useMemo(() => {
     if (!data) return null;
-    return getFilteredSummary(filters.brand ? [filters.brand] : [], filters.store ? [filters.store] : []);
+    return getFilteredSummary(filters.brand, filters.store);
   }, [data, filters.brand, filters.store, getFilteredSummary]);
 
   // Get available brands and stores
