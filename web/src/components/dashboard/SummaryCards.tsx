@@ -17,15 +17,36 @@ const CONDITION_LABELS = {
     'out_of_stock': 'Habis'
 };
 
+import { Skeleton } from "@/components/ui/skeleton";
+
 interface SummaryCardsProps {
     summary: {
         total: number;
         byCondition: Record<ConditionKey, number>;
     };
     onCardClick: (condition: ConditionKey) => void;
+    isLoading?: boolean;
 }
 
-export function SummaryCards({ summary, onCardClick }: SummaryCardsProps) {
+export function SummaryCards({ summary, onCardClick, isLoading }: SummaryCardsProps) {
+    if (isLoading) {
+        return (
+            <div className="grid gap-4 md:grid-cols-5">
+                {[1, 2, 3, 4, 5].map((i) => (
+                    <Card key={i} className="border-t-4 border-gray-200">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
+                            <Skeleton className="h-4 w-24" />
+                        </CardHeader>
+                        <CardContent className="p-4 pt-0">
+                            <Skeleton className="h-8 w-16 mb-2" />
+                            <Skeleton className="h-3 w-20" />
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+        );
+    }
+
     return (
         <div className="grid gap-4 md:grid-cols-5">
             {Object.entries(COLORS).map(([condition, color]) => {

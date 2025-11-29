@@ -53,9 +53,9 @@ export const poService = {
         }
     },
 
-    getStores: async () => {
+    getStores: async (search?: string) => {
         try {
-            const response = await api.get('/po/stores');
+            const response = await api.get('/po/stores', search ? { params: { search } } : undefined);
             return response.data;
         } catch (error) {
             console.error('Error fetching stores:', error);
@@ -69,6 +69,26 @@ export const poService = {
             return response.data;
         } catch (error) {
             console.error(`Error fetching results for store ${storeName}:`, error);
+            throw error;
+        }
+    },
+
+    getBrands: async (search?: string) => {
+        try {
+            const response = await api.get('/po/brands', search ? { params: { search } } : undefined);
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching brands:', error);
+            throw error;
+        }
+    },
+
+    getSkus: async (search?: string) => {
+        try {
+            const response = await api.get('/po/skus', search ? { params: { search } } : undefined);
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching SKUs:', error);
             throw error;
         }
     }

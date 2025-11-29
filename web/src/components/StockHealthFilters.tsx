@@ -70,7 +70,7 @@ export function StockHealthFilters({ onFilterChange, loading }: StockHealthFilte
   const handleStoreSearch = async (search: string) => {
     setSearchTerm(prev => ({ ...prev, store: search }));
     try {
-      const res = await poService.getStores({ search });
+      const res = await poService.getStores(search);
       setStores(res.data);
     } catch (error) {
       console.error('Error searching stores:', error);
@@ -81,7 +81,7 @@ export function StockHealthFilters({ onFilterChange, loading }: StockHealthFilte
   const handleSkuSearch = async (search: string) => {
     setSearchTerm(prev => ({ ...prev, sku: search }));
     try {
-      const res = await poService.getSkus({ search });
+      const res = await poService.getSkus(search);
       setSkus(res.data);
     } catch (error) {
       console.error('Error searching SKUs:', error);
@@ -92,7 +92,7 @@ export function StockHealthFilters({ onFilterChange, loading }: StockHealthFilte
   const handleBrandSearch = async (search: string) => {
     setSearchTerm(prev => ({ ...prev, brand: search }));
     try {
-      const res = await poService.getBrands({ search });
+      const res = await poService.getBrands(search);
       setBrands(res.data);
     } catch (error) {
       console.error('Error searching brands:', error);

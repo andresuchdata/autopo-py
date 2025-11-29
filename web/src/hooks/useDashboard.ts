@@ -5,7 +5,7 @@ import { healthMonitorService } from '@/services/healthMonitorService';
 
 export function useDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [filters, setFilters] = useState<{ brand?: string; store?: string }>({});
+  const [filters, setFilters] = useState<{ brand: string[]; store: string[] }>({ brand: [], store: [] });
   const {
     data,
     loading,
