@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ConditionKey } from '@/services/dashboardService';
 import { useDashboard } from "@/hooks/useDashboard";
 import { DashboardFilters } from './dashboard/DashboardFilters';
@@ -28,21 +28,49 @@ export function EnhancedDashboard() {
     selectedDate,
     lastUpdated,
     onDateChange,
-    filters,
-    setFilters,
+    filters, // Applied filters from useDashboard
+    setFilters, // Function to update applied filters
     brands,
     stores,
     availableDates,
   } = useDashboard();
+
+  // Local state for UI filters (immediate update)
+  const [localFilters, setLocalFilters] = useState<{ brand: string[]; store: string[] }>({
+    brand: [],
+    store: [],
+  });
+
+  // Sync local filters with applied filters on mount or when applied filters change externally
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
+
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [filterTimeout, setFilterTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const [selectedCondition, setSelectedCondition] = useState<ConditionKey | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
 
-  // Handle filter changes
-  const handleFilterChange = (newFilters: { brand?: string; store?: string }) => {
-    setFilters(newFilters);
+  // Handle filter changes with debounce
+  const handleFilterChange = (newFilters: { brand: string[]; store: string[] }) => {
+    // Update local UI state immediately
+    setLocalFilters(newFilters);
+
+    if (filterTimeout) {
+      clearTimeout(filterTimeout);
+    }
+
+    const timeout = setTimeout(() => {
+      setIsFiltering(true);
+      setFilters(newFilters);
+      // Small delay to let the UI update if needed, though usually sync
+      setTimeout(() => setIsFiltering(false), 100);
+    }, 1000); // 1 second debounce
+
+    setFilterTimeout(timeout);
   };
 
   // Handle card click to show items for a specific condition
@@ -75,7 +103,8 @@ export function EnhancedDashboard() {
     }
   };
 
-  if (loading && !data) {
+  // Show loading state if initial load and no data
+  if (loading && !data && !filteredData) {
     return <div className="flex justify-center items-center h-96">Loading dashboard data...</div>;
   }
 
@@ -96,7 +125,7 @@ export function EnhancedDashboard() {
       </div>
 
       <DashboardFilters
-        filters={filters}
+        filters={localFilters}
         onFilterChange={handleFilterChange}
         brands={brands}
         stores={stores}
@@ -105,17 +134,21 @@ export function EnhancedDashboard() {
         onDateChange={onDateChange}
       />
 
-      {filteredData && (
+      {(filteredData || loading || isFiltering) && (
         <>
-          <SummaryCards
-            summary={filteredData.summary}
-            onCardClick={handleCardClick}
-          />
+          {(filteredData || isFiltering) && (
+            <SummaryCards
+              summary={filteredData?.summary || { total: 0, byCondition: {} as any }}
+              onCardClick={handleCardClick}
+              isLoading={loading || isFiltering}
+            />
+          )}
 
           <DashboardCharts
-            charts={filteredData.charts}
-            byBrand={filteredData.byBrand.size > 0 ? filteredData.byBrand : undefined}
-            byStore={filteredData.byStore.size > 0 ? filteredData.byStore : undefined}
+            charts={filteredData?.charts || { pieDataBySkuCount: [], pieDataByStock: [], pieDataByValue: [] }}
+            byBrand={filteredData?.byBrand}
+            byStore={filteredData?.byStore}
+            isLoading={loading || isFiltering}
           />
         </>
       )}

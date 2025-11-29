@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { COLORS, CONDITION_LABELS } from "./SummaryCards";
-import { ConditionKey } from "@/services/dashboardService";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface DashboardChartsProps {
     charts: {
@@ -11,9 +11,10 @@ interface DashboardChartsProps {
     };
     byBrand?: Map<string, any[]>;
     byStore?: Map<string, any[]>;
+    isLoading?: boolean;
 }
 
-export function DashboardCharts({ charts, byBrand, byStore }: DashboardChartsProps) {
+export function DashboardCharts({ charts, byBrand, byStore, isLoading }: DashboardChartsProps) {
     // Helper to format currency
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('id-ID', {
@@ -23,6 +24,42 @@ export function DashboardCharts({ charts, byBrand, byStore }: DashboardChartsPro
             maximumFractionDigits: 0,
         }).format(value);
     };
+
+    if (isLoading) {
+        return (
+            <div className="space-y-8">
+                {/* Pie Charts Skeletons */}
+                <div className="grid gap-6 md:grid-cols-3">
+                    {[1, 2, 3].map((i) => (
+                        <Card key={i} className="flex flex-col">
+                            <CardHeader className="pb-2">
+                                <Skeleton className="h-6 w-3/4 mx-auto" />
+                            </CardHeader>
+                            <CardContent className="flex-1 min-h-[250px] flex items-center justify-center">
+                                <Skeleton className="h-[200px] w-[200px] rounded-full" />
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+
+                {/* Detailed Breakdowns Skeletons */}
+                <div className="grid gap-6 md:grid-cols-2">
+                    {[1, 2].map((i) => (
+                        <Card key={i}>
+                            <CardHeader>
+                                <Skeleton className="h-6 w-1/3" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="h-[400px] w-full">
+                                    <Skeleton className="h-full w-full" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
     // Render a single pie chart
     const renderPieChart = (
