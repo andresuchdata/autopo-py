@@ -38,6 +38,8 @@ export interface NormalizedHealthItem {
 export interface DashboardData {
   summary: {
     totalItems: number;
+    totalStock: number;
+    totalValue: number;
     overstock: number;
     healthy: number;
     low: number;
@@ -46,6 +48,9 @@ export interface DashboardData {
     items: NormalizedHealthItem[];
     byBrand: Array<Omit<ConditionCount, 'store'>>;
     byStore: Array<Omit<ConditionCount, 'brand'>>;
+    byCondition: Record<ConditionKey, number>;
+    stockByCondition: Record<ConditionKey, number>;
+    valueByCondition: Record<ConditionKey, number>;
   };
   charts: {
     conditionCounts: Record<ConditionKey, number>;
@@ -155,6 +160,8 @@ export class DashboardService {
   private calculateSummary(items: NormalizedHealthItem[]): DashboardData['summary'] {
     const summary: DashboardData['summary'] = {
       totalItems: items.length,
+      totalStock: 0,
+      totalValue: 0,
       overstock: 0,
       healthy: 0,
       low: 0,
@@ -162,11 +169,43 @@ export class DashboardService {
       out_of_stock: 0,
       items,
       byBrand: [],
-      byStore: []
+      byStore: [],
+      byCondition: {
+        overstock: 0,
+        healthy: 0,
+        low: 0,
+        nearly_out: 0,
+        out_of_stock: 0,
+      },
+      stockByCondition: {
+        overstock: 0,
+        healthy: 0,
+        low: 0,
+        nearly_out: 0,
+        out_of_stock: 0,
+      },
+      valueByCondition: {
+        overstock: 0,
+        healthy: 0,
+        low: 0,
+        nearly_out: 0,
+        out_of_stock: 0,
+      },
     };
 
     items.forEach((item) => {
+      // Update counts
       summary[item.condition] += 1;
+      summary.byCondition[item.condition] += 1;
+
+      // Update stock
+      summary.totalStock += item.stock;
+      summary.stockByCondition[item.condition] += item.stock;
+
+      // Update value
+      const value = item.stock * item.hpp;
+      summary.totalValue += value;
+      summary.valueByCondition[item.condition] += value;
     });
 
     // Add the brand and store breakdowns
@@ -277,12 +316,13 @@ export class DashboardService {
   }
 
   private getCondition(stock: number, dailySales: number): ConditionKey {
-    const daysOfCover = stock / dailySales;
+    const daysOfCover = dailySales > 0 ? stock / dailySales : 0;
 
-    if (daysOfCover > 30) return 'overstock';
-    if (daysOfCover > 15) return 'healthy';
-    if (daysOfCover > 7) return 'low';
-    if (daysOfCover > 0) return 'nearly_out';
+    if (daysOfCover > 31) return 'overstock';
+    if (daysOfCover >= 21) return 'healthy';
+    if (daysOfCover >= 7) return 'low';
+    if (daysOfCover >= 1) return 'nearly_out';
+
     return 'out_of_stock';
   }
 }
