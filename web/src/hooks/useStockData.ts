@@ -84,19 +84,19 @@ export function useStockData() {
   }
 
   // Get filtered summary based on brand and store filters
-  const getFilteredSummary = useCallback((brand?: string, store?: string): FilteredSummary | null => {
+  const getFilteredSummary = useCallback((brand: string[] = [], store: string[] = []): FilteredSummary | null => {
     if (!data) return null;
 
     // Start with all items
     let filteredItems = [...data.summary.items];
 
     // Apply filters if provided
-    if (brand) {
-      filteredItems = filteredItems.filter(item => item.brand === brand);
+    if (brand.length > 0) {
+      filteredItems = filteredItems.filter(item => brand.includes(item.brand));
     }
 
-    if (store) {
-      filteredItems = filteredItems.filter(item => item.store === store);
+    if (store.length > 0) {
+      filteredItems = filteredItems.filter(item => store.includes(item.store));
     }
 
     // Group by brand

@@ -94,7 +94,7 @@ export function StockItemsDialog({
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[90vw] h-[90vh] flex flex-col">
+            <DialogContent className="w-[80vw] max-w-[80vw] h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <div
