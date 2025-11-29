@@ -44,7 +44,7 @@ export function useDashboard() {
   // Get filtered data based on current filters
   const filteredData = useMemo(() => {
     if (!data) return null;
-    return getFilteredSummary(filters.brand, filters.store);
+    return getFilteredSummary(filters.brand ? [filters.brand] : [], filters.store ? [filters.store] : []);
   }, [data, filters.brand, filters.store, getFilteredSummary]);
 
   // Get available brands and stores
