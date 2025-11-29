@@ -22,6 +22,12 @@
   status = 200
   force = true
 
+[[redirects]]
+  from = "/api/health-check"
+  to = "/.netlify/functions/api/health-check"
+  status = 200
+  force = true
+
 # Required for Next.js static export
 [[headers]]
   for = "/*"
