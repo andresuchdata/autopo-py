@@ -108,7 +108,7 @@ export function DashboardCharts({ charts, byBrand, byStore, isLoading }: Dashboa
                                 height={36}
                                 formatter={(value, entry: any) => {
                                     const item = data.find(d => d.condition === entry.payload.condition);
-                                    const percent = item ? ((item.value / total) * 100).toFixed(0) : 0;
+                                    const percent = item ? ((item.value / total) * 100).toFixed(1) : 0;
                                     return <span className="text-xs text-gray-600 ml-1">{`${CONDITION_LABELS[value as keyof typeof CONDITION_LABELS]} (${percent}%)`}</span>;
                                 }}
                             />
