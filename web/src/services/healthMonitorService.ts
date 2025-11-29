@@ -77,7 +77,7 @@ export class HealthMonitorService {
     if (cached) return cached;
 
     // Get the folder ID for health_monitor from environment variables
-    const folderId = process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID;
+    const folderId = process.env.HEALTH_MONITOR_FOLDER_ID;
     if (!folderId) {
       throw new Error('Health monitor folder ID is not configured');
     }
@@ -109,7 +109,7 @@ export class HealthMonitorService {
     if (cached) return cached;
 
     // Get the folder ID for health_monitor from environment variables
-    const folderId = process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID;
+    const folderId = process.env.HEALTH_MONITOR_FOLDER_ID;
     if (!folderId) {
       console.warn('Health monitor folder ID is not configured');
       return [];

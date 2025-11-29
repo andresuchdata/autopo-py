@@ -140,7 +140,7 @@ export class DashboardService {
 
       return {
         sku: item.sku ?? item.SKU ?? item['Kode Barang'] ?? '',
-        name: item.name ?? item.Name ?? item['Nama Barang'] ?? '',
+        name: item.name ?? item.Name ?? item.Nama ?? item['Nama Barang'] ?? '',
         brand: item.brand ?? item.Brand ?? item['Nama Brand'] ?? '',
         store: item.store ?? item.Store ?? item.store_name ?? item['Nama Store'] ?? '',
         stock,

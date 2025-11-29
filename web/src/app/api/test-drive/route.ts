@@ -24,19 +24,19 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       files: res.data.files,
-      folderId: process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID,
+      folderId: process.env.HEALTH_MONITOR_FOLDER_ID,
     });
   } catch (error: any) {
     console.error('Test Drive Error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
         env: {
           hasClientEmail: !!process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
           hasPrivateKey: !!process.env.GOOGLE_DRIVE_PRIVATE_KEY,
-          folderId: process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID,
+          folderId: process.env.HEALTH_MONITOR_FOLDER_ID,
         }
       },
       { status: 500 }
