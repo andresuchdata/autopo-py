@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { ConditionKey } from '@/services/dashboardService';
 import { useDashboard } from "@/hooks/useDashboard";
 import { DashboardFilters } from './dashboard/DashboardFilters';
-import { SummaryCards, COLORS } from './dashboard/SummaryCards';
+import { SummaryCards } from './dashboard/SummaryCards';
 import { DashboardCharts } from './dashboard/DashboardCharts';
 import { StockItemsDialog } from './dashboard/StockItemsDialog';
 

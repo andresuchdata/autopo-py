@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
     if (debug) console.log('Looking for health_monitor folder...');
 
-    const folderId = process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID;
+    const folderId = process.env.HEALTH_MONITOR_FOLDER_ID;
     let healthMonitorFolderId = folderId;
 
     if (!healthMonitorFolderId) {
