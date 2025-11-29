@@ -37,15 +37,28 @@ export function EnhancedDashboard() {
     brand: [],
     store: [],
   });
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [filterTimeout, setFilterTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const [selectedCondition, setSelectedCondition] = useState<ConditionKey | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
 
-  // Handle filter changes
+  // Handle filter changes with debounce
   const handleFilterChange = (newFilters: { brand: string[]; store: string[] }) => {
-    setFilters(newFilters);
+    setIsFiltering(true);
+
+    if (filterTimeout) {
+      clearTimeout(filterTimeout);
+    }
+
+    const timeout = setTimeout(() => {
+      setFilters(newFilters);
+      setIsFiltering(false);
+    }, 500);
+
+    setFilterTimeout(timeout);
   };
 
   // Handle card click to show items for a specific condition
@@ -109,12 +122,13 @@ export function EnhancedDashboard() {
         onDateChange={onDateChange}
       />
 
-      {(filteredData || loading) && (
+      {(filteredData || loading || isFiltering) && (
         <>
-          {filteredData && (
+          {(filteredData || isFiltering) && (
             <SummaryCards
-              summary={filteredData.summary}
+              summary={filteredData?.summary || { total: 0, byCondition: {} as any }}
               onCardClick={handleCardClick}
+              isLoading={loading || isFiltering}
             />
           )}
 
@@ -122,7 +136,7 @@ export function EnhancedDashboard() {
             charts={filteredData?.charts || { pieDataBySkuCount: [], pieDataByStock: [], pieDataByValue: [] }}
             byBrand={filteredData?.byBrand}
             byStore={filteredData?.byStore}
-            isLoading={loading}
+            isLoading={loading || isFiltering}
           />
         </>
       )}
