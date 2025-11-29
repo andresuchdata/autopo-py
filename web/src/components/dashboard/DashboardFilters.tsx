@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -59,11 +59,17 @@ export function DashboardFilters({
                         <SelectValue placeholder="Select Date" />
                     </SelectTrigger>
                     <SelectContent>
-                        {availableDates.map((date) => (
-                            <SelectItem key={date} value={date}>
-                                {date}
-                            </SelectItem>
-                        ))}
+                        {availableDates && availableDates.length > 0 ? (
+                            availableDates.map((date) => (
+                                <SelectItem key={date} value={date}>
+                                    {date}
+                                </SelectItem>
+                            ))
+                        ) : (
+                            <div className="py-2 px-3 text-sm text-muted-foreground">
+                                Loading dates...
+                            </div>
+                        )}
                     </SelectContent>
                 </Select>
             </div>
