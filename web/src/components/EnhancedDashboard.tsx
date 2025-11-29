@@ -28,12 +28,15 @@ export function EnhancedDashboard() {
     selectedDate,
     lastUpdated,
     onDateChange,
-    filters,
-    setFilters,
     brands,
     stores,
     availableDates,
   } = useDashboard();
+
+  const [filters, setFilters] = useState<{ brand: string[]; store: string[] }>({
+    brand: [],
+    store: [],
+  });
 
   const [selectedCondition, setSelectedCondition] = useState<ConditionKey | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -41,7 +44,7 @@ export function EnhancedDashboard() {
   const [isLoadingItems, setIsLoadingItems] = useState(false);
 
   // Handle filter changes
-  const handleFilterChange = (newFilters: { brand?: string; store?: string }) => {
+  const handleFilterChange = (newFilters: { brand: string[]; store: string[] }) => {
     setFilters(newFilters);
   };
 
@@ -75,7 +78,8 @@ export function EnhancedDashboard() {
     }
   };
 
-  if (loading && !data) {
+  // Show loading state if initial load and no data
+  if (loading && !data && !filteredData) {
     return <div className="flex justify-center items-center h-96">Loading dashboard data...</div>;
   }
 
@@ -105,17 +109,20 @@ export function EnhancedDashboard() {
         onDateChange={onDateChange}
       />
 
-      {filteredData && (
+      {(filteredData || loading) && (
         <>
-          <SummaryCards
-            summary={filteredData.summary}
-            onCardClick={handleCardClick}
-          />
+          {filteredData && (
+            <SummaryCards
+              summary={filteredData.summary}
+              onCardClick={handleCardClick}
+            />
+          )}
 
           <DashboardCharts
-            charts={filteredData.charts}
-            byBrand={filteredData.byBrand.size > 0 ? filteredData.byBrand : undefined}
-            byStore={filteredData.byStore.size > 0 ? filteredData.byStore : undefined}
+            charts={filteredData?.charts || { pieDataBySkuCount: [], pieDataByStock: [], pieDataByValue: [] }}
+            byBrand={filteredData?.byBrand}
+            byStore={filteredData?.byStore}
+            isLoading={loading}
           />
         </>
       )}
