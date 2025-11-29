@@ -139,8 +139,8 @@ export class DashboardService {
       const dailySales = this.parseNumber(
         item.dailySales ?? item['Daily Sales'] ?? item['Rata2 Penjualan Harian'] ?? 0
       );
-      const condition = this.getCondition(stock, dailySales);
-      const daysOfCover = dailySales > 0 ? Math.floor(stock / dailySales) : 0;
+      const daysOfCover = this.parseNumber(item.daily_stock_cover ?? 0);
+      const condition = this.getCondition(stock, dailySales, daysOfCover);
       const hpp = this.parseNumber(item.hpp ?? item.HPP ?? item['HPP'] ?? 0);
 
       return {
@@ -315,13 +315,13 @@ export class DashboardService {
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  private getCondition(stock: number, dailySales: number): ConditionKey {
-    const daysOfCover = dailySales > 0 ? stock / dailySales : 0;
+  private getCondition(stock: number, dailySales: number, daysOfCover?: number): ConditionKey {
+    const doc = daysOfCover ?? (dailySales > 0 ? stock / dailySales : 0);
 
-    if (daysOfCover > 31) return 'overstock';
-    if (daysOfCover >= 21) return 'healthy';
-    if (daysOfCover >= 7) return 'low';
-    if (daysOfCover >= 1) return 'nearly_out';
+    if (doc > 31) return 'overstock';
+    if (doc >= 21) return 'healthy';
+    if (doc >= 7) return 'low';
+    if (doc >= 1) return 'nearly_out';
 
     return 'out_of_stock';
   }

@@ -90,7 +90,7 @@ export function EnhancedDashboard() {
           sku_name: item.name,
           brand_name: item.brand,
           current_stock: item.stock,
-          days_of_cover: item.daysOfCover,
+          days_of_cover: item.daysOfCover || 0,
           condition: item.condition,
         }));
 
