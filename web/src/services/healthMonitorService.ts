@@ -65,42 +65,25 @@ export class HealthMonitorService {
   }
 
   async getLatestDate(): Promise<string | null> {
-    const cacheKey = 'latest-health-monitor-date';
-    const cached = await this.cache.get<string>(cacheKey);
-    if (cached) return cached;
-
-    // Get the folder ID for health_monitor from environment variables
-    const folderId = process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID;
-    if (!folderId) {
-      console.error('Health monitor folder ID is not configured. Please set NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID in your environment variables.');
-      return null;
-    }
-
-    // Use our API utility for consistent request handling
-    const files = await fetchFromAPI<Array<{name: string}>>(`/api/drive?folderId=${folderId}`);
-    const dates = files
-      .map((file: { name: string }) => file.name.replace('.csv', ''))
-      .filter((date: string) => /^\d{8}$/.test(date))
-      .sort((a: string, b: string) => b.localeCompare(a));
-
-    const latestDate = dates[0] || null;
-    if (latestDate) {
-      await this.cache.set(cacheKey, latestDate);
-    }
-
-    return latestDate;
+    const result = await this.getAvailableDatesWithLatest();
+    return result.latestDate;
   }
 
   async getAvailableDates(): Promise<string[]> {
+    const result = await this.getAvailableDatesWithLatest();
+    return result.availableDates;
+  }
+
+  async getAvailableDatesWithLatest(): Promise<{ availableDates: string[]; latestDate: string | null }> {
     const cacheKey = 'available-health-monitor-dates';
-    const cached = await this.cache.get<string[]>(cacheKey);
+    const cached = await this.cache.get<{ availableDates: string[]; latestDate: string | null }>(cacheKey);
     if (cached) return cached;
 
     // Get the folder ID for health_monitor from environment variables
     const folderId = process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID;
     if (!folderId) {
       console.error('Health monitor folder ID is not configured. Please set NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID in your environment variables.');
-      return [];
+      return { availableDates: [], latestDate: null };
     }
 
     try {
@@ -111,13 +94,19 @@ export class HealthMonitorService {
         .filter((date) => /^\d{8}$/.test(date))
         .sort((a, b) => b.localeCompare(a));
 
-      await this.cache.set(cacheKey, dates); // Cache for 5 minutes (TTL handled by cache implementation or default)
-      return dates;
+      const result = {
+        availableDates: dates,
+        latestDate: dates[0] || null
+      };
+
+      await this.cache.set(cacheKey, result);
+      return result;
     } catch (error) {
       console.error('Error fetching available dates:', error);
-      return [];
+      return { availableDates: [], latestDate: null };
     }
   }
+
 }
 
 export const healthMonitorService = HealthMonitorService.getInstance();

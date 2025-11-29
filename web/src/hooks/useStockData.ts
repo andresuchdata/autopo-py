@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { dashboardService, NormalizedHealthItem, ConditionKey, ConditionCount } from '@/services/dashboardService';
+import { healthMonitorService } from '@/services/healthMonitorService';
 
 interface FilteredData {
   byBrand: Map<string, NormalizedHealthItem[]>;
@@ -30,12 +31,11 @@ export function useStockData() {
   const [availableDates, setAvailableDates] = useState<string[]>([]);
 
   // Fetch available dates on mount
-  // Fetch available dates on mount
   useEffect(() => {
     const fetchDates = async () => {
       try {
-        const dates = await dashboardService.getAvailableDates();
-        setAvailableDates(dates);
+        const { availableDates } = await healthMonitorService.getAvailableDatesWithLatest();
+        setAvailableDates(availableDates);
       } catch (err) {
         console.error('Failed to fetch available dates:', err);
       }

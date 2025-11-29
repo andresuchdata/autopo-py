@@ -22,7 +22,8 @@ export function useDashboard() {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const latestDate = await healthMonitorService.getLatestDate();
+        // Get both available dates and latest date in a single call
+        const { latestDate } = await healthMonitorService.getAvailableDatesWithLatest();
         if (latestDate) {
           setSelectedDate(latestDate);
           await refresh(latestDate);
