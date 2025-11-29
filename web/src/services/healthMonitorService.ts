@@ -1,4 +1,5 @@
 import { cache } from '@/lib/cache';
+import { fetchFromAPI } from '@/lib/api';
 
 const API_BASE = '/api';
 
@@ -45,17 +46,9 @@ export class HealthMonitorService {
       };
     }
 
-    // Fetch from API
+    // Fetch from API using our utility
     console.log(`[HealthMonitorService] Cache miss for ${date}, fetching from API`);
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
-    const response = await fetch(`${baseUrl}${API_BASE}/health-monitor?date=${date}`);
-    if (!response.ok) {
-      const error = await response.text().catch(() => 'Unknown error');
-      console.error(`[HealthMonitorService] API error (${response.status}):`, error);
-      throw new Error(`Failed to fetch health monitor data: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
+    const data = await fetchFromAPI(`/api/health-monitor?date=${date}`);
     const result = data.data || data;
 
     // Ensure we're storing an array in the cache
@@ -77,19 +70,14 @@ export class HealthMonitorService {
     if (cached) return cached;
 
     // Get the folder ID for health_monitor from environment variables
-    const folderId = process.env.HEALTH_MONITOR_FOLDER_ID;
+    const folderId = process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID;
     if (!folderId) {
-      throw new Error('Health monitor folder ID is not configured');
+      console.error('Health monitor folder ID is not configured. Please set NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID in your environment variables.');
+      return null;
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
-    const response = await fetch(`${baseUrl}${API_BASE}/drive?folderId=${folderId}`);
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch health monitor files');
-    }
-
-    const files = await response.json();
+    // Use our API utility for consistent request handling
+    const files = await fetchFromAPI<Array<{name: string}>>(`/api/drive?folderId=${folderId}`);
     const dates = files
       .map((file: { name: string }) => file.name.replace('.csv', ''))
       .filter((date: string) => /^\d{8}$/.test(date))
@@ -109,23 +97,19 @@ export class HealthMonitorService {
     if (cached) return cached;
 
     // Get the folder ID for health_monitor from environment variables
-    const folderId = process.env.HEALTH_MONITOR_FOLDER_ID;
+    const folderId = process.env.NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID;
     if (!folderId) {
-      console.warn('Health monitor folder ID is not configured');
+      console.error('Health monitor folder ID is not configured. Please set NEXT_PUBLIC_HEALTH_MONITOR_FOLDER_ID in your environment variables.');
       return [];
     }
 
     try {
-      const response = await fetch(`${API_BASE}/drive?folderId=${folderId}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch health monitor files');
-      }
-
-      const files = await response.json();
+      // Use our API utility for consistent request handling
+      const files = await fetchFromAPI<Array<{name: string}>>(`/api/drive?folderId=${folderId}`);
       const dates = files
-        .map((file: { name: string }) => file.name.replace('.csv', ''))
-        .filter((date: string) => /^\d{8}$/.test(date))
-        .sort((a: string, b: string) => b.localeCompare(a));
+        .map((file) => file.name.replace('.csv', ''))
+        .filter((date) => /^\d{8}$/.test(date))
+        .sort((a, b) => b.localeCompare(a));
 
       await this.cache.set(cacheKey, dates); // Cache for 5 minutes (TTL handled by cache implementation or default)
       return dates;
