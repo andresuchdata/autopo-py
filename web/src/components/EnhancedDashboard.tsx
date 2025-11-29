@@ -138,7 +138,14 @@ export function EnhancedDashboard() {
         <>
           {(filteredData || isFiltering) && (
             <SummaryCards
-              summary={filteredData?.summary || { total: 0, byCondition: {} as any }}
+              summary={filteredData?.summary || {
+                totalItems: 0,
+                totalStock: 0,
+                totalValue: 0,
+                byCondition: {} as any,
+                stockByCondition: {} as any,
+                valueByCondition: {} as any
+              }}
               onCardClick={handleCardClick}
               isLoading={loading || isFiltering}
             />

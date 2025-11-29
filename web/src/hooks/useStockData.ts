@@ -72,8 +72,12 @@ export function useStockData() {
     byBrand: Map<string, NormalizedHealthItem[]>;
     byStore: Map<string, NormalizedHealthItem[]>;
     summary: {
-      total: number;
+      totalItems: number;
+      totalStock: number;
+      totalValue: number;
       byCondition: Record<ConditionKey, number>;
+      stockByCondition: Record<ConditionKey, number>;
+      valueByCondition: Record<ConditionKey, number>;
     };
     charts: {
       conditionCounts: Record<ConditionKey, number>;
@@ -114,6 +118,25 @@ export function useStockData() {
       out_of_stock: 0
     } as Record<ConditionKey, number>;
 
+    const stockByCondition = {
+      overstock: 0,
+      healthy: 0,
+      low: 0,
+      nearly_out: 0,
+      out_of_stock: 0
+    } as Record<ConditionKey, number>;
+
+    const valueByCondition = {
+      overstock: 0,
+      healthy: 0,
+      low: 0,
+      nearly_out: 0,
+      out_of_stock: 0
+    } as Record<ConditionKey, number>;
+
+    let totalStock = 0;
+    let totalValue = 0;
+
     // Process all items once to build our data structures
     filteredItems.forEach(item => {
       // Group by brand
@@ -130,6 +153,15 @@ export function useStockData() {
 
       // Count by condition
       byCondition[item.condition] = (byCondition[item.condition] || 0) + 1;
+
+      // Sum stock
+      stockByCondition[item.condition] = (stockByCondition[item.condition] || 0) + item.stock;
+      totalStock += item.stock;
+
+      // Sum value
+      const val = item.stock * item.hpp;
+      valueByCondition[item.condition] = (valueByCondition[item.condition] || 0) + val;
+      totalValue += val;
     });
 
     return {
@@ -137,8 +169,12 @@ export function useStockData() {
       byBrand,
       byStore,
       summary: {
-        total: filteredItems.length,
-        byCondition
+        totalItems: filteredItems.length,
+        totalStock,
+        totalValue,
+        byCondition,
+        stockByCondition,
+        valueByCondition
       },
       charts: dashboardService.prepareChartData(filteredItems)
     };

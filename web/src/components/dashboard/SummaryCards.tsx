@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConditionKey } from "@/services/dashboardService";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const COLORS = {
     'overstock': '#3b82f6',      // Blue
@@ -17,64 +18,161 @@ const CONDITION_LABELS = {
     'out_of_stock': 'Habis'
 };
 
-import { Skeleton } from "@/components/ui/skeleton";
+const HEADER_LABELS = {
+    'overstock': 'Daily Stock Cover > 31 days',
+    'healthy': 'Daily Stock Cover 21 - 31 days',
+    'low': 'Daily Stock Cover 7 - 20 days',
+    'nearly_out': 'Daily Stock Cover 1 - 6 days',
+    'out_of_stock': 'Daily Stock Cover 0 day'
+};
 
 interface SummaryCardsProps {
     summary: {
-        total: number;
+        totalItems: number;
+        totalStock: number;
+        totalValue: number;
         byCondition: Record<ConditionKey, number>;
+        stockByCondition: Record<ConditionKey, number>;
+        valueByCondition: Record<ConditionKey, number>;
     };
     onCardClick: (condition: ConditionKey) => void;
     isLoading?: boolean;
 }
 
+const CONDITIONS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock'];
+
+function HeaderRow() {
+    return (
+        <div className="contents">
+            <div className="hidden md:block"></div> {/* Spacer for left column */}
+            {CONDITIONS.map((condition) => (
+                <div
+                    key={condition}
+                    className="flex items-center justify-center p-3 rounded-lg border-2 bg-white font-medium text-sm text-center shadow-sm"
+                    style={{ borderColor: COLORS[condition] }}
+                >
+                    {HEADER_LABELS[condition]}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+interface RowProps {
+    title: string;
+    data: Record<ConditionKey, number>;
+    total: number;
+    type: 'count' | 'number' | 'currency';
+    onCardClick: (condition: ConditionKey) => void;
+}
+
+function SummaryRow({ title, data, total, type, onCardClick }: RowProps) {
+    const formatValue = (val: number) => {
+        if (type === 'currency') {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+        }
+        return val.toLocaleString();
+    };
+
+    return (
+        <div className="contents">
+            <div className="flex items-center md:justify-end md:pr-4 font-medium text-muted-foreground text-sm uppercase tracking-wide">
+                {title}
+            </div>
+            {CONDITIONS.map((condition) => {
+                const value = data[condition] || 0;
+                // Calculate percentage with 1 decimal place
+                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                // Remove .0 if it's a whole number for cleaner look, unless it's < 1 and > 0
+                const displayPercentage = percentage.endsWith('.0') ? percentage.slice(0, -2) : percentage;
+
+                return (
+                    <Card
+                        key={condition}
+                        className="cursor-pointer hover:shadow-md transition-all border-t-4"
+                        style={{ borderTopColor: COLORS[condition] }}
+                        onClick={() => onCardClick(condition)}
+                    >
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
+                            <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                                {CONDITION_LABELS[condition]}
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 pt-0">
+                            <div className={`font-bold ${type === 'currency' ? 'text-lg' : 'text-2xl'}`}>
+                                {formatValue(value)}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {displayPercentage}% of total
+                            </p>
+                        </CardContent>
+                    </Card>
+                );
+            })}
+        </div>
+    );
+}
+
 export function SummaryCards({ summary, onCardClick, isLoading }: SummaryCardsProps) {
     if (isLoading) {
         return (
-            <div className="grid gap-4 md:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-[150px_repeat(5,1fr)]">
+                {/* Header Skeletons */}
+                <div className="hidden md:block"></div>
                 {[1, 2, 3, 4, 5].map((i) => (
-                    <Card key={i} className="border-t-4 border-gray-200">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
+                    <Skeleton key={`head-${i}`} className="h-12 w-full rounded-lg" />
+                ))}
+
+                {/* Row Skeletons */}
+                {[1, 2, 3].map((row) => (
+                    <div key={`row-${row}`} className="contents">
+                        <div className="flex items-center justify-end pr-4">
                             <Skeleton className="h-4 w-24" />
-                        </CardHeader>
-                        <CardContent className="p-4 pt-0">
-                            <Skeleton className="h-8 w-16 mb-2" />
-                            <Skeleton className="h-3 w-20" />
-                        </CardContent>
-                    </Card>
+                        </div>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                            <Card key={`cell-${row}-${i}`} className="border-t-4 border-gray-200">
+                                <CardHeader className="p-4 pb-2">
+                                    <Skeleton className="h-3 w-20" />
+                                </CardHeader>
+                                <CardContent className="p-4 pt-0">
+                                    <Skeleton className="h-8 w-24 mb-2" />
+                                    <Skeleton className="h-3 w-16" />
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
                 ))}
             </div>
         );
     }
 
     return (
-        <div className="grid gap-4 md:grid-cols-5">
-            {Object.entries(COLORS).map(([condition, color]) => {
-                const count = summary.byCondition[condition as ConditionKey] || 0;
-                const total = summary.total || 1;
-                const percentage = Math.round((count / total) * 100);
+        <div className="grid gap-4 md:grid-cols-[150px_repeat(5,1fr)] items-stretch">
+            <HeaderRow />
 
-                return (
-                    <Card
-                        key={condition}
-                        className="cursor-pointer hover:shadow-md transition-all border-t-4"
-                        style={{ borderTopColor: color }}
-                        onClick={() => onCardClick(condition as ConditionKey)}
-                    >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                {CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS]}
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 pt-0">
-                            <div className="text-2xl font-bold">{count.toLocaleString()}</div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                {percentage}% of total
-                            </p>
-                        </CardContent>
-                    </Card>
-                );
-            })}
+            <SummaryRow
+                title="by count of SKU"
+                data={summary.byCondition}
+                total={summary.totalItems}
+                type="count"
+                onCardClick={onCardClick}
+            />
+
+            <SummaryRow
+                title="by total Qty"
+                data={summary.stockByCondition}
+                total={summary.totalStock}
+                type="number"
+                onCardClick={onCardClick}
+            />
+
+            <SummaryRow
+                title="by total Value"
+                data={summary.valueByCondition}
+                total={summary.totalValue}
+                type="currency"
+                onCardClick={onCardClick}
+            />
         </div>
     );
 }
