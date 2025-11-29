@@ -4,8 +4,8 @@ import { Readable } from 'stream';
 
 // Initialize auth
 const auth = new JWT({
-  email: process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
-  key: process.env.GOOGLE_DRIVE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  email: process.env.GOOGLE_CLIENT_EMAIL,
+  key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
   scopes: ['https://www.googleapis.com/auth/drive'],
 });
 
@@ -42,7 +42,7 @@ export async function listFiles(): Promise<DriveFile[]> {
   try {
     const drive = await getDrive();
     const response = await drive.files.list({
-      q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed = false`,
+      q: `'${process.env.NEXT_PUBLIC_GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed = false`,
       fields: 'files(id, name, webViewLink, createdTime, modifiedTime, mimeType, size)',
       orderBy: 'modifiedTime desc',
       supportsAllDrives: true,
@@ -62,14 +62,14 @@ export async function uploadFile(
 ): Promise<DriveFile> {
   try {
     const drive = await getDrive();
-    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    const folderId = process.env.NEXT_PUBLIC_GOOGLE_DRIVE_FOLDER_ID;
     
     if (!folderId) {
       throw new Error('GOOGLE_DRIVE_FOLDER_ID is not set in environment variables');
     }
 
     console.log('Uploading file to folder ID:', folderId);
-    console.log('Service account email:', process.env.GOOGLE_DRIVE_CLIENT_EMAIL);
+    console.log('Service account email:', process.env.GOOGLE_CLIENT_EMAIL);
 
     // First, verify the folder is accessible
     try {
