@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/yourusername/autopo/internal/domain"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 )
 
 type StockHealthRepository interface {

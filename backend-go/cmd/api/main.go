@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/drive"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/repository/postgres"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
-	"github.com/yourusername/autopo-backend-go/internal/config"
-	"github.com/yourusername/autopo-backend-go/internal/drive"
-	"github.com/yourusername/autopo-backend-go/internal/repository"
-	"github.com/yourusername/autopo-backend-go/internal/repository/postgres"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 	}
 
 	// Initialize Repositories
-	ingestRepo := repository.NewIngestRepository(db.DB)
+	ingestRepo := repository.NewIngestRepository(db.DB.DB)
 
 	// Initialize Services
 	ingestService := drive.NewIngestService(driveService, ingestRepo)
