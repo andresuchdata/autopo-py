@@ -15,6 +15,8 @@ type StockHealthRepository interface {
 	GetStockHealthSummary(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealthSummary, error)
 	GetStockItems(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealth, int, error)
 	GetTimeSeriesData(ctx context.Context, days int, filter domain.StockHealthFilter) (map[string][]domain.TimeSeriesData, error)
+	GetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error)
+	GetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error)
 	GetAvailableDates(ctx context.Context, limit int) ([]time.Time, error)
 }
 
@@ -49,21 +51,19 @@ func NewStockHealthRepository(db *sqlx.DB) StockHealthRepository {
 func (r *stockHealthRepository) GetStockHealthSummary(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealthSummary, error) {
 	filterClause, args, _ := buildFilterClause(filter, "dsd", 1, false)
 
-	baseQuery := fmt.Sprintf(`
-		SELECT %s AS stock_condition
+	query := fmt.Sprintf(`
+		SELECT 
+			%s AS stock_condition,
+			COUNT(*) AS count,
+			COALESCE(SUM(dsd.stock), 0) AS total_stock,
+			COALESCE(SUM(dsd.stock * COALESCE(pr.hpp, 0)), 0) AS total_value
 		FROM daily_stock_data dsd
+		LEFT JOIN products pr ON pr.id = dsd.product_id
 		WHERE 1=1%s
 	`, stockConditionExpression("dsd"), filterClause)
 
-	query := fmt.Sprintf(`
-		SELECT stock_condition, COUNT(*) AS count
-		FROM (
-			%s
-		) AS stock_data
-	`, baseQuery)
-
 	if filter.Condition != "" {
-		query += fmt.Sprintf(" WHERE stock_condition = $%d", len(args)+1)
+		query += fmt.Sprintf(" AND (%s) = $%d", stockConditionExpression("dsd"), len(args)+1)
 		args = append(args, filter.Condition)
 	}
 
@@ -76,6 +76,60 @@ func (r *stockHealthRepository) GetStockHealthSummary(ctx context.Context, filte
 	}
 
 	return summaries, nil
+}
+
+func (r *stockHealthRepository) GetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error) {
+	filterClause, args, _ := buildFilterClause(filter, "dsd", 1, false)
+
+	query := fmt.Sprintf(`
+		SELECT 
+			COALESCE(br.id, 0) AS brand_id,
+			COALESCE(br.name, 'Unknown') AS brand_name,
+			%s AS stock_condition,
+			COUNT(*) AS count,
+			COALESCE(SUM(dsd.stock), 0) AS total_stock,
+			COALESCE(SUM(dsd.stock * COALESCE(pr.hpp, 0)), 0) AS total_value
+		FROM daily_stock_data dsd
+		LEFT JOIN brands br ON br.id = dsd.brand_id
+		LEFT JOIN products pr ON pr.id = dsd.product_id
+		WHERE 1=1%s
+		GROUP BY brand_id, brand_name, stock_condition
+		ORDER BY brand_name, stock_condition
+	`, stockConditionExpression("dsd"), filterClause)
+
+	var results []domain.ConditionBreakdown
+	if err := r.db.SelectContext(ctx, &results, query, args...); err != nil {
+		return nil, fmt.Errorf("error getting brand breakdown: %w", err)
+	}
+
+	return results, nil
+}
+
+func (r *stockHealthRepository) GetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error) {
+	filterClause, args, _ := buildFilterClause(filter, "dsd", 1, false)
+
+	query := fmt.Sprintf(`
+		SELECT 
+			COALESCE(st.id, 0) AS store_id,
+			COALESCE(st.name, 'Unknown') AS store_name,
+			%s AS stock_condition,
+			COUNT(*) AS count,
+			COALESCE(SUM(dsd.stock), 0) AS total_stock,
+			COALESCE(SUM(dsd.stock * COALESCE(pr.hpp, 0)), 0) AS total_value
+		FROM daily_stock_data dsd
+		LEFT JOIN stores st ON st.id = dsd.store_id
+		LEFT JOIN products pr ON pr.id = dsd.product_id
+		WHERE 1=1%s
+		GROUP BY store_id, store_name, stock_condition
+		ORDER BY store_name, stock_condition
+	`, stockConditionExpression("dsd"), filterClause)
+
+	var results []domain.ConditionBreakdown
+	if err := r.db.SelectContext(ctx, &results, query, args...); err != nil {
+		return nil, fmt.Errorf("error getting store breakdown: %w", err)
+	}
+
+	return results, nil
 }
 
 func (r *stockHealthRepository) GetStockItems(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealth, int, error) {
