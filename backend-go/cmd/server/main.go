@@ -66,7 +66,7 @@ func main() {
 	router := api.NewRouter(&api.Services{
 		POService:          poService,
 		StockHealthService: stockHealthService,
-	})
+	}, cfg.Server.AllowedOrigins)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
