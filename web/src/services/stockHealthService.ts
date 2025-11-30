@@ -69,6 +69,8 @@ export interface StockHealthFilterParams {
   storeIds?: number[];
 }
 
+const serializeIds = (ids?: number[]) => (ids && ids.length > 0 ? ids.join(',') : undefined);
+
 export const stockHealthService = {
   async getItems(params: StockHealthFilterParams): Promise<StockHealthItemsResponse> {
     const response = await api.get<StockHealthItemsResponse>(`${ANALYTICS_BASE}/items`, {
@@ -77,8 +79,8 @@ export const stockHealthService = {
         page: params.page ?? 1,
         page_size: params.pageSize ?? 2000,
         condition: params.condition,
-        brand_ids: params.brandIds?.join(',') ?? undefined,
-        store_ids: params.storeIds?.join(',') ?? undefined,
+        brand_ids: serializeIds(params.brandIds),
+        store_ids: serializeIds(params.storeIds),
       },
     });
 
@@ -128,8 +130,8 @@ export const stockHealthService = {
       params: {
         stock_date: params.stockDate,
         days: params.days ?? 30,
-        brand_ids: params.brandIds?.join(',') ?? undefined,
-        store_ids: params.storeIds?.join(',') ?? undefined,
+        brand_ids: serializeIds(params.brandIds),
+        store_ids: serializeIds(params.storeIds),
       },
     });
     return response.data;
