@@ -80,11 +80,14 @@ func (r *stockHealthRepository) GetStockHealthSummary(ctx context.Context, filte
 
 func (r *stockHealthRepository) GetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error) {
 	filterClause, args, _ := buildFilterClause(filter, "dsd", 1, false)
+	stockConditionExpr := stockConditionExpression("dsd")
+	brandIDExpr := "COALESCE(br.id, 0)"
+	brandNameExpr := "COALESCE(br.name, 'Unknown')"
 
 	query := fmt.Sprintf(`
 		SELECT 
-			COALESCE(br.id, 0) AS brand_id,
-			COALESCE(br.name, 'Unknown') AS brand_name,
+			%s AS brand_id,
+			%s AS brand_name,
 			%s AS stock_condition,
 			COUNT(*) AS count,
 			COALESCE(SUM(dsd.stock), 0) AS total_stock,
@@ -93,9 +96,9 @@ func (r *stockHealthRepository) GetBrandBreakdown(ctx context.Context, filter do
 		LEFT JOIN brands br ON br.id = dsd.brand_id
 		LEFT JOIN products pr ON pr.id = dsd.product_id
 		WHERE 1=1%s
-		GROUP BY brand_id, brand_name, stock_condition
+		GROUP BY %s, %s, %s
 		ORDER BY brand_name, stock_condition
-	`, stockConditionExpression("dsd"), filterClause)
+	`, brandIDExpr, brandNameExpr, stockConditionExpr, filterClause, brandIDExpr, brandNameExpr, stockConditionExpr)
 
 	var results []domain.ConditionBreakdown
 	if err := r.db.SelectContext(ctx, &results, query, args...); err != nil {
@@ -107,11 +110,14 @@ func (r *stockHealthRepository) GetBrandBreakdown(ctx context.Context, filter do
 
 func (r *stockHealthRepository) GetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error) {
 	filterClause, args, _ := buildFilterClause(filter, "dsd", 1, false)
+	stockConditionExpr := stockConditionExpression("dsd")
+	storeIDExpr := "COALESCE(st.id, 0)"
+	storeNameExpr := "COALESCE(st.name, 'Unknown')"
 
 	query := fmt.Sprintf(`
 		SELECT 
-			COALESCE(st.id, 0) AS store_id,
-			COALESCE(st.name, 'Unknown') AS store_name,
+			%s AS store_id,
+			%s AS store_name,
 			%s AS stock_condition,
 			COUNT(*) AS count,
 			COALESCE(SUM(dsd.stock), 0) AS total_stock,
@@ -120,9 +126,9 @@ func (r *stockHealthRepository) GetStoreBreakdown(ctx context.Context, filter do
 		LEFT JOIN stores st ON st.id = dsd.store_id
 		LEFT JOIN products pr ON pr.id = dsd.product_id
 		WHERE 1=1%s
-		GROUP BY store_id, store_name, stock_condition
+		GROUP BY %s, %s, %s
 		ORDER BY store_name, stock_condition
-	`, stockConditionExpression("dsd"), filterClause)
+	`, storeIDExpr, storeNameExpr, stockConditionExpr, filterClause, storeIDExpr, storeNameExpr, stockConditionExpr)
 
 	var results []domain.ConditionBreakdown
 	if err := r.db.SelectContext(ctx, &results, query, args...); err != nil {
