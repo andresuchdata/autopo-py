@@ -4,7 +4,6 @@ package config
 import (
 	"log"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/joho/godotenv"

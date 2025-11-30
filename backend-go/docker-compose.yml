@@ -1,16 +1,18 @@
-version: '3.8'
 
 services:
   db:
-    image: postgres:15-alpine
+    image: timescale/timescaledb:latest-pg15
     container_name: autopo-db
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-autopo}
+      TIMESCALEDB_TELEMETRY: 'off'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/migrations:/docker-entrypoint-initdb.d
+      - ./data/seeds:/docker-entrypoint-seed-data
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "shared_preload_libraries=timescaledb"]
     ports:
       - "5432:5432"
     healthcheck:
@@ -38,11 +40,15 @@ services:
       - DB_SSLMODE=disable
       - APP_UPLOAD_DIR=/app/data/uploads
       - APP_DATA_DIR=/app/data/output
+      - SEED_DATA_DIR=/app/data/seeds
+    entrypoint: ["/app/entrypoint.sh"]
     ports:
       - "8080:8080"
     volumes:
       - ./data/uploads:/app/data/uploads
       - ./data/output:/app/data/output
+      - ./data/seeds:/app/data/seeds
+      - ./scripts:/app/scripts
     networks:
       - autopo-network
     restart: unless-stopped

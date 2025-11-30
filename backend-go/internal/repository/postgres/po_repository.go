@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog/log"
-	"github.com/yourusername/autopo/backend-go/internal/domain"
 )
 
 type poRepository struct {
