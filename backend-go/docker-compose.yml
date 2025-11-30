@@ -48,7 +48,6 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - .:/app
       - ./data/uploads:/app/data/uploads
       - ./data/output:/app/data/output
       - ./data/seeds:/app/data/seeds
