@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
     Dialog,
     DialogContent,
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { COLORS, CONDITION_LABELS } from "./SummaryCards";
 import { ConditionKey } from "@/services/dashboardService";
+import { type StockHealthItemsResponse } from "@/services/stockHealthService";
 
 interface StockItem {
     id: number;
@@ -33,9 +34,8 @@ interface StockItem {
 interface StockItemsDialogProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    items: StockItem[];
     condition: ConditionKey | null;
-    isLoading: boolean;
+    fetchItems: (params: { page: number; pageSize: number }) => Promise<StockHealthItemsResponse>;
 }
 
 type SortField = keyof StockItem;
@@ -44,14 +44,63 @@ type SortDirection = 'asc' | 'desc';
 export function StockItemsDialog({
     isOpen,
     onOpenChange,
-    items,
     condition,
-    isLoading,
+    fetchItems,
 }: StockItemsDialogProps) {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
     const [sortField, setSortField] = useState<SortField>('store_name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    const [items, setItems] = useState<StockItem[]>([]);
+    const [totalItems, setTotalItems] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const loadItems = useCallback(async (pageParam: number, pageSizeParam: number) => {
+        if (!condition) {
+            setItems([]);
+            setTotalItems(0);
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+        try {
+            const response = await fetchItems({ page: pageParam, pageSize: pageSizeParam });
+            const normalizedItems: StockItem[] = response.items.map((item) => ({
+                id: item.id,
+                store_name: item.store_name,
+                sku_code: item.sku_code,
+                sku_name: item.product_name,
+                brand_name: item.brand_name,
+                current_stock: item.current_stock,
+                days_of_cover: item.days_of_cover,
+                condition: (item.stock_condition as ConditionKey) ?? 'out_of_stock',
+            }));
+
+            setItems(normalizedItems);
+            setTotalItems(response.total);
+        } catch (err) {
+            console.error('Failed to fetch stock items', err);
+            setItems([]);
+            setTotalItems(0);
+            setError('Failed to load items');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [condition, fetchItems]);
+
+    useEffect(() => {
+        if (isOpen && condition) {
+            setCurrentPage(1);
+            loadItems(1, itemsPerPage);
+        }
+
+        if (!isOpen) {
+            setItems([]);
+            setTotalItems(0);
+        }
+    }, [isOpen, condition, itemsPerPage, loadItems]);
 
     // Handle sorting
     const handleSort = (field: SortField) => {
@@ -87,10 +136,19 @@ export function StockItemsDialog({
         return sorted;
     }, [items, sortField, sortDirection]);
 
-    // Pagination logic
-    const totalPages = Math.ceil(processedItems.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedItems = processedItems.slice(startIndex, startIndex + itemsPerPage);
+    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
+    const handlePageChange = useCallback((nextPage: number) => {
+        const clamped = Math.max(1, Math.min(totalPages, nextPage));
+        setCurrentPage(clamped);
+        loadItems(clamped, itemsPerPage);
+    }, [itemsPerPage, loadItems, totalPages]);
+
+    const handlePageSizeChange = (value: number) => {
+        setItemsPerPage(value);
+        setCurrentPage(1);
+        loadItems(1, value);
+    };
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -104,7 +162,7 @@ export function StockItemsDialog({
                         {condition && CONDITION_LABELS[condition]}
                     </DialogTitle>
                     <DialogDescription>
-                        Showing {items.length} items
+                        {condition ? `Showing ${totalItems.toLocaleString()} items` : 'Select a condition to view items'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -127,8 +185,14 @@ export function StockItemsDialog({
                                         Loading items...
                                     </TableCell>
                                 </TableRow>
-                            ) : paginatedItems.length > 0 ? (
-                                paginatedItems.map((item) => (
+                            ) : error ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center py-8 text-red-500">
+                                        {error}
+                                    </TableCell>
+                                </TableRow>
+                            ) : processedItems.length > 0 ? (
+                                processedItems.map((item) => (
                                     <TableRow key={item.id} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{item.store_name}</TableCell>
                                         <TableCell className="font-mono text-xs">{item.sku_code}</TableCell>
@@ -152,15 +216,14 @@ export function StockItemsDialog({
                 {/* Pagination Controls */}
                 <div className="flex items-center justify-between pt-4 border-t">
                     <div className="text-sm text-muted-foreground">
-                        Page {currentPage} of {totalPages} ({items.length} items)
+                        Page {currentPage} of {totalPages} ({totalItems.toLocaleString()} items)
                     </div>
                     <div className="flex items-center gap-2">
                         <select
                             className="border rounded px-2 py-1 text-sm"
                             value={itemsPerPage}
                             onChange={(e) => {
-                                setItemsPerPage(Number(e.target.value));
-                                setCurrentPage(1);
+                                handlePageSizeChange(Number(e.target.value));
                             }}
                         >
                             <option value={10}>10 per page</option>
@@ -172,16 +235,16 @@ export function StockItemsDialog({
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1 || isLoading}
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages}
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages || isLoading}
                             >
                                 <ChevronRight className="h-4 w-4" />
                             </Button>
