@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS daily_stock_data (
     time TIMESTAMPTZ NOT NULL,
     store_id INTEGER REFERENCES stores(id),
     product_id INTEGER REFERENCES products(id),
+    brand_id INTEGER REFERENCES brands(id),
+    sku VARCHAR(255) REFERENCES products(sku),
     
     -- Stock and Sales Metrics
     stock INTEGER DEFAULT 0,
@@ -57,7 +59,7 @@ SELECT create_hypertable('daily_stock_data', 'time',
 -- Add compression
 ALTER TABLE daily_stock_data SET (
     timescaledb.compress,
-    timescaledb.compress_segmentby = 'store_id, product_id'
+    timescaledb.compress_segmentby = 'store_id, product_id, brand_id, sku'
 );
 
 -- Create compression policy (compress chunks older than 7 days)
@@ -79,12 +81,14 @@ SELECT
     time_bucket(INTERVAL '1 day', time) AS bucket,
     store_id,
     product_id,
+    brand_id,
+    sku,
     AVG(stock) AS avg_stock,
     SUM(daily_sales) AS total_daily_sales,
     MAX(max_daily_sales) AS max_daily_sales,
     AVG(lead_time) AS avg_lead_time
 FROM daily_stock_data
-GROUP BY bucket, store_id, product_id
+GROUP BY bucket, store_id, brand_id, product_id, sku
 WITH NO DATA;
 
 -- Refresh the continuous aggregate every hour
