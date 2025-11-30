@@ -36,7 +36,6 @@ COPY --from=builder /app/bin/server /app/server
 COPY --from=builder /app/bin/seed /app/bin/seed
 
 # Copy configuration files and scripts
-COPY .env.example /app/.env
 COPY entrypoint.sh /app/entrypoint.sh
 
 # Create necessary directories and copy seed data
