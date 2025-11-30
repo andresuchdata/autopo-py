@@ -32,10 +32,8 @@ CREATE TABLE IF NOT EXISTS stores (
 -- Create products table
 CREATE TABLE IF NOT EXISTS products (
     id SERIAL PRIMARY KEY,
-    sku_code VARCHAR(255) NOT NULL UNIQUE, -- SKU from CSV
+    sku VARCHAR(255) NOT NULL UNIQUE, -- SKU from CSV
     name VARCHAR(255) NOT NULL,
-    brand_id INTEGER REFERENCES brands(id),
-    supplier_id INTEGER REFERENCES suppliers(id),
     hpp NUMERIC(15, 2), -- Harga Pokok Penjualan
     price NUMERIC(15, 2), -- Harga
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -86,9 +84,15 @@ CREATE TABLE IF NOT EXISTS supplier_brand_mappings (
     id SERIAL PRIMARY KEY,
     supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
     brand_id INTEGER NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE,
+    order_day INTEGER,
+    min_purchase NUMERIC(15, 2),
+    trading_term VARCHAR(255),
+    promo_factor VARCHAR(255),
+    delay_factor VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(supplier_id, brand_id)
+    UNIQUE(supplier_id, brand_id, store_id)
 );
 
 -- Create indexes for purchase orders
@@ -104,8 +108,10 @@ CREATE INDEX idx_po_items_product ON purchase_order_items(product_id);
 CREATE INDEX idx_po_items_sku ON purchase_order_items(sku);
 
 -- Create indexes for supplier_brand_mappings
+DROP INDEX IF EXISTS supplier_brand_mappings_supplier_id_brand_id_key;
 CREATE INDEX idx_supplier_brand_mapping_supplier ON supplier_brand_mappings(supplier_id);
 CREATE INDEX idx_supplier_brand_mapping_brand ON supplier_brand_mappings(brand_id);
+CREATE INDEX idx_supplier_brand_mapping_store ON supplier_brand_mappings(store_id);
 
 -- Create product_mappings table
 CREATE TABLE IF NOT EXISTS product_mappings (
@@ -114,7 +120,7 @@ CREATE TABLE IF NOT EXISTS product_mappings (
     brand_id INTEGER NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
     store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
     supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
-    original_sku VARCHAR(255) NOT NULL,
+    sku VARCHAR(255) NOT NULL,
     original_product_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -126,7 +132,7 @@ CREATE INDEX idx_product_mappings_product ON product_mappings(product_id);
 CREATE INDEX idx_product_mappings_brand ON product_mappings(brand_id);
 CREATE INDEX idx_product_mappings_store ON product_mappings(store_id);
 CREATE INDEX idx_product_mappings_supplier ON product_mappings(supplier_id);
-CREATE INDEX idx_product_mappings_sku ON product_mappings(original_sku);
+CREATE INDEX idx_product_mappings_sku ON product_mappings(sku);
 
 -- Add function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
