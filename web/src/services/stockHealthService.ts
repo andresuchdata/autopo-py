@@ -27,11 +27,46 @@ interface AvailableDatesResponse {
   dates: string[];
 }
 
+interface StockHealthSummaryResponse {
+  summary: StockHealthSummary[];
+}
+
+interface StockHealthSummary {
+  condition: string;
+  count: number;
+  total_stock: number;
+  total_value: number;
+}
+
+export interface TimeSeriesResponse {
+  [condition: string]: Array<{ date: string; count: number }>;
+}
+
+export interface ConditionBreakdownResponse {
+  brand_id?: number;
+  brand?: string;
+  store_id?: number;
+  store?: string;
+  condition: string;
+  count: number;
+  total_stock: number;
+  total_value: number;
+}
+
+export interface StockHealthDashboardResponse {
+  summary: StockHealthSummary[];
+  time_series: TimeSeriesResponse;
+  brand_breakdown: ConditionBreakdownResponse[];
+  store_breakdown: ConditionBreakdownResponse[];
+}
+
 export interface StockHealthFilterParams {
   stockDate: string;
   page?: number;
   pageSize?: number;
   condition?: string;
+  brandIds?: number[];
+  storeIds?: number[];
 }
 
 export const stockHealthService = {
@@ -42,6 +77,8 @@ export const stockHealthService = {
         page: params.page ?? 1,
         page_size: params.pageSize ?? 2000,
         condition: params.condition,
+        brand_ids: params.brandIds?.join(',') ?? undefined,
+        store_ids: params.storeIds?.join(',') ?? undefined,
       },
     });
 
@@ -65,5 +102,36 @@ export const stockHealthService = {
   async getAvailableDates(limit = 30): Promise<string[]> {
     const { dates } = await this.getAvailableDatesWithLatest(limit);
     return dates;
+  },
+
+  async getSummary(params: { stockDate: string }): Promise<StockHealthSummaryResponse> {
+    const response = await api.get<StockHealthSummaryResponse>(`${ANALYTICS_BASE}/summary`, {
+      params: {
+        stock_date: params.stockDate,
+      },
+    });
+    return response.data;
+  },
+
+  async getTimeSeries(params: { stockDate: string; days?: number }): Promise<TimeSeriesResponse> {
+    const response = await api.get<TimeSeriesResponse>(`${ANALYTICS_BASE}/time_series`, {
+      params: {
+        stock_date: params.stockDate,
+        days: params.days ?? 30,
+      },
+    });
+    return response.data;
+  },
+
+  async getDashboard(params: { stockDate: string; brandIds?: number[]; storeIds?: number[]; days?: number }): Promise<StockHealthDashboardResponse> {
+    const response = await api.get<StockHealthDashboardResponse>(`${ANALYTICS_BASE}/dashboard`, {
+      params: {
+        stock_date: params.stockDate,
+        days: params.days ?? 30,
+        brand_ids: params.brandIds?.join(',') ?? undefined,
+        store_ids: params.storeIds?.join(',') ?? undefined,
+      },
+    });
+    return response.data;
   },
 };

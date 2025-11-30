@@ -36,6 +36,10 @@ func (h *StockHealthHandler) parseFilter(c *gin.Context) domain.StockHealthFilte
 		filter.Condition = condition
 	}
 
+	if stockDate := strings.TrimSpace(c.Query("stock_date")); stockDate != "" {
+		filter.StockDate = stockDate
+	}
+
 	parseInt64List := func(param string) []int64 {
 		value := strings.TrimSpace(c.Query(param))
 		if value == "" {
