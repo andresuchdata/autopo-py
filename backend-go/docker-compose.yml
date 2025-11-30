@@ -8,11 +8,14 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-autopo}
       TIMESCALEDB_TELEMETRY: 'off'
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/migrations:/docker-entrypoint-initdb.d
       - ./data/seeds:/docker-entrypoint-seed-data
-    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "shared_preload_libraries=timescaledb"]
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     ports:
       - "5432:5432"
     healthcheck:
@@ -45,6 +48,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
+      - .:/app
       - ./data/uploads:/app/data/uploads
       - ./data/output:/app/data/output
       - ./data/seeds:/app/data/seeds
@@ -52,6 +56,28 @@ services:
     networks:
       - autopo-network
     restart: unless-stopped
+
+  seeder:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: autopo-seeder
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=autopo
+      - DB_SSLMODE=disable
+      - SEED_DATA_DIR=/app/data/seeds
+    volumes:
+      - ./data/seeds:/app/data/seeds
+    command: /app/bin/seed --db-url "postgres://postgres:postgres@db:5432/autopo?sslmode=disable"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - autopo-network
 
 networks:
   autopo-network:
