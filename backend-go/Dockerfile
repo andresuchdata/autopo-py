@@ -13,8 +13,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the server and seeder
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/seed ./cmd/seed
 
 # Final stage
 FROM alpine:3.18
@@ -30,8 +31,9 @@ RUN apk add --no-cache \
     grep \
     coreutils
 
-# Copy the binary from builder
+# Copy the binaries from builder
 COPY --from=builder /app/bin/server /app/server
+COPY --from=builder /app/bin/seed /app/bin/seed
 
 # Copy configuration files and scripts
 COPY .env.example /app/.env
@@ -49,6 +51,3 @@ EXPOSE 8080
 
 # Set entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
-
-# Default command
-CMD ["/app/server"]
