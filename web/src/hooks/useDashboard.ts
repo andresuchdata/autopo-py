@@ -1,7 +1,8 @@
 // In useDashboard.ts
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useStockData } from './useStockData';
+import { useStockData, type LabeledOption } from './useStockData';
 import { stockHealthService } from '@/services/stockHealthService';
+import { poService } from '@/services/api';
 
 export interface DashboardFiltersState {
   brandIds: number[];
@@ -13,6 +14,8 @@ const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [] };
 export function useDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [filters, setFilters] = useState<DashboardFiltersState>(DEFAULT_FILTERS);
+  const [masterBrandOptions, setMasterBrandOptions] = useState<LabeledOption[]>([]);
+  const [masterStoreOptions, setMasterStoreOptions] = useState<LabeledOption[]>([]);
   const filtersChangedRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
@@ -27,8 +30,57 @@ export function useDashboard() {
     getStoreOptions,
   } = useStockData();
 
-  const brandOptions = useMemo(() => getBrandOptions(), [getBrandOptions]);
-  const storeOptions = useMemo(() => getStoreOptions(), [getStoreOptions]);
+  const derivedBrandOptions = useMemo(() => getBrandOptions(), [getBrandOptions]);
+  const derivedStoreOptions = useMemo(() => getStoreOptions(), [getStoreOptions]);
+
+  const brandOptions = useMemo(() => {
+    return masterBrandOptions.length > 0 ? masterBrandOptions : derivedBrandOptions;
+  }, [derivedBrandOptions, masterBrandOptions]);
+
+  const storeOptions = useMemo(() => {
+    return masterStoreOptions.length > 0 ? masterStoreOptions : derivedStoreOptions;
+  }, [derivedStoreOptions, masterStoreOptions]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const mapToOptions = (items: Array<{ id?: number | null; name?: string }> = []): LabeledOption[] =>
+      items
+        .filter((item) => typeof item?.name === 'string')
+        .map((item) => ({
+          id: typeof item.id === 'number' ? item.id : null,
+          name: item.name ?? 'Unknown',
+        }));
+
+    const fetchMasterData = async () => {
+      try {
+        const [brandsRes, storesRes] = await Promise.all([
+          poService.getBrands(),
+          poService.getStores(),
+        ]);
+
+        if (!isMounted) return;
+
+        const brandOpts = mapToOptions(brandsRes?.data ?? []);
+        const storeOpts = mapToOptions(storesRes?.data ?? []);
+
+        if (brandOpts.length > 0) {
+          setMasterBrandOptions(brandOpts);
+        }
+        if (storeOpts.length > 0) {
+          setMasterStoreOptions(storeOpts);
+        }
+      } catch (err) {
+        console.error('Failed to fetch master data for dashboard filters:', err);
+      }
+    };
+
+    fetchMasterData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const loadInitialData = useCallback(async () => {
     try {
