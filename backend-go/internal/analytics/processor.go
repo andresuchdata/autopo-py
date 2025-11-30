@@ -108,7 +108,7 @@ func (p *AnalyticsProcessor) ProcessFile(ctx context.Context, filePath string) e
 	switch dir {
 	case "stock_health":
 		return p.processStockHealthFile(ctx, filePath)
-	case "purchase_orders_snapshots":
+	case "po_snapshots":
 		return p.processPOSnapshotFile(ctx, filePath)
 	default:
 		return fmt.Errorf("unknown file type in directory: %s", dir)
@@ -127,15 +127,11 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	}
 	defer file.Close()
 
-	log.Printf("Successfully opened file: %s", filePath)
-
 	reader := csv.NewReader(file)
 	header, err := reader.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read CSV header: %w", err)
 	}
-
-	log.Printf("CSV columns: %v", header)
 
 	// Create a map of column indices
 	colMap := make(map[string]int)
@@ -176,6 +172,8 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	}
 	defer stmt.Close()
 
+	processedCount := 0
+
 	// Process records
 	for {
 		record, err := reader.Read()
@@ -188,7 +186,6 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 
 		// Get SKU from record
 		sku := record[colMap["sku"]]
-		log.Printf("Processing record with SKU: %s", sku)
 
 		// First try to get existing product
 		var productID int
@@ -200,6 +197,7 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		// If product doesn't exist, create it
 		if err == sql.ErrNoRows || productID == 0 {
 			log.Printf("Product with SKU %s not found, creating new product", sku)
+
 			// Create product within the same transaction
 			err = tx.QueryRowContext(ctx,
 				"INSERT INTO products (sku, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id",
@@ -271,12 +269,16 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		if err != nil {
 			return fmt.Errorf("failed to insert record: %w", err)
 		}
+
+		processedCount++
 	}
 
 	// Commit the transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
+
+	log.Printf("Successfully processed %d stock health records from %s", processedCount, filePath)
 
 	return nil
 }
@@ -342,6 +344,8 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	}
 	defer stmt.Close()
 
+	processedCount := 0
+
 	// Process records
 	for {
 		record, err := reader.Read()
@@ -357,20 +361,97 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 			continue
 		}
 
+		// Ensure product exists (create if missing)
+		sku := strings.TrimSpace(record[colMap["SKU"]])
+		if sku == "" {
+			log.Printf("Skipping record without SKU in file %s", filePath)
+			continue
+		}
+
+		productName := strings.TrimSpace(record[colMap["Nama Produk"]])
+		if productName == "" {
+			productName = "Product " + sku
+		}
+
+		var productID int
+		err = tx.QueryRowContext(ctx, "SELECT id FROM products WHERE sku = $1", sku).Scan(&productID)
+		if err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("failed to resolve product: %w", err)
+		}
+
+		if err == sql.ErrNoRows || productID == 0 {
+			err = tx.QueryRowContext(ctx,
+				"INSERT INTO products (sku, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id",
+				sku, productName,
+			).Scan(&productID)
+			if err != nil {
+				return fmt.Errorf("failed to create product: %w", err)
+			}
+		}
+
 		// Lookup IDs
-		brandID, err := p.resolver.ResolveBrandID(ctx, record[colMap["Brand"]])
-		if err != nil {
+		brandName := strings.TrimSpace(record[colMap["Brand"]])
+		if brandName == "" {
+			return fmt.Errorf("record missing brand name")
+		}
+
+		var brandID int
+		err = tx.QueryRowContext(ctx, "SELECT id FROM brands WHERE LOWER(name) = LOWER($1)", brandName).Scan(&brandID)
+		if err != nil && err != sql.ErrNoRows {
 			return fmt.Errorf("failed to resolve brand: %w", err)
 		}
 
-		storeID, err := p.resolver.ResolveStoreID(ctx, record[colMap["Store"]])
-		if err != nil {
+		if err == sql.ErrNoRows || brandID == 0 {
+			err = tx.QueryRowContext(ctx,
+				"INSERT INTO brands (name, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id",
+				brandName,
+			).Scan(&brandID)
+			if err != nil {
+				return fmt.Errorf("failed to create brand: %w", err)
+			}
+		}
+
+		storeName := strings.TrimSpace(record[colMap["Store"]])
+		if storeName == "" {
+			return fmt.Errorf("record missing store name")
+		}
+
+		var storeID int
+		err = tx.QueryRowContext(ctx, "SELECT id FROM stores WHERE LOWER(name) = LOWER($1)", storeName).Scan(&storeID)
+		if err != nil && err != sql.ErrNoRows {
 			return fmt.Errorf("failed to resolve store: %w", err)
 		}
 
-		supplierID, err := p.resolver.ResolveSupplierID(ctx, record[colMap["Supplier"]])
-		if err != nil {
-			return fmt.Errorf("failed to resolve supplier: %w", err)
+		if err == sql.ErrNoRows || storeID == 0 {
+			err = tx.QueryRowContext(ctx,
+				"INSERT INTO stores (name, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id",
+				storeName,
+			).Scan(&storeID)
+			if err != nil {
+				return fmt.Errorf("failed to create store: %w", err)
+			}
+		}
+
+		supplierName := strings.TrimSpace(record[colMap["Supplier"]])
+		var supplierID sql.NullInt64
+		if supplierName != "" {
+			err = tx.QueryRowContext(ctx, "SELECT id FROM suppliers WHERE LOWER(name) = LOWER($1)", supplierName).Scan(&supplierID.Int64)
+			if err != nil {
+				if err == sql.ErrNoRows {
+					err = tx.QueryRowContext(ctx,
+						"INSERT INTO suppliers (name, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id",
+						supplierName,
+					).Scan(&supplierID.Int64)
+					if err != nil {
+						return fmt.Errorf("failed to create supplier: %w", err)
+					}
+					supplierID.Valid = true
+				} else {
+					return fmt.Errorf("failed to resolve supplier: %w", err)
+				}
+			} else {
+				supplierID.Valid = true
+			}
 		}
 
 		// Parse dates
@@ -413,37 +494,42 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 			return fmt.Errorf("invalid date in filename: %w", err)
 		}
 
-		// TODO: Lookup product ID by SKU
-		productID := 0 // Implement product lookup
-
 		// Execute the query with nullable time values
 		_, err = stmt.ExecContext(
 			ctx,
-			snapshotTime,                  // time
-			record[colMap["No PO"]],       // po_number
-			productID,                     // product_id (TODO: Get from SKU)
-			record[colMap["SKU"]],         // sku
-			record[colMap["Nama Produk"]], // product_name
-			brandID,                       // brand_id
-			storeID,                       // store_id
-			supplierID,                    // supplier_id
-			quantityOrdered,               // quantity_ordered
-			unitPrice,                     // unit_price
-			totalAmount,                   // total_amount
-			status,                        // status
-			toNullTime(releasedAt),        // po_released_at
-			toNullTime(sentAt),            // po_sent_at
-			toNullTime(approvedAt),        // po_approved_at
-			toNullTime(arrivedAt),         // po_arrived_at
-			toNullTime(receivedAt),        // po_received_at
-			quantityReceived,              // quantity_received
+			snapshotTime,                // time
+			record[colMap["No PO"]],     // po_number
+			productID,                   // product_id
+			sku,                         // sku
+			productName,                 // product_name
+			brandID,                     // brand_id
+			storeID,                     // store_id
+			toNullableInt64(supplierID), // supplier_id
+			quantityOrdered,             // quantity_ordered
+			unitPrice,                   // unit_price
+			totalAmount,                 // total_amount
+			status,                      // status
+			toNullTime(releasedAt),      // po_released_at
+			toNullTime(sentAt),          // po_sent_at
+			toNullTime(approvedAt),      // po_approved_at
+			toNullTime(arrivedAt),       // po_arrived_at
+			toNullTime(receivedAt),      // po_received_at
+			quantityReceived,            // quantity_received
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert record: %w", err)
 		}
+
+		processedCount++
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	log.Printf("Successfully processed %d PO snapshot records from %s", processedCount, filePath)
+
+	return nil
 }
 
 // toNullTime converts a *time.Time to a NullTime for SQL
@@ -452,4 +538,11 @@ func toNullTime(t *time.Time) interface{} {
 		return nil
 	}
 	return *t
+}
+
+func toNullableInt64(v sql.NullInt64) interface{} {
+	if v.Valid {
+		return v.Int64
+	}
+	return nil
 }

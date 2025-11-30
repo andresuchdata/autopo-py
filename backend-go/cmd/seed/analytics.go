@@ -29,46 +29,63 @@ func SeedAnalyticsData(c *cli.Context) error {
 
 	stockHealthDir := c.String("stock-health-dir")
 	poSnapshotsDir := c.String("po-snapshots-dir")
+	stockHealthOnly := c.Bool("stock-health-only")
+	poSnapshotsOnly := c.Bool("po-snapshots-only")
+
+	// If both flags are true, it's a conflict
+	if stockHealthOnly && poSnapshotsOnly {
+		return fmt.Errorf("cannot specify both --stock-health-only and --po-snapshots-only")
+	}
+
+	// Default to processing both if neither flag is set
+	processStockHealth := !poSnapshotsOnly
+	processPOSnapshots := !stockHealthOnly
 
 	// Initialize the analytics processor
 	processor := analytics.NewAnalyticsProcessor(db)
 
-	// Process stock health files
-	if err := filepath.Walk(stockHealthDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if filepath.Ext(path) == ".csv" {
-			log.Printf("Processing stock health file: %s\n", path)
-			if err := processor.ProcessFile(c.Context, path); err != nil {
-				return fmt.Errorf("error processing %s: %w", path, err)
+	// Process stock health files if enabled
+	if processStockHealth {
+		log.Println("Processing stock health files...")
+		if err := filepath.Walk(stockHealthDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
+			if info.IsDir() {
+				return nil
+			}
+			if filepath.Ext(path) == ".csv" {
+				log.Printf("Processing stock health file: %s\n", path)
+				if err := processor.ProcessFile(c.Context, path); err != nil {
+					return fmt.Errorf("error processing %s: %w", path, err)
+				}
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("error walking stock health directory: %w", err)
 		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("error walking stock health directory: %w", err)
 	}
 
-	// Process PO snapshot files
-	if err := filepath.Walk(poSnapshotsDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if filepath.Ext(path) == ".csv" {
-			log.Printf("Processing PO snapshot file: %s\n", path)
-			if err := processor.ProcessFile(c.Context, path); err != nil {
-				return fmt.Errorf("error processing %s: %w", path, err)
+	// Process PO snapshot files if enabled
+	if processPOSnapshots {
+		log.Println("Processing PO snapshot files...")
+		if err := filepath.Walk(poSnapshotsDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
+			if info.IsDir() {
+				return nil
+			}
+			if filepath.Ext(path) == ".csv" {
+				log.Printf("Processing PO snapshot file: %s\n", path)
+				if err := processor.ProcessFile(c.Context, path); err != nil {
+					return fmt.Errorf("error processing %s: %w", path, err)
+				}
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("error walking PO snapshots directory: %w", err)
 		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("error walking PO snapshots directory: %w", err)
 	}
 
 	return nil
