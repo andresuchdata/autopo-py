@@ -1,26 +1,15 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { dashboardService, NormalizedHealthItem, ConditionKey, ConditionCount } from '@/services/dashboardService';
-import { stockHealthService } from '@/services/stockHealthService';
+import { useState, useCallback, useEffect } from 'react';
+import {
+  dashboardService,
+  type DashboardData,
+  type DashboardFilters,
+  type ConditionKey,
+} from '@/services/dashboardService';
+import { stockHealthService, type StockHealthApiItem } from '@/services/stockHealthService';
 
-interface FilteredData {
-  byBrand: Map<string, NormalizedHealthItem[]>;
-  byStore: Map<string, NormalizedHealthItem[]>;
-  byBrandAndStore: Map<string, Map<string, NormalizedHealthItem[]>>;
-}
-
-export interface DashboardData {
-  summary: {
-    totalItems: number;
-    overstock: number;
-    healthy: number;
-    low: number;
-    nearly_out: number;
-    out_of_stock: number;
-    items: NormalizedHealthItem[];
-    byBrand: Array<Omit<ConditionCount, 'store'>>;
-    byStore: Array<Omit<ConditionCount, 'brand'>>;
-  };
-  charts: any;
+interface LabeledOption {
+  id: number | null;
+  name: string;
 }
 
 export function useStockData() {
@@ -29,8 +18,9 @@ export function useStockData() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [lastFilters, setLastFilters] = useState<DashboardFilters | undefined>(undefined);
+  const [lastDate, setLastDate] = useState<string | null>(null);
 
-  // Fetch available dates on mount
   useEffect(() => {
     const fetchDates = async () => {
       try {
@@ -43,20 +33,21 @@ export function useStockData() {
     fetchDates();
   }, []);
 
-  const refresh = useCallback(async (date: string) => {
+  const refresh = useCallback(async (date: string, filters?: DashboardFilters) => {
     setLoading(true);
     setError(null);
 
     try {
-      const result = await dashboardService.getDashboardData(date);
-      console.log("useStockData", result);
+      const result = await dashboardService.getDashboardData(date, filters);
 
       if (!result) {
-        throw Error("Invalid or no data!")
+        throw new Error('Invalid or no data!');
       }
 
       setData(result);
       setLastUpdated(new Date());
+      setLastFilters(filters);
+      setLastDate(date);
       return result;
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
@@ -67,134 +58,54 @@ export function useStockData() {
     }
   }, []);
 
-  interface FilteredSummary {
-    items: NormalizedHealthItem[];
-    byBrand: Map<string, NormalizedHealthItem[]>;
-    byStore: Map<string, NormalizedHealthItem[]>;
-    summary: {
-      totalItems: number;
-      totalStock: number;
-      totalValue: number;
-      byCondition: Record<ConditionKey, number>;
-      stockByCondition: Record<ConditionKey, number>;
-      valueByCondition: Record<ConditionKey, number>;
-    };
-    charts: {
-      conditionCounts: Record<ConditionKey, number>;
-      pieDataBySkuCount: { condition: ConditionKey; value: number }[];
-      pieDataByStock: { condition: ConditionKey; value: number }[];
-      pieDataByValue: { condition: ConditionKey; value: number }[];
-    };
-  }
-
-  // Get filtered summary based on brand and store filters
-  const getFilteredSummary = useCallback((brand: string[] = [], store: string[] = []): FilteredSummary | null => {
-    if (!data) return null;
-
-    // Start with all items
-    let filteredItems = [...data.summary.items];
-
-
-    // Apply filters if provided
-    if (brand.length > 0) {
-      filteredItems = filteredItems.filter(item => brand.includes(item.brand));
-    }
-
-    if (store.length > 0) {
-      filteredItems = filteredItems.filter(item => store.includes(item.store));
-    }
-
-    // Group by brand
-    const byBrand = new Map<string, NormalizedHealthItem[]>();
-    // Group by store
-    const byStore = new Map<string, NormalizedHealthItem[]>();
-
-    // Count by condition
-    const byCondition = {
-      overstock: 0,
-      healthy: 0,
-      low: 0,
-      nearly_out: 0,
-      out_of_stock: 0
-    } as Record<ConditionKey, number>;
-
-    const stockByCondition = {
-      overstock: 0,
-      healthy: 0,
-      low: 0,
-      nearly_out: 0,
-      out_of_stock: 0
-    } as Record<ConditionKey, number>;
-
-    const valueByCondition = {
-      overstock: 0,
-      healthy: 0,
-      low: 0,
-      nearly_out: 0,
-      out_of_stock: 0
-    } as Record<ConditionKey, number>;
-
-    let totalStock = 0;
-    let totalValue = 0;
-
-    // Process all items once to build our data structures
-    filteredItems.forEach(item => {
-      // Group by brand
-      if (!byBrand.has(item.brand)) {
-        byBrand.set(item.brand, []);
+  const fetchItems = useCallback(
+    async (params: {
+      date?: string;
+      condition?: ConditionKey;
+      page?: number;
+      pageSize?: number;
+    }) => {
+      const stockDate = params.date ?? lastDate;
+      if (!stockDate) {
+        throw new Error('No stock date selected');
       }
-      byBrand.get(item.brand)?.push(item);
 
-      // Group by store
-      if (!byStore.has(item.store)) {
-        byStore.set(item.store, []);
-      }
-      byStore.get(item.store)?.push(item);
+      return stockHealthService.getItems({
+        stockDate,
+        condition: params.condition,
+        page: params.page,
+        pageSize: params.pageSize,
+        brandIds: lastFilters?.brandIds,
+        storeIds: lastFilters?.storeIds,
+      });
+    },
+    [lastDate, lastFilters]
+  );
 
-      // Count by condition
-      byCondition[item.condition] = (byCondition[item.condition] || 0) + 1;
+  const buildOptions = useCallback(
+    (type: 'brand' | 'store'): LabeledOption[] => {
+      if (!data) return [];
+      const seen = new Map<string, number | null>();
+      const source = type === 'brand' ? data.brandBreakdown : data.storeBreakdown;
 
-      // Sum stock
-      stockByCondition[item.condition] = (stockByCondition[item.condition] || 0) + item.stock;
-      totalStock += item.stock;
+      source.forEach((entry) => {
+        const name =
+          type === 'brand'
+            ? entry.brand || 'Unknown'
+            : entry.store || 'Unknown';
+        const id = type === 'brand' ? entry.brand_id ?? null : entry.store_id ?? null;
+        if (!seen.has(name)) {
+          seen.set(name, id);
+        }
+      });
 
-      // Sum value
-      const val = item.stock * item.hpp;
-      valueByCondition[item.condition] = (valueByCondition[item.condition] || 0) + val;
-      totalValue += val;
-    });
+      return Array.from(seen.entries()).map(([name, id]) => ({ name, id }));
+    },
+    [data]
+  );
 
-    return {
-      items: filteredItems,
-      byBrand,
-      byStore,
-      summary: {
-        totalItems: filteredItems.length,
-        totalStock,
-        totalValue,
-        byCondition,
-        stockByCondition,
-        valueByCondition
-      },
-      charts: dashboardService.prepareChartData(filteredItems)
-    };
-  }, [data]);
-
-  // Get unique brands from data
-  const getBrands = useCallback(() => {
-    if (!data) return [];
-    const brands = new Set<string>();
-    data.summary.items.forEach(item => brands.add(item.brand));
-    return Array.from(brands);
-  }, [data]);
-
-  // Get unique stores from data
-  const getStores = useCallback(() => {
-    if (!data) return [];
-    const stores = new Set<string>();
-    data.summary.items.forEach(item => stores.add(item.store));
-    return Array.from(stores);
-  }, [data]);
+  const getBrandOptions = useCallback(() => buildOptions('brand'), [buildOptions]);
+  const getStoreOptions = useCallback(() => buildOptions('store'), [buildOptions]);
 
   return {
     data,
@@ -203,8 +114,8 @@ export function useStockData() {
     lastUpdated,
     refresh,
     availableDates,
-    getFilteredSummary,
-    getBrands,
-    getStores
+    fetchItems,
+    getBrandOptions,
+    getStoreOptions,
   };
 }

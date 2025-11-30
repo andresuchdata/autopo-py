@@ -31,6 +31,14 @@ func (s *StockHealthService) GetTimeSeries(ctx context.Context, days int, filter
 	return s.repo.GetTimeSeriesData(ctx, days, filter)
 }
 
+func (s *StockHealthService) GetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error) {
+	return s.repo.GetBrandBreakdown(ctx, filter)
+}
+
+func (s *StockHealthService) GetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error) {
+	return s.repo.GetStoreBreakdown(ctx, filter)
+}
+
 func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter domain.StockHealthFilter) (*domain.StockHealthDashboard, error) {
 	summary, err := s.repo.GetStockHealthSummary(ctx, filter)
 	if err != nil {
@@ -42,9 +50,21 @@ func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter 
 		return nil, err
 	}
 
+	brandBreakdown, err := s.repo.GetBrandBreakdown(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	storeBreakdown, err := s.repo.GetStoreBreakdown(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
 	return &domain.StockHealthDashboard{
-		Summary:    summary,
-		TimeSeries: timeSeries,
+		Summary:        summary,
+		TimeSeries:     timeSeries,
+		BrandBreakdown: brandBreakdown,
+		StoreBreakdown: storeBreakdown,
 	}, nil
 }
 
