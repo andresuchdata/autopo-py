@@ -5,15 +5,37 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
+	"github.com/jmoiron/sqlx"
 )
 
 type StockHealthRepository interface {
 	GetStockHealthSummary(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealthSummary, error)
 	GetStockItems(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealth, int, error)
 	GetTimeSeriesData(ctx context.Context, days int, filter domain.StockHealthFilter) (map[string][]domain.TimeSeriesData, error)
+	GetAvailableDates(ctx context.Context, limit int) ([]time.Time, error)
+}
+
+func (r *stockHealthRepository) GetAvailableDates(ctx context.Context, limit int) ([]time.Time, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+
+	query := `
+		SELECT DISTINCT stock_date
+		FROM stock_health
+		ORDER BY stock_date DESC
+		LIMIT $1
+	`
+
+	var dates []time.Time
+	if err := r.db.SelectContext(ctx, &dates, query, limit); err != nil {
+		return nil, fmt.Errorf("error getting available dates: %w", err)
+	}
+
+	return dates, nil
 }
 
 type stockHealthRepository struct {
@@ -52,6 +74,12 @@ func (r *stockHealthRepository) GetStockHealthSummary(ctx context.Context, filte
 	if len(filter.BrandIDs) > 0 {
 		conditions = append(conditions, fmt.Sprintf("brand_id = ANY($%d::bigint[])", argCounter))
 		args = append(args, filter.BrandIDs)
+		argCounter++
+	}
+
+	if filter.StockDate != "" {
+		conditions = append(conditions, fmt.Sprintf("stock_date = $%d::date", argCounter))
+		args = append(args, filter.StockDate)
 		argCounter++
 	}
 
@@ -111,6 +139,12 @@ func (r *stockHealthRepository) GetStockItems(ctx context.Context, filter domain
 	if filter.Condition != "" {
 		conditions = append(conditions, fmt.Sprintf("stock_condition = $%d", argCounter))
 		args = append(args, filter.Condition)
+		argCounter++
+	}
+
+	if filter.StockDate != "" {
+		conditions = append(conditions, fmt.Sprintf("stock_date = $%d::date", argCounter))
+		args = append(args, filter.StockDate)
 		argCounter++
 	}
 

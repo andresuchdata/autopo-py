@@ -84,6 +84,7 @@ type StockHealthFilter struct {
 	SKUIds    []string `json:"sku_ids"`
 	BrandIDs  []int64  `json:"brand_ids"`
 	Condition string   `json:"condition"`
+	StockDate string   `json:"stock_date"`
 	Page      int      `json:"page"`
 	PageSize  int      `json:"page_size"`
 }
