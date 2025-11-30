@@ -89,6 +89,16 @@ func main() {
 						Value:   "./data/seeds/po_snapshots",
 						EnvVars: []string{"PO_SNAPSHOTS_DIR"},
 					},
+					&cli.BoolFlag{
+						Name:  "stock-health-only",
+						Usage: "Only process stock health files, skip PO snapshots",
+						Value: false,
+					},
+					&cli.BoolFlag{
+						Name:  "po-snapshots-only",
+						Usage: "Only process PO snapshot files, skip stock health",
+						Value: false,
+					},
 				},
 				Action: SeedAnalyticsData,
 			},
