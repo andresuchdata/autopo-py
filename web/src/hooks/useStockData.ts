@@ -6,6 +6,7 @@ import {
   type ConditionKey,
 } from '@/services/dashboardService';
 import { stockHealthService, type StockHealthItemsResponse } from '@/services/stockHealthService';
+import { type SummaryGrouping } from '@/types/stockHealth';
 
 export interface LabeledOption {
   id: number | null;
@@ -64,6 +65,7 @@ export function useStockData() {
       condition?: ConditionKey;
       page?: number;
       pageSize?: number;
+      grouping?: SummaryGrouping;
     }): Promise<StockHealthItemsResponse> => {
       const stockDate = params.date ?? lastDate;
       if (!stockDate) {
@@ -77,6 +79,7 @@ export function useStockData() {
         pageSize: params.pageSize,
         brandIds: lastFilters?.brandIds,
         storeIds: lastFilters?.storeIds,
+        grouping: params.grouping,
       });
     },
     [lastDate, lastFilters]

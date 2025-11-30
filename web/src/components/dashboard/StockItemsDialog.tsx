@@ -19,6 +19,7 @@ import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { COLORS, CONDITION_LABELS } from "./SummaryCards";
 import { ConditionKey } from "@/services/dashboardService";
 import { type StockHealthItemsResponse } from "@/services/stockHealthService";
+import { type SummaryGrouping } from "@/types/stockHealth";
 
 interface StockItem {
     id: number;
@@ -29,13 +30,16 @@ interface StockItem {
     current_stock: number;
     days_of_cover: number;
     condition: ConditionKey;
+    hpp: number;
+    inventory_value: number;
 }
 
 interface StockItemsDialogProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
     condition: ConditionKey | null;
-    fetchItems: (params: { page: number; pageSize: number }) => Promise<StockHealthItemsResponse>;
+    grouping: SummaryGrouping | null;
+    fetchItems: (params: { page: number; pageSize: number; grouping?: SummaryGrouping }) => Promise<StockHealthItemsResponse>;
 }
 
 type SortField = keyof StockItem;
@@ -45,6 +49,7 @@ export function StockItemsDialog({
     isOpen,
     onOpenChange,
     condition,
+    grouping,
     fetchItems,
 }: StockItemsDialogProps) {
     const [currentPage, setCurrentPage] = useState(1);
@@ -56,6 +61,21 @@ export function StockItemsDialog({
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const activeGrouping: SummaryGrouping = grouping ?? 'sku';
+
+    useEffect(() => {
+        if (activeGrouping === 'value') {
+            setSortField('inventory_value');
+            setSortDirection('desc');
+        } else if (activeGrouping === 'stock') {
+            setSortField('current_stock');
+            setSortDirection('desc');
+        } else {
+            setSortField('store_name');
+            setSortDirection('asc');
+        }
+    }, [activeGrouping]);
+
     const loadItems = useCallback(async (pageParam: number, pageSizeParam: number) => {
         if (!condition) {
             setItems([]);
@@ -66,7 +86,11 @@ export function StockItemsDialog({
         setIsLoading(true);
         setError(null);
         try {
-            const response = await fetchItems({ page: pageParam, pageSize: pageSizeParam });
+            const response = await fetchItems({
+                page: pageParam,
+                pageSize: pageSizeParam,
+                grouping: activeGrouping,
+            });
             const normalizedItems: StockItem[] = response.items.map((item) => ({
                 id: item.id,
                 store_name: item.store_name,
@@ -76,6 +100,8 @@ export function StockItemsDialog({
                 current_stock: item.current_stock,
                 days_of_cover: item.days_of_cover,
                 condition: (item.stock_condition as ConditionKey) ?? 'out_of_stock',
+                hpp: item.hpp ?? 0,
+                inventory_value: (item.current_stock ?? 0) * (item.hpp ?? 0),
             }));
 
             setItems(normalizedItems);
@@ -88,7 +114,7 @@ export function StockItemsDialog({
         } finally {
             setIsLoading(false);
         }
-    }, [condition, fetchItems]);
+    }, [condition, fetchItems, activeGrouping]);
 
     useEffect(() => {
         if (isOpen && condition) {
@@ -100,7 +126,7 @@ export function StockItemsDialog({
             setItems([]);
             setTotalItems(0);
         }
-    }, [isOpen, condition, itemsPerPage, loadItems]);
+    }, [isOpen, condition, itemsPerPage, loadItems, activeGrouping]);
 
     // Handle sorting
     const handleSort = (field: SortField) => {
@@ -150,6 +176,23 @@ export function StockItemsDialog({
         loadItems(1, value);
     };
 
+    const formatNumber = (value: number) => new Intl.NumberFormat('id-ID').format(value);
+    const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
+
+    const groupingDescriptions: Record<SummaryGrouping, string> = {
+        sku: 'individual SKU details',
+        stock: 'total quantity details',
+        value: 'inventory value details',
+    };
+
+    const metricConfig = activeGrouping === 'value'
+        ? { label: 'Inventory Value', field: 'inventory_value' as SortField, render: (item: StockItem) => formatCurrency(item.inventory_value) }
+        : {
+            label: activeGrouping === 'stock' ? 'Total Qty' : 'Stock',
+            field: 'current_stock' as SortField,
+            render: (item: StockItem) => formatNumber(item.current_stock),
+        };
+
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="w-[95vw] max-w-[95vw] sm:w-[80vw] sm:max-w-[80vw] h-[90vh] flex flex-col">
@@ -162,7 +205,9 @@ export function StockItemsDialog({
                         {condition && CONDITION_LABELS[condition]}
                     </DialogTitle>
                     <DialogDescription>
-                        {condition ? `Showing ${totalItems.toLocaleString()} items` : 'Select a condition to view items'}
+                        {condition
+                            ? `Showing ${totalItems.toLocaleString()} items (${groupingDescriptions[activeGrouping]})`
+                            : 'Select a condition to view items'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -174,8 +219,11 @@ export function StockItemsDialog({
                                 <SortableHeader label="SKU Code" field="sku_code" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="SKU Name" field="sku_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="Brand" field="brand_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
-                                <SortableHeader label="Stock" field="current_stock" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                <SortableHeader label={metricConfig.label} field={metricConfig.field} currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
                                 <SortableHeader label="Days of Cover" field="days_of_cover" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                {activeGrouping === 'value' && (
+                                    <SortableHeader label="HPP" field="hpp" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                )}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -198,8 +246,11 @@ export function StockItemsDialog({
                                         <TableCell className="font-mono text-xs">{item.sku_code}</TableCell>
                                         <TableCell className="max-w-[300px] truncate" title={item.sku_name}>{item.sku_name}</TableCell>
                                         <TableCell>{item.brand_name}</TableCell>
-                                        <TableCell className="text-right font-mono">{item.current_stock}</TableCell>
+                                        <TableCell className="text-right font-mono">{metricConfig.render(item)}</TableCell>
                                         <TableCell className="text-right font-mono">{item.days_of_cover.toFixed(1)}</TableCell>
+                                        {activeGrouping === 'value' && (
+                                            <TableCell className="text-right font-mono">{formatCurrency(item.hpp)}</TableCell>
+                                        )}
                                     </TableRow>
                                 ))
                             ) : (

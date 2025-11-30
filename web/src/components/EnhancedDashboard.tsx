@@ -8,6 +8,7 @@ import { DashboardFilters } from './dashboard/DashboardFilters';
 import { SummaryCards } from './dashboard/SummaryCards';
 import { DashboardCharts } from './dashboard/DashboardCharts';
 import { StockItemsDialog } from './dashboard/StockItemsDialog';
+import { type SummaryGrouping } from '@/types/stockHealth';
 
 const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock'];
 
@@ -52,10 +53,12 @@ export function EnhancedDashboard() {
   } = useDashboard();
 
   const [selectedCondition, setSelectedCondition] = useState<ConditionKey | null>(null);
+  const [selectedGrouping, setSelectedGrouping] = useState<SummaryGrouping | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const handleCardClick = useCallback((condition: ConditionKey) => {
+  const handleCardClick = useCallback((condition: ConditionKey, grouping: SummaryGrouping) => {
     setSelectedCondition(condition);
+    setSelectedGrouping(grouping);
     setIsDialogOpen(true);
   }, []);
 
@@ -63,6 +66,7 @@ export function EnhancedDashboard() {
     setIsDialogOpen(open);
     if (!open) {
       setSelectedCondition(null);
+      setSelectedGrouping(null);
     }
   }, []);
 
@@ -76,9 +80,10 @@ export function EnhancedDashboard() {
         condition: selectedCondition,
         page: params.page,
         pageSize: params.pageSize,
+        grouping: selectedGrouping ?? undefined,
       });
     },
-    [fetchItems, selectedCondition]
+    [fetchItems, selectedCondition, selectedGrouping]
   );
 
   const summary = data?.summary ?? EMPTY_SUMMARY;
@@ -129,6 +134,7 @@ export function EnhancedDashboard() {
       <StockItemsDialog
         isOpen={isDialogOpen}
         condition={selectedCondition}
+        grouping={selectedGrouping}
         onOpenChange={handleDialogOpenChange}
         fetchItems={fetchItemsForDialog}
       />
