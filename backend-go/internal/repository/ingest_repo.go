@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/yourusername/autopo-backend-go/internal/domain"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 )
 
 type IngestRepository struct {

@@ -4,35 +4,31 @@ package main
 import (
 	"context"
 	"database/sql"
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/api"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/repository/postgres"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
+	"github.com/andresuchdata/autopo-py/backend-go/pkg/logger"
 	_ "github.com/lib/pq"
-	"github.com/yourusername/autopo/internal/api"
-	"github.com/yourusername/autopo/internal/config"
-	"github.com/yourusername/autopo/internal/repository"
-	"github.com/yourusername/autopo/internal/service"
-	"github.com/yourusername/autopo/pkg/logger"
 )
 
 func main() {
 	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
-	}
-
-	// Initialize logger
-	logger.Init(cfg.Env == "production")
+	cfg := config.Load()
 
 	// Initialize database connection
-	db, err := sql.Open("postgres", cfg.DatabaseURL)
+	db, err := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Database.Host, cfg.Database.Port, cfg.Database.User,
+		cfg.Database.Password, cfg.Database.DBName, cfg.Database.SSLMode))
 	if err != nil {
-		logger.Fatal("Failed to connect to database", "error", err)
+		logger.Log.Fatal().Err(err).Msg("Failed to connect to database")
 	}
 	defer db.Close()
 
@@ -41,35 +37,43 @@ func main() {
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
-		logger.Fatal("Failed to ping database", "error", err)
+		logger.Log.Fatal().Err(err).Msg("Failed to ping database")
 	}
 
-	// Initialize repositories
-	storeRepo := repository.NewStoreRepository(db)
-	brandRepo := repository.NewBrandRepository(db)
-	skuRepo := repository.NewSKURepository(db)
-	stockHealthRepo := repository.NewStockHealthRepository(db)
+	// Initialize repository
+	dbConn, err := postgres.NewDB(&config.DatabaseConfig{
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		DBName:   cfg.Database.DBName,
+		SSLMode:  cfg.Database.SSLMode,
+	})
+	if err != nil {
+		logger.Log.Fatal().Err(err).Msg("Failed to initialize database connection")
+	}
+
+	// Initialize repository
+	poRepo := postgres.NewPORepository(dbConn)
 
 	// Initialize services
-	services := &service.Services{
-		Store:       service.NewStoreService(storeRepo),
-		Brand:       service.NewBrandService(brandRepo),
-		SKU:         service.NewSKUService(skuRepo, brandRepo),
-		StockHealth: service.NewStockHealthService(stockHealthRepo, storeRepo, brandRepo, skuRepo),
-	}
+	poService := service.NewPOService(poRepo)
 
 	// Initialize HTTP server
-	router := api.SetupRouter(services)
+	router := api.NewRouter(&api.Services{
+		POService: poService,
+	})
+
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
+		Addr:    ":" + cfg.Server.Port,
 		Handler: router,
 	}
 
 	// Start server in a goroutine
 	go func() {
-		logger.Info("Starting server", "port", cfg.Port)
+		logger.Log.Info().Str("port", cfg.Server.Port).Msg("Starting server")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("Failed to start server", "error", err)
+			logger.Log.Fatal().Err(err).Msg("Failed to start server")
 		}
 	}()
 
@@ -77,7 +81,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	logger.Info("Shutting down server...")
+	logger.Log.Info().Msg("Shutting down server...")
 
 	// The context is used to inform the server it has 5 seconds to finish
 	// the request it is currently handling
@@ -85,8 +89,8 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.Fatal("Server forced to shutdown", "error", err)
+		logger.Log.Fatal().Err(err).Msg("Server forced to shutdown")
 	}
 
-	logger.Info("Server exiting")
+	logger.Log.Info().Msg("Server exiting")
 }

@@ -4,7 +4,7 @@ package repository
 import (
 	"context"
 
-	"github.com/yourusername/autopo/backend-go/internal/domain"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 )
 
 type PORepository interface {
