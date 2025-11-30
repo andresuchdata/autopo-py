@@ -3,73 +3,81 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStockData } from './useStockData';
 import { stockHealthService } from '@/services/stockHealthService';
 
+export interface DashboardFiltersState {
+  brandIds: number[];
+  storeIds: number[];
+}
+
+const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [] };
+
 export function useDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [filters, setFilters] = useState<{ brand: string[]; store: string[] }>({ brand: [], store: [] });
+  const [filters, setFilters] = useState<DashboardFiltersState>(DEFAULT_FILTERS);
   const {
     data,
     loading,
     error,
     refresh,
     lastUpdated,
-    getFilteredSummary,
-    getBrands,
-    getStores,
-    availableDates
+    availableDates,
+    fetchItems,
+    getBrandOptions,
+    getStoreOptions,
   } = useStockData();
 
-  // Load the latest data on mount
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        // Get both available dates and latest date in a single call
-        const { latestDate } = await stockHealthService.getAvailableDatesWithLatest();
-        if (latestDate) {
-          setSelectedDate(latestDate);
-          await refresh(latestDate);
-        }
-      } catch (err) {
-        console.error('Failed to load initial data:', err);
+  const brandOptions = useMemo(() => getBrandOptions(), [getBrandOptions]);
+  const storeOptions = useMemo(() => getStoreOptions(), [getStoreOptions]);
+
+  const loadInitialData = useCallback(async () => {
+    try {
+      const { latestDate } = await stockHealthService.getAvailableDatesWithLatest();
+      if (latestDate) {
+        setSelectedDate(latestDate);
+        await refresh(latestDate, filters);
       }
-    };
+    } catch (err) {
+      console.error('Failed to load initial data:', err);
+    }
+  }, [filters, refresh]);
 
-    loadInitialData();
-  }, [refresh]);
+  useEffect(() => {
+    if (!selectedDate) {
+      loadInitialData();
+    }
+  }, [selectedDate, loadInitialData]);
 
-  // Handle date change
-  const handleDateChange = async (newDate: string) => {
+  const handleDateChange = useCallback(async (newDate: string) => {
     setSelectedDate(newDate);
-    await refresh(newDate);
-  };
+    await refresh(newDate, filters);
+  }, [filters, refresh]);
 
-  // Get filtered data based on current filters
-  const filteredData = useMemo(() => {
-    if (!data) return null;
-    return getFilteredSummary(filters.brand, filters.store);
-  }, [data, filters.brand, filters.store, getFilteredSummary]);
-
-  // Get available brands and stores
-  const brands = getBrands();
-  const stores = getStores();
+  const handleFilterChange = useCallback(async (nextFilters: DashboardFiltersState) => {
+    setFilters(nextFilters);
+    if (selectedDate) {
+      await refresh(selectedDate, nextFilters);
+    }
+  }, [refresh, selectedDate]);
 
   const refreshSelected = useCallback(() => {
     if (!selectedDate) return Promise.resolve(null);
-    return refresh(selectedDate);
-  }, [selectedDate, refresh]);
+    return refresh(selectedDate, filters);
+  }, [filters, refresh, selectedDate]);
 
   return {
     data,
-    filteredData,
     loading,
     error,
     selectedDate,
     lastUpdated,
     filters,
-    brands,
-    stores,
+    brandOptions,
+    storeOptions,
     availableDates,
     onDateChange: handleDateChange,
-    setFilters,
+    onFiltersChange: handleFilterChange,
     refresh: refreshSelected,
+    fetchItems,
+    brandList: brandOptions,
+    storeList: storeOptions,
   };
 }
