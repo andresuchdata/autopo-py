@@ -1,4 +1,5 @@
 import { api } from '@/services/api';
+import { type SummaryGrouping } from '@/types/stockHealth';
 
 const ANALYTICS_BASE = '/analytics/stock_health';
 
@@ -16,6 +17,7 @@ export interface StockHealthApiItem {
   stock_date: string;
   last_updated: string;
   stock_condition: string;
+  hpp?: number;
 }
 
 export interface StockHealthItemsResponse {
@@ -67,6 +69,7 @@ export interface StockHealthFilterParams {
   condition?: string;
   brandIds?: number[];
   storeIds?: number[];
+  grouping?: SummaryGrouping;
 }
 
 const serializeIds = (ids?: number[]) => (ids && ids.length > 0 ? ids.join(',') : undefined);
@@ -81,6 +84,7 @@ export const stockHealthService = {
         condition: params.condition,
         brand_ids: serializeIds(params.brandIds),
         store_ids: serializeIds(params.storeIds),
+        grouping: params.grouping,
       },
     });
 
