@@ -70,8 +70,22 @@ type StockHealth struct {
 
 // StockHealthSummary represents a summary of stock conditions
 type StockHealthSummary struct {
-	Condition string `json:"condition" db:"stock_condition"`
-	Count     int    `json:"count" db:"count"`
+	Condition  string  `json:"condition" db:"stock_condition"`
+	Count      int     `json:"count" db:"count"`
+	TotalStock int64   `json:"total_stock" db:"total_stock"`
+	TotalValue float64 `json:"total_value" db:"total_value"`
+}
+
+// ConditionBreakdown represents counts per condition for brands or stores
+type ConditionBreakdown struct {
+	BrandID    int64   `json:"brand_id,omitempty" db:"brand_id"`
+	Brand      string  `json:"brand,omitempty" db:"brand_name"`
+	StoreID    int64   `json:"store_id,omitempty" db:"store_id"`
+	Store      string  `json:"store,omitempty" db:"store_name"`
+	Condition  string  `json:"condition" db:"stock_condition"`
+	Count      int     `json:"count" db:"count"`
+	TotalStock int64   `json:"total_stock" db:"total_stock"`
+	TotalValue float64 `json:"total_value" db:"total_value"`
 }
 
 // TimeSeriesData represents time series data for stock health
@@ -93,8 +107,10 @@ type StockHealthFilter struct {
 
 // StockHealthDashboard represents the dashboard data
 type StockHealthDashboard struct {
-	Summary    []StockHealthSummary        `json:"summary"`
-	TimeSeries map[string][]TimeSeriesData `json:"time_series"`
+	Summary        []StockHealthSummary        `json:"summary"`
+	TimeSeries     map[string][]TimeSeriesData `json:"time_series"`
+	BrandBreakdown []ConditionBreakdown        `json:"brand_breakdown"`
+	StoreBreakdown []ConditionBreakdown        `json:"store_breakdown"`
 }
 
 // Brand represents a brand entity
