@@ -39,9 +39,12 @@ COPY --from=builder /app/bin/seed /app/bin/seed
 COPY .env.example /app/.env
 COPY entrypoint.sh /app/entrypoint.sh
 
-# Create necessary directories
+# Create necessary directories and copy seed data
 RUN mkdir -p /app/data/uploads /app/data/output /app/data/seeds && \
     chmod +x /app/entrypoint.sh
+
+# Include static seed CSVs for container seeding
+COPY data/seeds /app/data/seeds
 
 # Copy scripts
 COPY scripts /app/scripts
