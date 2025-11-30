@@ -16,6 +16,15 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+func newDBURLFlag() *cli.StringFlag {
+	return &cli.StringFlag{
+		Name:     "db-url",
+		Usage:    "Database connection string",
+		Required: true,
+		EnvVars:  []string{"DATABASE_URL"},
+	}
+}
+
 // nullIfEmpty returns NULL if the string is empty, otherwise returns the string
 func nullIfEmpty(s string) sql.NullString {
 	if s == "" {
@@ -54,18 +63,14 @@ func main() {
 		Name:  "seed",
 		Usage: "Seed the database with initial data",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:     "db-url",
-				Usage:    "Database connection string",
-				Required: true,
-				EnvVars:  []string{"DATABASE_URL"},
-			},
+			newDBURLFlag(),
 		},
 		Commands: []*cli.Command{
 			{
 				Name:  "master",
 				Usage: "Seed master data (brands, suppliers, stores, etc.)",
 				Flags: []cli.Flag{
+					newDBURLFlag(),
 					&cli.StringFlag{
 						Name:    "data-dir",
 						Usage:   "Directory containing master seed data",
@@ -81,6 +86,7 @@ func main() {
 				Name:  "analytics",
 				Usage: "Seed analytics data (stock health and PO snapshots)",
 				Flags: []cli.Flag{
+					newDBURLFlag(),
 					&cli.StringFlag{
 						Name:    "stock-health-dir",
 						Usage:   "Directory containing stock health CSV files",
@@ -112,6 +118,7 @@ func main() {
 				Name:  "all",
 				Usage: "Seed both master data and analytics data",
 				Flags: []cli.Flag{
+					newDBURLFlag(),
 					&cli.StringFlag{
 						Name:    "data-dir",
 						Usage:   "Directory containing master seed data",

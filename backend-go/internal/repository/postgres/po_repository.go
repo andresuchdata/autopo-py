@@ -129,7 +129,7 @@ func (r *poRepository) GetStores(ctx context.Context) ([]*domain.Store, error) {
 
 func (r *poRepository) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
 	query := `
-		SELECT id, name, original_id, created_at, updated_at
+		SELECT id, name, created_at, updated_at
 		FROM brands
 		ORDER BY name
 	`
