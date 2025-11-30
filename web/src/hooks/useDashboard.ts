@@ -1,7 +1,7 @@
 // In useDashboard.ts
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStockData } from './useStockData';
-import { healthMonitorService } from '@/services/healthMonitorService';
+import { stockHealthService } from '@/services/stockHealthService';
 
 export function useDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -23,7 +23,7 @@ export function useDashboard() {
     const loadInitialData = async () => {
       try {
         // Get both available dates and latest date in a single call
-        const { latestDate } = await healthMonitorService.getAvailableDatesWithLatest();
+        const { latestDate } = await stockHealthService.getAvailableDatesWithLatest();
         if (latestDate) {
           setSelectedDate(latestDate);
           await refresh(latestDate);
@@ -52,6 +52,11 @@ export function useDashboard() {
   const brands = getBrands();
   const stores = getStores();
 
+  const refreshSelected = useCallback(() => {
+    if (!selectedDate) return Promise.resolve(null);
+    return refresh(selectedDate);
+  }, [selectedDate, refresh]);
+
   return {
     data,
     filteredData,
@@ -65,6 +70,6 @@ export function useDashboard() {
     availableDates,
     onDateChange: handleDateChange,
     setFilters,
-    refresh: () => selectedDate && refresh(selectedDate),
+    refresh: refreshSelected,
   };
 }
