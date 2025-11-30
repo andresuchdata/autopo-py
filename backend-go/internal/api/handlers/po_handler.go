@@ -2,14 +2,13 @@
 package handlers
 
 import (
-	"mime/multipart"
 	"net/http"
 	"path/filepath"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/autopo/backend-go/internal/domain"
-	"github.com/yourusername/autopo/backend-go/internal/service"
 )
 
 type POHandler struct {

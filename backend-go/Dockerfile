@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -22,19 +22,33 @@ FROM alpine:3.18
 WORKDIR /app
 
 # Install dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    postgresql-client \
+    bash \
+    grep \
+    coreutils
 
 # Copy the binary from builder
 COPY --from=builder /app/bin/server /app/server
 
-# Copy configuration files
+# Copy configuration files and scripts
 COPY .env.example /app/.env
+COPY entrypoint.sh /app/entrypoint.sh
 
 # Create necessary directories
-RUN mkdir -p /app/data/uploads /app/data/output
+RUN mkdir -p /app/data/uploads /app/data/output /app/data/seeds && \
+    chmod +x /app/entrypoint.sh
+
+# Copy scripts
+COPY scripts /app/scripts
 
 # Expose port
 EXPOSE 8080
 
-# Run the application
+# Set entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Default command
 CMD ["/app/server"]
