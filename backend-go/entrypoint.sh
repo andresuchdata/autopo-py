@@ -33,10 +33,24 @@ done
 
 # Check if we should run seed data
 if [ "$RUN_SEED_DATA" = "true" ]; then
-  echo "Running seed data import..."
-  cd /app/scripts
-  chmod +x seed_import.sh
-  ./seed_import.sh
+  echo "Running Go seed CLI..."
+
+  # Prefer DATABASE_URL if provided, otherwise build one from discrete DB_* envs
+  if [ -n "$DATABASE_URL" ]; then
+    SEED_DB_URL="$DATABASE_URL"
+  else
+    SEED_DB_URL="postgres://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?sslmode=${DB_SSLMODE:-disable}"
+  fi
+
+  SEED_DATA_DIR=${SEED_DATA_DIR:-/app/data/seeds}
+  STOCK_HEALTH_DIR=${STOCK_HEALTH_DIR:-$SEED_DATA_DIR/stock_health}
+  PO_SNAPSHOTS_DIR=${PO_SNAPSHOTS_DIR:-$SEED_DATA_DIR/po_snapshots}
+
+  /app/bin/seed all \
+    --db-url "$SEED_DB_URL" \
+    --data-dir "$SEED_DATA_DIR" \
+    --stock-health-dir "$STOCK_HEALTH_DIR" \
+    --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
 fi
 
 # Start the application
