@@ -182,3 +182,8 @@ func (s *POService) GetStoreResults(ctx context.Context, storeName string) ([]*d
 func (s *POService) GetStores(ctx context.Context) ([]*domain.Store, error) {
 	return s.repo.GetStores(ctx)
 }
+
+// GetBrands returns a list of all brands
+func (s *POService) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
+	return s.repo.GetBrands(ctx)
+}

@@ -44,25 +44,49 @@ export function useDashboard() {
   useEffect(() => {
     let isMounted = true;
 
-    const mapToOptions = (items: Array<{ id?: number | null; name?: string }> = []): LabeledOption[] =>
+    const mapToOptions = (items: Array<Record<string, unknown>> = []): LabeledOption[] =>
       items
-        .filter((item) => typeof item?.name === 'string')
-        .map((item) => ({
-          id: typeof item.id === 'number' ? item.id : null,
-          name: item.name ?? 'Unknown',
-        }));
+        .map((item, index) => {
+          const possibleId =
+            item.id ??
+            item.ID ??
+            item.original_id ??
+            item.originalId ??
+            item.brand_id ??
+            item.store_id ??
+            index;
+
+          const coercedId =
+            typeof possibleId === 'number'
+              ? possibleId
+              : typeof possibleId === 'string' && possibleId.trim() !== ''
+                ? Number(possibleId)
+                : null;
+
+          const possibleName =
+            item.name ??
+            item.Name ??
+            item.brand ??
+            item.Brand ??
+            item.store ??
+            item.Store ??
+            item.nama ??
+            `Entry ${index + 1}`;
+
+          const name = typeof possibleName === 'string' ? possibleName : String(possibleName ?? `Entry ${index + 1}`);
+
+          return { id: Number.isNaN(coercedId ?? undefined) ? null : coercedId, name };
+        })
+        .filter((option) => option.name.trim().length > 0);
 
     const fetchMasterData = async () => {
       try {
-        const [brandsRes, storesRes] = await Promise.all([
-          poService.getBrands(),
-          poService.getStores(),
-        ]);
+        const [brandsRes, storesRes] = await Promise.all([poService.getBrands(), poService.getStores()]);
 
         if (!isMounted) return;
 
-        const brandOpts = mapToOptions(brandsRes?.data ?? []);
-        const storeOpts = mapToOptions(storesRes?.data ?? []);
+        const brandOpts = mapToOptions(brandsRes ?? []);
+        const storeOpts = mapToOptions(storesRes ?? []);
 
         if (brandOpts.length > 0) {
           setMasterBrandOptions(brandOpts);
