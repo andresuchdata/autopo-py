@@ -201,11 +201,11 @@ func (r *stockHealthRepository) GetTimeSeriesData(ctx context.Context, days int,
 				dsd."time"::date AS stock_date,
 				%s AS stock_condition
 			FROM daily_stock_data dsd
-			WHERE dsd."time"::date >= (current_date - ($1 || ' days')::interval)%s
+			WHERE dsd."time"::date >= (current_date - ($1::int * INTERVAL '1 day'))%s
 		),
 		dates AS (
-			SELECT date_trunc('day', current_date - (n || ' days')::interval) AS date
-			FROM generate_series(0, $1) n
+			SELECT date_trunc('day', current_date - (n * INTERVAL '1 day')) AS date
+			FROM generate_series(0, $1::int) n
 		),
 		daily_counts AS (
 			SELECT stock_date, stock_condition, COUNT(*) AS count
