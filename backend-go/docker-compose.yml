@@ -11,7 +11,6 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/migrations:/docker-entrypoint-initdb.d
       - ./data/seeds:/docker-entrypoint-seed-data
       - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
       - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf
@@ -45,6 +44,7 @@ services:
       - APP_DATA_DIR=/app/data/output
       - SEED_DATA_DIR=/app/data/seeds
     entrypoint: ["/app/entrypoint.sh"]
+    command: ["/app/server"]
     ports:
       - "8080:8080"
     volumes:

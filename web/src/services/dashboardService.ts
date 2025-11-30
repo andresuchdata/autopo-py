@@ -1,4 +1,4 @@
-import { healthMonitorService, HealthMonitorData } from './healthMonitorService';
+import { stockHealthService } from './stockHealthService';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 const CONDITION_KEYS = [
@@ -98,8 +98,8 @@ export class DashboardService {
     }
 
     try {
-      const data = await healthMonitorService.getData(date);
-      const normalizedItems = this.normalizeItems(data);
+      const stockData = await stockHealthService.getItems({ stockDate: date, pageSize: 5000 });
+      const normalizedItems = stockData.items.map((item) => this.normalizeItem(item));
 
       // Apply filters if provided
       let filteredItems = normalizedItems;
@@ -128,33 +128,27 @@ export class DashboardService {
   }
 
   async getAvailableDates(): Promise<string[]> {
-    return healthMonitorService.getAvailableDates();
+    return stockHealthService.getAvailableDates();
   }
 
-  private normalizeItems(data: HealthMonitorData): NormalizedHealthItem[] {
-    if (!data?.data?.length) return [];
+  private normalizeItem(item: any): NormalizedHealthItem {
+    const stock = item.current_stock ?? 0;
+    const dailySales = item.daily_sales ?? 0;
+    const condition = (item.stock_condition as ConditionKey) ?? this.getCondition(stock, dailySales);
+    const daysOfCover = item.days_of_cover ?? (dailySales > 0 ? Math.floor(stock / dailySales) : 0);
+    const hpp = item.hpp ?? 0;
 
-    return data.data.map((item) => {
-      const stock = this.parseNumber(item.stock ?? item.Stock ?? item['Stok Akhir'] ?? 0);
-      const dailySales = this.parseNumber(
-        item.dailySales ?? item['Daily Sales'] ?? item['Rata2 Penjualan Harian'] ?? 0
-      );
-      const daysOfCover = this.parseNumber(item.daily_stock_cover ?? 0);
-      const condition = this.getCondition(stock, dailySales, daysOfCover);
-      const hpp = this.parseNumber(item.hpp ?? item.HPP ?? item['HPP'] ?? 0);
-
-      return {
-        sku: item.sku ?? item.SKU ?? item['Kode Barang'] ?? '',
-        name: item.name ?? item.Name ?? item.Nama ?? item['Nama Barang'] ?? '',
-        brand: item.brand ?? item.Brand ?? item['Nama Brand'] ?? '',
-        store: item.store ?? item.Store ?? item.store_name ?? item['Nama Store'] ?? '',
-        stock,
-        dailySales,
-        condition,
-        daysOfCover,
-        hpp,
-      };
-    });
+    return {
+      sku: item.sku_code ?? '',
+      name: item.product_name ?? '',
+      brand: item.brand_name ?? '',
+      store: item.store_name ?? '',
+      stock,
+      dailySales,
+      condition,
+      daysOfCover,
+      hpp,
+    };
   }
 
   private calculateSummary(items: NormalizedHealthItem[]): DashboardData['summary'] {

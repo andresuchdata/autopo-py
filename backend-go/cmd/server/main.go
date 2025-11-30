@@ -13,6 +13,7 @@ import (
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/api"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository/postgres"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
 	"github.com/andresuchdata/autopo-py/backend-go/pkg/logger"
@@ -55,13 +56,16 @@ func main() {
 
 	// Initialize repository
 	poRepo := postgres.NewPORepository(dbConn)
+	stockHealthRepo := repository.NewStockHealthRepository(dbConn.DB)
 
 	// Initialize services
 	poService := service.NewPOService(poRepo)
+	stockHealthService := service.NewStockHealthService(stockHealthRepo)
 
 	// Initialize HTTP server
 	router := api.NewRouter(&api.Services{
-		POService: poService,
+		POService:          poService,
+		StockHealthService: stockHealthService,
 	})
 
 	srv := &http.Server{
