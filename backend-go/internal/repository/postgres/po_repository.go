@@ -126,3 +126,18 @@ func (r *poRepository) GetStores(ctx context.Context) ([]*domain.Store, error) {
 
 	return stores, nil
 }
+
+func (r *poRepository) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
+	query := `
+		SELECT id, name, original_id, created_at, updated_at
+		FROM brands
+		ORDER BY name
+	`
+
+	var brands []*domain.Brand
+	if err := sqlx.SelectContext(ctx, r.db, &brands, query); err != nil {
+		return nil, fmt.Errorf("failed to list brands: %w", err)
+	}
+
+	return brands, nil
+}

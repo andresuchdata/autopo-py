@@ -17,10 +17,11 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port         string
-	Mode         string
-	ReadTimeout  int
-	WriteTimeout int
+	Port           string
+	Mode           string
+	ReadTimeout    int
+	WriteTimeout   int
+	AllowedOrigins []string
 }
 
 type DatabaseConfig struct {
@@ -56,6 +57,7 @@ func Load() *Config {
 		viper.SetDefault("DB_PASSWORD", "postgres")
 		viper.SetDefault("DB_NAME", "autopo")
 		viper.SetDefault("DB_SSLMODE", "disable")
+		viper.SetDefault("SERVER_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"})
 		viper.SetDefault("APP_UPLOAD_DIR", "./data/uploads")
 		viper.SetDefault("APP_DATA_DIR", "./data/output")
 
@@ -68,10 +70,11 @@ func Load() *Config {
 
 		instance = &Config{
 			Server: ServerConfig{
-				Port:         viper.GetString("SERVER_PORT"),
-				Mode:         viper.GetString("SERVER_MODE"),
-				ReadTimeout:  viper.GetInt("SERVER_READ_TIMEOUT"),
-				WriteTimeout: viper.GetInt("SERVER_WRITE_TIMEOUT"),
+				Port:           viper.GetString("SERVER_PORT"),
+				Mode:           viper.GetString("SERVER_MODE"),
+				ReadTimeout:    viper.GetInt("SERVER_READ_TIMEOUT"),
+				WriteTimeout:   viper.GetInt("SERVER_WRITE_TIMEOUT"),
+				AllowedOrigins: viper.GetStringSlice("SERVER_ALLOWED_ORIGINS"),
 			},
 			Database: DatabaseConfig{
 				Host:     viper.GetString("DB_HOST"),

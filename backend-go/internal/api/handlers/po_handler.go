@@ -80,6 +80,17 @@ func (h *POHandler) GetStores(c *gin.Context) {
 	c.JSON(http.StatusOK, stores)
 }
 
+// GetBrands returns a list of all brands
+func (h *POHandler) GetBrands(c *gin.Context) {
+	brands, err := h.poService.GetBrands(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch brands"})
+		return
+	}
+
+	c.JSON(http.StatusOK, brands)
+}
+
 // GetStoreResults returns the processing results for a specific store
 func (h *POHandler) GetStoreResults(c *gin.Context) {
 	storeName := c.Param("store")
