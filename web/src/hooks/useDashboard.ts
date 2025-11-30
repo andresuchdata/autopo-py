@@ -1,5 +1,5 @@
 // In useDashboard.ts
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStockData } from './useStockData';
 import { stockHealthService } from '@/services/stockHealthService';
 
@@ -13,6 +13,8 @@ const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [] };
 export function useDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [filters, setFilters] = useState<DashboardFiltersState>(DEFAULT_FILTERS);
+  const filtersChangedRef = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
     data,
     loading,
@@ -52,11 +54,32 @@ export function useDashboard() {
   }, [filters, refresh]);
 
   const handleFilterChange = useCallback(async (nextFilters: DashboardFiltersState) => {
+    filtersChangedRef.current = true;
     setFilters(nextFilters);
-    if (selectedDate) {
-      await refresh(selectedDate, nextFilters);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedDate || !filtersChangedRef.current) {
+      return;
     }
-  }, [refresh, selectedDate]);
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    debounceRef.current = setTimeout(() => {
+      refresh(selectedDate, filters).catch((err) => {
+        console.error('Failed to refresh dashboard after filter change:', err);
+      });
+      filtersChangedRef.current = false;
+    }, 700);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [filters, selectedDate, refresh]);
 
   const refreshSelected = useCallback(() => {
     if (!selectedDate) return Promise.resolve(null);
