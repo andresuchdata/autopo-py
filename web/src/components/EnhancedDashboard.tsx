@@ -1,110 +1,93 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { ConditionKey } from '@/services/dashboardService';
-import { useDashboard } from "@/hooks/useDashboard";
+import { useState, useCallback } from 'react';
+import { ConditionKey, type ChartData } from '@/services/dashboardService';
+import { type StockHealthItemsResponse } from '@/services/stockHealthService';
+import { useDashboard } from '@/hooks/useDashboard';
 import { DashboardFilters } from './dashboard/DashboardFilters';
 import { SummaryCards } from './dashboard/SummaryCards';
 import { DashboardCharts } from './dashboard/DashboardCharts';
 import { StockItemsDialog } from './dashboard/StockItemsDialog';
 
-interface StockItem {
-  id: number;
-  store_name: string;
-  sku_code: string;
-  sku_name: string;
-  brand_name: string;
-  current_stock: number;
-  days_of_cover: number;
-  condition: ConditionKey;
-}
+const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock'];
+
+const makeEmptyConditionRecord = (): Record<ConditionKey, number> => ({
+  overstock: 0,
+  healthy: 0,
+  low: 0,
+  nearly_out: 0,
+  out_of_stock: 0,
+});
+
+const EMPTY_SUMMARY = {
+  totalItems: 0,
+  totalStock: 0,
+  totalValue: 0,
+  byCondition: makeEmptyConditionRecord(),
+  stockByCondition: makeEmptyConditionRecord(),
+  valueByCondition: makeEmptyConditionRecord(),
+};
+
+const EMPTY_CHARTS: ChartData = {
+  conditionCounts: makeEmptyConditionRecord(),
+  pieDataBySkuCount: [],
+  pieDataByStock: [],
+  pieDataByValue: [],
+};
 
 export function EnhancedDashboard() {
   const {
     data,
-    filteredData,
     loading,
     error,
     selectedDate,
     lastUpdated,
-    onDateChange,
-    filters, // Applied filters from useDashboard
-    setFilters, // Function to update applied filters
-    brands,
-    stores,
+    filters,
+    brandOptions,
+    storeOptions,
     availableDates,
+    onDateChange,
+    onFiltersChange,
+    fetchItems,
   } = useDashboard();
-
-  // Local state for UI filters (immediate update)
-  const [localFilters, setLocalFilters] = useState<{ brand: string[]; store: string[] }>({
-    brand: [],
-    store: [],
-  });
-
-  // Sync local filters with applied filters on mount or when applied filters change externally
-  useEffect(() => {
-    setLocalFilters(filters);
-  }, [filters]);
-
-  const [isFiltering, setIsFiltering] = useState(false);
-  const [filterTimeout, setFilterTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const [selectedCondition, setSelectedCondition] = useState<ConditionKey | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [stockItems, setStockItems] = useState<StockItem[]>([]);
-  const [isLoadingItems, setIsLoadingItems] = useState(false);
 
-  // Handle filter changes with debounce
-  const handleFilterChange = (newFilters: { brand: string[]; store: string[] }) => {
-    // Update local UI state immediately
-    setLocalFilters(newFilters);
-
-    if (filterTimeout) {
-      clearTimeout(filterTimeout);
-    }
-
-    const timeout = setTimeout(() => {
-      setIsFiltering(true);
-      setFilters(newFilters);
-      // Small delay to let the UI update if needed, though usually sync
-      setTimeout(() => setIsFiltering(false), 100);
-    }, 1000); // 1 second debounce
-
-    setFilterTimeout(timeout);
-  };
-
-  // Handle card click to show items for a specific condition
-  const handleCardClick = async (condition: ConditionKey) => {
+  const handleCardClick = useCallback((condition: ConditionKey) => {
     setSelectedCondition(condition);
-    setIsLoadingItems(true);
-    try {
-      if (!filteredData) return;
+    setIsDialogOpen(true);
+  }, []);
 
-      // Get filtered items for the selected condition
-      const items = filteredData.items
-        .filter(item => item.condition === condition)
-        .map((item, index) => ({
-          id: index,
-          store_name: item.store,
-          sku_code: item.sku,
-          sku_name: item.name,
-          brand_name: item.brand,
-          current_stock: item.stock,
-          days_of_cover: item.daysOfCover || 0,
-          condition: item.condition,
-        }));
-
-      setStockItems(items);
-      setIsDialogOpen(true);
-    } catch (err) {
-      console.error('Error loading items:', err);
-    } finally {
-      setIsLoadingItems(false);
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setSelectedCondition(null);
     }
-  };
+  }, []);
+
+  const fetchItemsForDialog = useCallback(
+    async (params: { page: number; pageSize: number }): Promise<StockHealthItemsResponse> => {
+      if (!selectedCondition) {
+        return { items: [], total: 0 };
+      }
+
+      return fetchItems({
+        condition: selectedCondition,
+        page: params.page,
+        pageSize: params.pageSize,
+      });
+    },
+    [fetchItems, selectedCondition]
+  );
+
+  const summary = data?.summary ?? EMPTY_SUMMARY;
+  const charts = data?.charts ?? EMPTY_CHARTS;
+  const brandBreakdown = data?.brandBreakdown ?? [];
+  const storeBreakdown = data?.storeBreakdown ?? [];
 
   // Show loading state if initial load and no data
-  if (loading && !data && !filteredData) {
+  if (loading && !data) {
     return <div className="flex justify-center items-center h-96">Loading dashboard data...</div>;
   }
 
@@ -120,52 +103,34 @@ export function EnhancedDashboard() {
           <p className="text-muted-foreground mt-1">Overview of inventory health across brands and stores.</p>
         </div>
         <div className="text-sm text-muted-foreground bg-gray-100 px-3 py-1 rounded-full">
-          {lastUpdated && `Last updated: ${new Date(lastUpdated).toLocaleString()}`}
+          {lastUpdated && `Last updated: ${lastUpdated.toLocaleString()}`}
         </div>
       </div>
 
       <DashboardFilters
-        filters={localFilters}
-        onFilterChange={handleFilterChange}
-        brands={brands}
-        stores={stores}
+        filters={filters}
+        onFilterChange={onFiltersChange}
+        brandOptions={brandOptions}
+        storeOptions={storeOptions}
         selectedDate={selectedDate}
         availableDates={availableDates}
         onDateChange={onDateChange}
       />
 
-      {(filteredData || loading || isFiltering) && (
-        <>
-          {(filteredData || isFiltering) && (
-            <SummaryCards
-              summary={filteredData?.summary || {
-                totalItems: 0,
-                totalStock: 0,
-                totalValue: 0,
-                byCondition: {} as any,
-                stockByCondition: {} as any,
-                valueByCondition: {} as any
-              }}
-              onCardClick={handleCardClick}
-              isLoading={loading || isFiltering}
-            />
-          )}
+      <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={loading} />
 
-          <DashboardCharts
-            charts={filteredData?.charts || { pieDataBySkuCount: [], pieDataByStock: [], pieDataByValue: [] }}
-            byBrand={filteredData?.byBrand}
-            byStore={filteredData?.byStore}
-            isLoading={loading || isFiltering}
-          />
-        </>
-      )}
+      <DashboardCharts
+        charts={charts}
+        brandBreakdown={brandBreakdown}
+        storeBreakdown={storeBreakdown}
+        isLoading={loading}
+      />
 
       <StockItemsDialog
         isOpen={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        items={stockItems}
         condition={selectedCondition}
-        isLoading={isLoadingItems}
+        onOpenChange={handleDialogOpenChange}
+        fetchItems={fetchItemsForDialog}
       />
     </div>
   );

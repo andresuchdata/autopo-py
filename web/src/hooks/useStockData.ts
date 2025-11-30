@@ -5,9 +5,9 @@ import {
   type DashboardFilters,
   type ConditionKey,
 } from '@/services/dashboardService';
-import { stockHealthService, type StockHealthApiItem } from '@/services/stockHealthService';
+import { stockHealthService, type StockHealthItemsResponse } from '@/services/stockHealthService';
 
-interface LabeledOption {
+export interface LabeledOption {
   id: number | null;
   name: string;
 }
@@ -64,7 +64,7 @@ export function useStockData() {
       condition?: ConditionKey;
       page?: number;
       pageSize?: number;
-    }) => {
+    }): Promise<StockHealthItemsResponse> => {
       const stockDate = params.date ?? lastDate;
       if (!stockDate) {
         throw new Error('No stock date selected');
