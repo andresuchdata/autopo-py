@@ -156,8 +156,9 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
         ) 
-        ON CONFLICT (time, store_id, product_id) 
+        ON CONFLICT (time, store_id, sku, brand_id) 
         DO UPDATE SET
+            product_id = EXCLUDED.product_id,
             stock = EXCLUDED.stock,
             daily_sales = EXCLUDED.daily_sales,
             max_daily_sales = EXCLUDED.max_daily_sales,

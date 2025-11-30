@@ -2,8 +2,11 @@
 package api
 
 import (
+	"time"
+
 	"github.com/andresuchdata/autopo-py/backend-go/internal/api/handlers"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -19,6 +22,14 @@ func NewRouter(services *Services) *gin.Engine {
 	// Add middleware
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000", "http://127.0.0.1:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	apiGroup := router.Group("/api/v1")
 

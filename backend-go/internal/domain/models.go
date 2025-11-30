@@ -60,10 +60,12 @@ type StockHealth struct {
 	BrandID        int64     `json:"brand_id" db:"brand_id"`
 	BrandName      string    `json:"brand_name" db:"brand_name"`
 	CurrentStock   int       `json:"current_stock" db:"current_stock"`
+	DailySales     float64   `json:"daily_sales" db:"daily_sales"`
 	DaysOfCover    int       `json:"days_of_cover" db:"days_of_cover"`
 	StockDate      time.Time `json:"stock_date" db:"stock_date"`
 	LastUpdated    time.Time `json:"last_updated" db:"last_updated"`
 	StockCondition string    `json:"stock_condition" db:"stock_condition"`
+	HPP            float64   `json:"hpp" db:"hpp"`
 }
 
 // StockHealthSummary represents a summary of stock conditions
