@@ -13,6 +13,7 @@ import (
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/types"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
 	"github.com/urfave/cli/v2"
 )
 
@@ -59,6 +60,10 @@ func closeDB(c *cli.Context) error {
 }
 
 func main() {
+	if err := godotenv.Load(".env"); err != nil {
+		log.Printf("warning: could not load .env file: %v", err)
+	}
+
 	app := &cli.App{
 		Name:  "seed",
 		Usage: "Seed the database with initial data",
