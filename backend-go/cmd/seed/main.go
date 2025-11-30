@@ -24,6 +24,31 @@ func nullIfEmpty(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
+func initDB(c *cli.Context) error {
+	// Initialize database connection
+	db, err := sql.Open("pgx", c.String("db-url"))
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	// Test the connection
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	// Store the database connection in the context
+	c.Context = context.WithValue(c.Context, types.DBKey, db)
+	return nil
+}
+
+func closeDB(c *cli.Context) error {
+	// Close the database connection when done
+	if db, ok := c.Context.Value(types.DBKey).(*sql.DB); ok && db != nil {
+		return db.Close()
+	}
+	return nil
+}
+
 func main() {
 	app := &cli.App{
 		Name:  "seed",
@@ -35,29 +60,6 @@ func main() {
 				Required: true,
 				EnvVars:  []string{"DATABASE_URL"},
 			},
-		},
-		Before: func(c *cli.Context) error {
-			// Initialize database connection
-			db, err := sql.Open("pgx", c.String("db-url"))
-			if err != nil {
-				return fmt.Errorf("failed to connect to database: %w", err)
-			}
-
-			// Test the connection
-			if err := db.Ping(); err != nil {
-				return fmt.Errorf("failed to ping database: %w", err)
-			}
-
-			// Store the database connection in the context
-			c.Context = context.WithValue(c.Context, types.DBKey, db)
-			return nil
-		},
-		After: func(c *cli.Context) error {
-			// Close the database connection when done
-			if db, ok := c.Context.Value(types.DBKey).(*sql.DB); ok && db != nil {
-				return db.Close()
-			}
-			return nil
 		},
 		Commands: []*cli.Command{
 			{
@@ -71,6 +73,8 @@ func main() {
 						EnvVars: []string{"SEED_DATA_DIR"},
 					},
 				},
+				Before: initDB,
+				After:  closeDB,
 				Action: runSeeder,
 			},
 			{
@@ -100,6 +104,8 @@ func main() {
 						Value: false,
 					},
 				},
+				Before: initDB,
+				After:  closeDB,
 				Action: SeedAnalyticsData,
 			},
 			{
@@ -125,6 +131,8 @@ func main() {
 						EnvVars: []string{"PO_SNAPSHOTS_DIR"},
 					},
 				},
+				Before: initDB,
+				After:  closeDB,
 				Action: func(c *cli.Context) error {
 					// First run master seed
 					if err := runSeeder(c); err != nil {
