@@ -9,6 +9,7 @@ import (
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 type StockHealthRepository interface {
@@ -263,19 +264,19 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 
 	if len(filter.StoreIDs) > 0 {
 		conditions = append(conditions, fmt.Sprintf("%s.store_id = ANY($%d::bigint[])", alias, idx))
-		args = append(args, filter.StoreIDs)
+		args = append(args, pq.Array(filter.StoreIDs))
 		idx++
 	}
 
 	if len(filter.SKUIds) > 0 {
 		conditions = append(conditions, fmt.Sprintf("%s.sku = ANY($%d::text[])", alias, idx))
-		args = append(args, filter.SKUIds)
+		args = append(args, pq.Array(filter.SKUIds))
 		idx++
 	}
 
 	if len(filter.BrandIDs) > 0 {
 		conditions = append(conditions, fmt.Sprintf("%s.brand_id = ANY($%d::bigint[])", alias, idx))
-		args = append(args, filter.BrandIDs)
+		args = append(args, pq.Array(filter.BrandIDs))
 		idx++
 	}
 
