@@ -18,7 +18,7 @@ export interface StockHealthApiItem {
   stock_condition: string;
 }
 
-interface StockHealthItemsResponse {
+export interface StockHealthItemsResponse {
   items: StockHealthApiItem[];
   total: number;
 }
