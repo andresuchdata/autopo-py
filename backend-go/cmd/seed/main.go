@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/types"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/urfave/cli/v2"
 )
@@ -34,14 +35,99 @@ func main() {
 				Required: true,
 				EnvVars:  []string{"DATABASE_URL"},
 			},
-			&cli.StringFlag{
-				Name:    "data-dir",
-				Usage:   "Directory containing seed data",
-				Value:   "./data/seeds/master_data",
-				EnvVars: []string{"SEED_DATA_DIR"},
+		},
+		Before: func(c *cli.Context) error {
+			// Initialize database connection
+			db, err := sql.Open("pgx", c.String("db-url"))
+			if err != nil {
+				return fmt.Errorf("failed to connect to database: %w", err)
+			}
+
+			// Test the connection
+			if err := db.Ping(); err != nil {
+				return fmt.Errorf("failed to ping database: %w", err)
+			}
+
+			// Store the database connection in the context
+			c.Context = context.WithValue(c.Context, types.DBKey, db)
+			return nil
+		},
+		After: func(c *cli.Context) error {
+			// Close the database connection when done
+			if db, ok := c.Context.Value(types.DBKey).(*sql.DB); ok && db != nil {
+				return db.Close()
+			}
+			return nil
+		},
+		Commands: []*cli.Command{
+			{
+				Name:  "master",
+				Usage: "Seed master data (brands, suppliers, stores, etc.)",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "data-dir",
+						Usage:   "Directory containing master seed data",
+						Value:   "./data/seeds/master_data",
+						EnvVars: []string{"SEED_DATA_DIR"},
+					},
+				},
+				Action: runSeeder,
+			},
+			{
+				Name:  "analytics",
+				Usage: "Seed analytics data (stock health and PO snapshots)",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "stock-health-dir",
+						Usage:   "Directory containing stock health CSV files",
+						Value:   "./data/seeds/stock_health",
+						EnvVars: []string{"STOCK_HEALTH_DIR"},
+					},
+					&cli.StringFlag{
+						Name:    "po-snapshots-dir",
+						Usage:   "Directory containing PO snapshot CSV files",
+						Value:   "./data/seeds/po_snapshots",
+						EnvVars: []string{"PO_SNAPSHOTS_DIR"},
+					},
+				},
+				Action: SeedAnalyticsData,
+			},
+			{
+				Name:  "all",
+				Usage: "Seed both master data and analytics data",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "data-dir",
+						Usage:   "Directory containing master seed data",
+						Value:   "./data/seeds/master_data",
+						EnvVars: []string{"SEED_DATA_DIR"},
+					},
+					&cli.StringFlag{
+						Name:    "stock-health-dir",
+						Usage:   "Directory containing stock health CSV files",
+						Value:   "./data/seeds/stock_health",
+						EnvVars: []string{"STOCK_HEALTH_DIR"},
+					},
+					&cli.StringFlag{
+						Name:    "po-snapshots-dir",
+						Usage:   "Directory containing PO snapshot CSV files",
+						Value:   "./data/seeds/po_snapshots",
+						EnvVars: []string{"PO_SNAPSHOTS_DIR"},
+					},
+				},
+				Action: func(c *cli.Context) error {
+					// First run master seed
+					if err := runSeeder(c); err != nil {
+						return fmt.Errorf("error running master seed: %w", err)
+					}
+					// Then run analytics seed
+					if err := SeedAnalyticsData(c); err != nil {
+						return fmt.Errorf("error running analytics seed: %w", err)
+					}
+					return nil
+				},
 			},
 		},
-		Action: runSeeder,
 	}
 
 	if err := app.Run(os.Args); err != nil {
