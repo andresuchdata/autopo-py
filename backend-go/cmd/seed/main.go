@@ -32,6 +32,116 @@ func newDBURLFlag() *cli.StringFlag {
 	}
 }
 
+func seedProductsMaster(ctx context.Context, tx *sql.Tx, dataDir string) error {
+	path := filepath.Join(dataDir, "products_with_hpp.csv")
+	log.Printf("Seeding products from %s\n", path)
+
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open file %s: %w", path, err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	header, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("failed to read header: %w", err)
+	}
+
+	skuIdx := getColumnIndex(header, "sku")
+	nameIdx := getColumnIndex(header, "nama_product")
+	hppIdx := getColumnIndex(header, "hpp")
+
+	type productSeed struct {
+		sku  string
+		name string
+		hpp  sql.NullFloat64
+	}
+
+	var (
+		products []productSeed
+		seen     = make(map[string]int)
+	)
+
+	for {
+		record, err := reader.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("failed to read record: %w", err)
+		}
+
+		sku := strings.TrimSpace(record[skuIdx])
+		if sku == "" {
+			continue
+		}
+
+		name := strings.TrimSpace(record[nameIdx])
+		if name == "" {
+			name = "Product " + sku
+		}
+
+		hpp, err := parseNullableFloat(record[hppIdx])
+		if err != nil {
+			return fmt.Errorf("invalid hpp for sku %s: %w", sku, err)
+		}
+
+		if idx, ok := seen[sku]; ok {
+			if products[idx].name == "" && name != "" {
+				products[idx].name = name
+			} else if name != "" {
+				products[idx].name = name
+			}
+			if !products[idx].hpp.Valid && hpp.Valid {
+				products[idx].hpp = hpp
+			}
+			continue
+		}
+
+		products = append(products, productSeed{sku: sku, name: name, hpp: hpp})
+		seen[sku] = len(products) - 1
+	}
+
+	if len(products) == 0 {
+		log.Println("No product rows found in products_with_hpp.csv; skipping product seed")
+		return nil
+	}
+
+	const batchSize = 1000
+	for start := 0; start < len(products); start += batchSize {
+		end := start + batchSize
+		if end > len(products) {
+			end = len(products)
+		}
+		batch := products[start:end]
+
+		valueStrings := make([]string, 0, len(batch))
+		args := make([]interface{}, 0, len(batch)*3)
+		for i, p := range batch {
+			base := i*3 + 1
+			valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,NOW(),NOW())", base, base+1, base+2))
+			args = append(args, p.sku, p.name, nullFloatToInterface(p.hpp))
+		}
+
+		query := fmt.Sprintf(`
+			INSERT INTO products (sku, name, hpp, created_at, updated_at)
+			VALUES %s
+			ON CONFLICT (sku) DO UPDATE SET
+				name = EXCLUDED.name,
+				hpp = CASE WHEN EXCLUDED.hpp IS NOT NULL THEN EXCLUDED.hpp ELSE products.hpp END,
+				updated_at = NOW()
+		`, strings.Join(valueStrings, ","))
+
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return fmt.Errorf("failed to upsert products batch %d-%d: %w", start+1, end, err)
+		}
+	}
+
+	log.Printf("Successfully seeded %d products from products_with_hpp.csv\n", len(products))
+	return nil
+}
+
 func analyticsFlags() []cli.Flag {
 	return []cli.Flag{
 		newDBURLFlag(),
@@ -454,6 +564,11 @@ func seedMasterData(ctx context.Context, tx *sql.Tx, dataDir string, reset bool)
 	// Seed supplier_brand_mappings
 	if err := seedSupplierBrandMappings(ctx, tx, dataDir); err != nil {
 		return fmt.Errorf("failed to seed supplier brand mappings: %w", err)
+	}
+
+	// Seed master products from pricing reference before mapping
+	if err := seedProductsMaster(ctx, tx, dataDir); err != nil {
+		return fmt.Errorf("failed to seed products: %w", err)
 	}
 
 	// Seed product_mappings
