@@ -52,6 +52,24 @@ func initDB(c *cli.Context) error {
 	return nil
 }
 
+func resetMasterTables(ctx context.Context, tx *sql.Tx) error {
+	log.Println("Resetting master tables before seeding...")
+	stmt := `
+		TRUNCATE TABLE 
+			product_mappings,
+			supplier_brand_mappings,
+			products,
+			brands,
+			suppliers,
+			stores
+		RESTART IDENTITY CASCADE
+	`
+	if _, err := tx.ExecContext(ctx, stmt); err != nil {
+		return err
+	}
+	return nil
+}
+
 func closeDB(c *cli.Context) error {
 	// Close the database connection when done
 	if db, ok := c.Context.Value(types.DBKey).(*sql.DB); ok && db != nil {
@@ -83,6 +101,11 @@ func main() {
 						Value:   "./data/seeds/master_data",
 						EnvVars: []string{"SEED_DATA_DIR"},
 					},
+					&cli.BoolFlag{
+						Name:    "reset-master",
+						Usage:   "Truncate master data tables before seeding",
+						EnvVars: []string{"RESET_MASTER_SEED"},
+					},
 				},
 				Before: initDB,
 				After:  closeDB,
@@ -104,6 +127,11 @@ func main() {
 						Usage:   "Directory containing PO snapshot CSV files",
 						Value:   "./data/seeds/po_snapshots",
 						EnvVars: []string{"PO_SNAPSHOTS_DIR"},
+					},
+					&cli.BoolFlag{
+						Name:    "reset-analytics",
+						Usage:   "Truncate analytics tables before seeding",
+						EnvVars: []string{"RESET_ANALYTICS_SEED"},
 					},
 					&cli.BoolFlag{
 						Name:  "stock-health-only",
@@ -131,6 +159,11 @@ func main() {
 						Value:   "./data/seeds/master_data",
 						EnvVars: []string{"SEED_DATA_DIR"},
 					},
+					&cli.BoolFlag{
+						Name:    "reset-master",
+						Usage:   "Truncate master data tables before seeding",
+						EnvVars: []string{"RESET_MASTER_SEED"},
+					},
 					&cli.StringFlag{
 						Name:    "stock-health-dir",
 						Usage:   "Directory containing stock health CSV files",
@@ -142,6 +175,11 @@ func main() {
 						Usage:   "Directory containing PO snapshot CSV files",
 						Value:   "./data/seeds/po_snapshots",
 						EnvVars: []string{"PO_SNAPSHOTS_DIR"},
+					},
+					&cli.BoolFlag{
+						Name:    "reset-analytics",
+						Usage:   "Truncate analytics tables before seeding",
+						EnvVars: []string{"RESET_ANALYTICS_SEED"},
 					},
 				},
 				Before: initDB,
@@ -169,6 +207,7 @@ func main() {
 func runSeeder(c *cli.Context) error {
 	dbURL := c.String("db-url")
 	dataDir := c.String("data-dir")
+	resetMaster := c.Bool("reset-master")
 
 	// Initialize database connection
 	db, err := sql.Open("pgx", dbURL)
@@ -191,7 +230,7 @@ func runSeeder(c *cli.Context) error {
 	log.Println("Starting database seeding...")
 
 	// Seed master data
-	if err := seedMasterData(ctx, tx, dataDir); err != nil {
+	if err := seedMasterData(ctx, tx, dataDir, resetMaster); err != nil {
 		return fmt.Errorf("failed to seed master data: %w", err)
 	}
 
@@ -204,7 +243,13 @@ func runSeeder(c *cli.Context) error {
 	return nil
 }
 
-func seedMasterData(ctx context.Context, tx *sql.Tx, dataDir string) error {
+func seedMasterData(ctx context.Context, tx *sql.Tx, dataDir string, reset bool) error {
+	if reset {
+		if err := resetMasterTables(ctx, tx); err != nil {
+			return fmt.Errorf("failed to reset master tables: %w", err)
+		}
+	}
+
 	// Seed brands
 	if err := seedTable(ctx, tx, "brands", []string{"name", "original_id"}, filepath.Join(dataDir, "brands.csv")); err != nil {
 		return fmt.Errorf("failed to seed brands: %w", err)
@@ -408,11 +453,14 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 	const batchSize = 1000
 	type record struct {
 		brandOriginal    string
-		storeOriginal    string
+		brandName        string
 		supplierOriginal string
+		supplierName     string
+		storeOriginal    string
 		sku              string
 		productName      string
 		hpp              sql.NullFloat64
+		csvRow           int
 	}
 
 	var (
@@ -420,13 +468,15 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 		rowCount int
 	)
 
-	flushBatch := func() error {
-		if len(batch) == 0 {
+	flushBatch := func(startRow int, sample record) error {
+		batchLen := len(batch)
+		if batchLen == 0 {
 			return nil
 		}
+		endRow := startRow + batchLen - 1
 
-		valueStrings := make([]string, 0, len(batch))
-		args := make([]interface{}, 0, len(batch)*6)
+		valueStrings := make([]string, 0, batchLen)
+		args := make([]interface{}, 0, batchLen*6)
 		for i, rec := range batch {
 			base := i*6 + 1
 			valueStrings = append(valueStrings, fmt.Sprintf("($%d::text,$%d::text,$%d::text,$%d::text,$%d::text,$%d::numeric)", base, base+1, base+2, base+3, base+4, base+5))
@@ -453,20 +503,31 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 					hpp = EXCLUDED.hpp,
 					updated_at = NOW()
 				RETURNING id, sku
+			),
+			resolved_mappings AS (
+				SELECT
+					up.id AS product_id,
+					up.sku,
+					MAX(input_data.product_name) AS product_name,
+					b.id AS brand_id,
+					st.id AS store_id,
+					s.id AS supplier_id
+				FROM input_data
+				JOIN upserted_products up ON up.sku = input_data.sku
+				JOIN brands b ON b.original_id = input_data.brand_original_id
+				JOIN stores st ON st.original_id = input_data.store_original_id
+				JOIN suppliers s ON s.original_id = input_data.supplier_original_id
+				GROUP BY up.id, up.sku, b.id, st.id, s.id
 			)
 			INSERT INTO product_mappings (product_id, sku, original_product_name, brand_id, store_id, supplier_id)
 			SELECT
-				upserted_products.id,
-				upserted_products.sku,
-				input_data.product_name,
-				b.id,
-				st.id,
-				s.id
-			FROM input_data
-			JOIN upserted_products ON upserted_products.sku = input_data.sku
-			JOIN brands b ON b.original_id = input_data.brand_original_id
-			JOIN stores st ON st.original_id = input_data.store_original_id
-			JOIN suppliers s ON s.original_id = input_data.supplier_original_id
+				product_id,
+				sku,
+				product_name,
+				brand_id,
+				store_id,
+				supplier_id
+			FROM resolved_mappings
 			ON CONFLICT (product_id, brand_id, store_id, supplier_id)
 			DO UPDATE SET
 				sku = EXCLUDED.sku,
@@ -475,7 +536,17 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 		`, strings.Join(valueStrings, ","))
 
 		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-			return fmt.Errorf("failed to bulk upsert product mappings: %w", err)
+			return fmt.Errorf("failed to bulk upsert product mappings (CSV rows %d-%d, sample: brand_id=%s brand_name=%s sku=%s product=%s supplier_id=%s supplier_name=%s): %w",
+				startRow,
+				endRow,
+				sample.brandOriginal,
+				sample.brandName,
+				sample.sku,
+				sample.productName,
+				sample.supplierOriginal,
+				sample.supplierName,
+				err,
+			)
 		}
 
 		batch = batch[:0]
@@ -500,18 +571,24 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 			return fmt.Errorf("invalid hpp for sku %s: %w", safeField(recordData, 2), err)
 		}
 
-		batch = append(batch, record{
+		rec := record{
 			brandOriginal:    strings.TrimSpace(recordData[0]),
-			storeOriginal:    strings.TrimSpace(recordData[4]),
+			brandName:        strings.TrimSpace(recordData[1]),
 			supplierOriginal: strings.TrimSpace(recordData[6]),
+			supplierName:     strings.TrimSpace(recordData[7]),
+			storeOriginal:    strings.TrimSpace(recordData[4]),
 			sku:              strings.TrimSpace(recordData[2]),
 			productName:      strings.TrimSpace(recordData[3]),
 			hpp:              hppValue,
-		})
+			csvRow:           rowCount + 1,
+		}
+		batch = append(batch, rec)
 
 		rowCount++
 		if len(batch) == batchSize {
-			if err := flushBatch(); err != nil {
+			batchStart := rowCount - len(batch) + 1
+			sample := batch[0]
+			if err := flushBatch(batchStart, sample); err != nil {
 				return err
 			}
 		}
@@ -520,7 +597,12 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 		}
 	}
 
-	if err := flushBatch(); err != nil {
+	batchStart := rowCount - len(batch) + 1
+	var sample record
+	if len(batch) > 0 {
+		sample = batch[0]
+	}
+	if err := flushBatch(batchStart, sample); err != nil {
 		return err
 	}
 
