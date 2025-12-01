@@ -517,10 +517,29 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 			WITH input_data (brand_original_id, sku, product_name, store_original_id, supplier_original_id, hpp) AS (
 				VALUES %s
 			),
+			deduped_mappings AS (
+				SELECT DISTINCT ON (brand_original_id, store_original_id, supplier_original_id, sku)
+					brand_original_id,
+					sku,
+					product_name,
+					store_original_id,
+					supplier_original_id,
+					hpp
+				FROM input_data
+				ORDER BY brand_original_id, store_original_id, supplier_original_id, sku, product_name
+			),
+			unique_products AS (
+				SELECT DISTINCT ON (sku)
+					sku,
+					product_name,
+					hpp
+				FROM deduped_mappings
+				ORDER BY sku, product_name
+			),
 			upserted_products AS (
 				INSERT INTO products (name, sku, hpp, created_at, updated_at)
-				SELECT DISTINCT product_name, sku, hpp, NOW(), NOW()
-				FROM input_data
+				SELECT product_name, sku, hpp, NOW(), NOW()
+				FROM unique_products
 				ON CONFLICT (sku) DO UPDATE
 				SET name = EXCLUDED.name,
 					hpp = EXCLUDED.hpp,
@@ -531,19 +550,19 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 				SELECT
 					up.id AS product_id,
 					up.sku,
-					input_data.product_name,
+					deduped_mappings.product_name,
 					b.id AS brand_id,
 					st.id AS store_id,
 					s.id AS supplier_id,
 					ROW_NUMBER() OVER (
 						PARTITION BY up.id, b.id, st.id, s.id
-						ORDER BY input_data.product_name
+						ORDER BY deduped_mappings.product_name
 					) AS rn
-				FROM input_data
-				JOIN upserted_products up ON up.sku = input_data.sku
-				JOIN brands b ON b.original_id = input_data.brand_original_id
-				JOIN stores st ON st.original_id = input_data.store_original_id
-				JOIN suppliers s ON s.original_id = input_data.supplier_original_id
+				FROM deduped_mappings
+				JOIN upserted_products up ON up.sku = deduped_mappings.sku
+				JOIN brands b ON b.original_id = deduped_mappings.brand_original_id
+				JOIN stores st ON st.original_id = deduped_mappings.store_original_id
+				JOIN suppliers s ON s.original_id = deduped_mappings.supplier_original_id
 			),
 			resolved_mappings AS (
 				SELECT
