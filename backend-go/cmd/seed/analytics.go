@@ -25,6 +25,7 @@ func SeedAnalyticsData(c *cli.Context) error {
 	poSnapshotsDir := c.String("po-snapshots-dir")
 	stockHealthOnly := c.Bool("stock-health-only")
 	poSnapshotsOnly := c.Bool("po-snapshots-only")
+	resetAnalytics := c.Bool("reset-analytics")
 
 	// If both flags are true, it's a conflict
 	if stockHealthOnly && poSnapshotsOnly {
@@ -34,6 +35,19 @@ func SeedAnalyticsData(c *cli.Context) error {
 	// Default to processing both if neither flag is set
 	processStockHealth := !poSnapshotsOnly
 	processPOSnapshots := !stockHealthOnly
+
+	// Truncate analytics tables if reset flag is set
+	if resetAnalytics {
+		log.Println("Resetting analytics tables...")
+		resetQuery := `
+			TRUNCATE TABLE daily_stock_data RESTART IDENTITY CASCADE;
+			TRUNCATE TABLE po_snapshots RESTART IDENTITY CASCADE;
+		`
+		if _, err := db.ExecContext(c.Context, resetQuery); err != nil {
+			return fmt.Errorf("failed to reset analytics tables: %w", err)
+		}
+		log.Println("Analytics tables reset successfully")
+	}
 
 	// Initialize the analytics processor
 	processor := analytics.NewAnalyticsProcessor(db)
