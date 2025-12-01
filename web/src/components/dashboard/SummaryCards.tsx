@@ -20,10 +20,10 @@ const CONDITION_LABELS = {
 };
 
 const HEADER_LABELS = {
-    'overstock': 'Daily Stock Cover > 31 days',
-    'healthy': 'Daily Stock Cover 21 - 31 days',
-    'low': 'Daily Stock Cover 7 - 20 days',
-    'nearly_out': 'Daily Stock Cover 1 - 6 days',
+    'overstock': 'Daily Stock Cover > 30 days',
+    'healthy': 'Daily Stock Cover 21,xx - 30 days',
+    'low': 'Daily Stock Cover 7,xx - 21 days',
+    'nearly_out': 'Daily Stock Cover 0,xx - 7 days',
     'out_of_stock': 'Daily Stock Cover 0 day'
 };
 
@@ -78,8 +78,13 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
 
     return (
         <div className="contents">
-            <div className="flex items-center md:justify-end md:pr-4 font-medium text-muted-foreground text-sm uppercase tracking-wide">
-                {title}
+            <div className="flex flex-col items-center md:items-center md:justify-center md:pr-4 gap-0.5 text-center md:text-right">
+                <div className="font-medium text-muted-foreground text-sm uppercase tracking-wide">
+                    {title}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                    Total: <span className="font-semibold text-foreground">{formatValue(total)}</span>
+                </div>
             </div>
             {CONDITIONS.map((condition) => {
                 const value = data[condition] || 0;
