@@ -8,7 +8,7 @@ import { DashboardFilters } from './dashboard/DashboardFilters';
 import { SummaryCards } from './dashboard/SummaryCards';
 import { DashboardCharts } from './dashboard/DashboardCharts';
 import { StockItemsDialog } from './dashboard/StockItemsDialog';
-import { type SummaryGrouping } from '@/types/stockHealth';
+import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from '@/types/stockHealth';
 
 const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock'];
 
@@ -71,7 +71,13 @@ export function EnhancedDashboard() {
   }, []);
 
   const fetchItemsForDialog = useCallback(
-    async (params: { page: number; pageSize: number }): Promise<StockHealthItemsResponse> => {
+    async (params: {
+      page: number;
+      pageSize: number;
+      grouping?: SummaryGrouping;
+      sortField?: StockItemsSortField;
+      sortDirection?: SortDirection;
+    }): Promise<StockHealthItemsResponse> => {
       if (!selectedCondition) {
         return { items: [], total: 0 };
       }
@@ -80,7 +86,9 @@ export function EnhancedDashboard() {
         condition: selectedCondition,
         page: params.page,
         pageSize: params.pageSize,
-        grouping: selectedGrouping ?? undefined,
+        grouping: params.grouping ?? selectedGrouping ?? undefined,
+        sortField: params.sortField,
+        sortDirection: params.sortDirection,
       });
     },
     [fetchItems, selectedCondition, selectedGrouping]

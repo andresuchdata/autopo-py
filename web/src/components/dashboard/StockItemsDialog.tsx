@@ -19,7 +19,7 @@ import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { COLORS, CONDITION_LABELS } from "./SummaryCards";
 import { ConditionKey } from "@/services/dashboardService";
 import { type StockHealthItemsResponse } from "@/services/stockHealthService";
-import { type SummaryGrouping } from "@/types/stockHealth";
+import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from "@/types/stockHealth";
 
 interface StockItem {
     id: number;
@@ -39,11 +39,16 @@ interface StockItemsDialogProps {
     onOpenChange: (open: boolean) => void;
     condition: ConditionKey | null;
     grouping: SummaryGrouping | null;
-    fetchItems: (params: { page: number; pageSize: number; grouping?: SummaryGrouping }) => Promise<StockHealthItemsResponse>;
+    fetchItems: (params: {
+        page: number;
+        pageSize: number;
+        grouping?: SummaryGrouping;
+        sortField?: StockItemsSortField;
+        sortDirection?: SortDirection;
+    }) => Promise<StockHealthItemsResponse>;
 }
 
-type SortField = keyof StockItem;
-type SortDirection = 'asc' | 'desc';
+type SortField = StockItemsSortField;
 
 export function StockItemsDialog({
     isOpen,
@@ -76,7 +81,12 @@ export function StockItemsDialog({
         }
     }, [activeGrouping]);
 
-    const loadItems = useCallback(async (pageParam: number, pageSizeParam: number) => {
+    const loadItems = useCallback(async (
+        pageParam: number,
+        pageSizeParam: number,
+        customSortField?: SortField,
+        customSortDirection?: SortDirection,
+    ) => {
         if (!condition) {
             setItems([]);
             setTotalItems(0);
@@ -90,6 +100,8 @@ export function StockItemsDialog({
                 page: pageParam,
                 pageSize: pageSizeParam,
                 grouping: activeGrouping,
+                sortField: customSortField ?? sortField,
+                sortDirection: customSortDirection ?? sortDirection,
             });
             const normalizedItems: StockItem[] = response.items.map((item) => ({
                 id: item.id,
@@ -114,7 +126,7 @@ export function StockItemsDialog({
         } finally {
             setIsLoading(false);
         }
-    }, [condition, fetchItems, activeGrouping]);
+    }, [condition, fetchItems, activeGrouping, sortField, sortDirection]);
 
     useEffect(() => {
         if (isOpen && condition) {
@@ -126,41 +138,17 @@ export function StockItemsDialog({
             setItems([]);
             setTotalItems(0);
         }
-    }, [isOpen, condition, itemsPerPage, loadItems, activeGrouping]);
+    }, [isOpen, condition, itemsPerPage, loadItems]);
 
-    // Handle sorting
     const handleSort = (field: SortField) => {
-        if (sortField === field) {
-            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-        } else {
-            setSortField(field);
-            setSortDirection('asc');
-        }
+        const isSameField = sortField === field;
+        const nextDirection: SortDirection = isSameField && sortDirection === 'asc' ? 'desc' : 'asc';
+        const nextField = isSameField ? field : field;
+        setSortField(nextField);
+        setSortDirection(nextDirection);
+        setCurrentPage(1);
+        loadItems(1, itemsPerPage, nextField, nextDirection);
     };
-
-    // Process items (sort and paginate)
-    const processedItems = useMemo(() => {
-        let sorted = [...items];
-
-        sorted.sort((a, b) => {
-            const aValue = a[sortField];
-            const bValue = b[sortField];
-
-            if (typeof aValue === 'string' && typeof bValue === 'string') {
-                return sortDirection === 'asc'
-                    ? aValue.localeCompare(bValue)
-                    : bValue.localeCompare(aValue);
-            }
-
-            if (typeof aValue === 'number' && typeof bValue === 'number') {
-                return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
-            }
-
-            return 0;
-        });
-
-        return sorted;
-    }, [items, sortField, sortDirection]);
 
     const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
@@ -176,8 +164,8 @@ export function StockItemsDialog({
         loadItems(1, value);
     };
 
-    const formatNumber = (value: number) => new Intl.NumberFormat('id-ID').format(value);
-    const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
+    const formatDecimal = (value: number) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+    const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
     const groupingDescriptions: Record<SummaryGrouping, string> = {
         sku: 'individual SKU details',
@@ -190,7 +178,7 @@ export function StockItemsDialog({
         : {
             label: activeGrouping === 'stock' ? 'Total Qty' : 'Stock',
             field: 'current_stock' as SortField,
-            render: (item: StockItem) => formatNumber(item.current_stock),
+            render: (item: StockItem) => formatDecimal(item.current_stock),
         };
 
     return (
@@ -239,15 +227,15 @@ export function StockItemsDialog({
                                         {error}
                                     </TableCell>
                                 </TableRow>
-                            ) : processedItems.length > 0 ? (
-                                processedItems.map((item) => (
+                            ) : items.length > 0 ? (
+                                items.map((item) => (
                                     <TableRow key={`${item.id}-${item.store_name}`} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{item.store_name}</TableCell>
                                         <TableCell className="font-mono text-xs">{item.sku_code}</TableCell>
                                         <TableCell className="max-w-[300px] truncate" title={item.sku_name}>{item.sku_name}</TableCell>
                                         <TableCell>{item.brand_name}</TableCell>
                                         <TableCell className="text-right font-mono">{metricConfig.render(item)}</TableCell>
-                                        <TableCell className="text-right font-mono">{item.days_of_cover.toFixed(1)}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatDecimal(item.days_of_cover)}</TableCell>
                                         {activeGrouping === 'value' && (
                                             <TableCell className="text-right font-mono">{formatCurrency(item.hpp)}</TableCell>
                                         )}

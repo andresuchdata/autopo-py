@@ -114,5 +114,6 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
   esac
 fi
 
+echo "Starting application..."
 # Start the application
 exec "$@"
