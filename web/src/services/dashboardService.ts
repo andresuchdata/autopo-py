@@ -103,17 +103,24 @@ export class DashboardService {
   }
 
   private transformDashboardResponse(response: StockHealthDashboardResponse): DashboardData {
-    const summary = this.calculateSummary(response);
+    const normalizedResponse: StockHealthDashboardResponse = {
+      summary: Array.isArray(response.summary) ? response.summary : [],
+      time_series: response.time_series ?? {},
+      brand_breakdown: Array.isArray(response.brand_breakdown) ? response.brand_breakdown : [],
+      store_breakdown: Array.isArray(response.store_breakdown) ? response.store_breakdown : [],
+    };
+
+    const summary = this.calculateSummary(normalizedResponse.summary);
     const charts = this.prepareChartData(summary);
     return {
       summary,
       charts,
-      brandBreakdown: response.brand_breakdown,
-      storeBreakdown: response.store_breakdown,
+      brandBreakdown: normalizedResponse.brand_breakdown,
+      storeBreakdown: normalizedResponse.store_breakdown,
     };
   }
 
-  private calculateSummary(response: StockHealthDashboardResponse): DashboardSummary {
+  private calculateSummary(summaryRows: StockHealthDashboardResponse['summary']): DashboardSummary {
     const baseRecord = () => CONDITION_KEYS.reduce((acc, key) => {
       acc[key] = 0;
       return acc;
@@ -127,7 +134,7 @@ export class DashboardService {
     let totalStock = 0;
     let totalValue = 0;
 
-    response.summary.forEach((row) => {
+    summaryRows.forEach((row) => {
       const condition = (row.condition as ConditionKey) ?? 'out_of_stock';
       byCondition[condition] = row.count;
       stockByCondition[condition] = Number(row.total_stock ?? 0);

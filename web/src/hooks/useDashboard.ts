@@ -10,6 +10,7 @@ export interface DashboardFiltersState {
 }
 
 const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [] };
+const DEFAULT_STORE_NAME = 'miss glam padang';
 
 export function useDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -41,43 +42,77 @@ export function useDashboard() {
     return masterStoreOptions.length > 0 ? masterStoreOptions : derivedStoreOptions;
   }, [derivedStoreOptions, masterStoreOptions]);
 
+  const mapToOptions = useCallback((items: Array<Record<string, unknown>> = []): LabeledOption[] =>
+    items
+      .map((item, index) => {
+        const possibleId =
+          item.id ??
+          item.ID ??
+          item.original_id ??
+          item.originalId ??
+          item.brand_id ??
+          item.store_id ??
+          index;
+
+        const coercedId =
+          typeof possibleId === 'number'
+            ? possibleId
+            : typeof possibleId === 'string' && possibleId.trim() !== ''
+              ? Number(possibleId)
+              : null;
+
+        const possibleName =
+          item.name ??
+          item.Name ??
+          item.brand ??
+          item.Brand ??
+          item.store ??
+          item.Store ??
+          item.nama ??
+          `Entry ${index + 1}`;
+
+        const name = typeof possibleName === 'string' ? possibleName : String(possibleName ?? `Entry ${index + 1}`);
+
+        return { id: Number.isNaN(coercedId ?? undefined) ? null : coercedId, name };
+      })
+      .filter((option) => option.name.trim().length > 0), []);
+
+  const findDefaultStore = useCallback(
+    (options: LabeledOption[]) =>
+      options.find((option) => option.id !== null && option.name.trim().toLowerCase() === DEFAULT_STORE_NAME),
+    []
+  );
+
+  const ensureDefaultStoreSelection = useCallback(async (): Promise<DashboardFiltersState> => {
+    if (filters.storeIds.length) {
+      return filters;
+    }
+
+    const existingStore = findDefaultStore(storeOptions);
+    if (existingStore?.id != null) {
+      const nextFilters = { ...filters, storeIds: [existingStore.id] };
+      setFilters(nextFilters);
+      return nextFilters;
+    }
+
+    try {
+      const storesRes = await poService.getStores('Miss Glam Padang');
+      const normalized = mapToOptions(storesRes ?? []);
+      const fetchedStore = findDefaultStore(normalized);
+      if (fetchedStore?.id != null) {
+        const nextFilters = { ...filters, storeIds: [fetchedStore.id] };
+        setFilters(nextFilters);
+        return nextFilters;
+      }
+    } catch (err) {
+      console.error('Failed to fetch default store for dashboard filters:', err);
+    }
+
+    return filters;
+  }, [filters, findDefaultStore, mapToOptions, storeOptions]);
+
   useEffect(() => {
     let isMounted = true;
-
-    const mapToOptions = (items: Array<Record<string, unknown>> = []): LabeledOption[] =>
-      items
-        .map((item, index) => {
-          const possibleId =
-            item.id ??
-            item.ID ??
-            item.original_id ??
-            item.originalId ??
-            item.brand_id ??
-            item.store_id ??
-            index;
-
-          const coercedId =
-            typeof possibleId === 'number'
-              ? possibleId
-              : typeof possibleId === 'string' && possibleId.trim() !== ''
-                ? Number(possibleId)
-                : null;
-
-          const possibleName =
-            item.name ??
-            item.Name ??
-            item.brand ??
-            item.Brand ??
-            item.store ??
-            item.Store ??
-            item.nama ??
-            `Entry ${index + 1}`;
-
-          const name = typeof possibleName === 'string' ? possibleName : String(possibleName ?? `Entry ${index + 1}`);
-
-          return { id: Number.isNaN(coercedId ?? undefined) ? null : coercedId, name };
-        })
-        .filter((option) => option.name.trim().length > 0);
 
     const fetchMasterData = async () => {
       try {
@@ -104,19 +139,22 @@ export function useDashboard() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [mapToOptions]);
 
   const loadInitialData = useCallback(async () => {
     try {
       const { latestDate } = await stockHealthService.getAvailableDatesWithLatest();
+
+      const initialFilters = await ensureDefaultStoreSelection();
+
       if (latestDate) {
         setSelectedDate(latestDate);
-        await refresh(latestDate, filters);
+        await refresh(latestDate, initialFilters);
       }
     } catch (err) {
       console.error('Failed to load initial data:', err);
     }
-  }, [filters, refresh]);
+  }, [ensureDefaultStoreSelection, refresh]);
 
   useEffect(() => {
     if (!selectedDate) {

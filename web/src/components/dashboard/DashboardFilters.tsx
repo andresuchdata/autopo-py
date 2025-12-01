@@ -45,8 +45,36 @@ export function DashboardFilters({
     availableDates,
     onDateChange,
 }: DashboardFiltersProps) {
+    const selectableStoreOptions = useMemo(() => storeOptions.filter((option) => option.id !== null), [storeOptions]);
+    const selectedStoreId = filters.storeIds[0] ?? null;
+
     return (
         <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white p-4 rounded-lg shadow-sm border">
+            <div className="flex-1 min-w-[200px]">
+                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">
+                    Store
+                </Label>
+                <Select
+                    value={selectedStoreId !== null ? String(selectedStoreId) : ""}
+                    onValueChange={(value) => onFilterChange({ ...filters, storeIds: value ? [Number(value)] : [] })}
+                >
+                    <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select store" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {selectableStoreOptions.length > 0 ? (
+                            selectableStoreOptions.map((option) => (
+                                <SelectItem key={option.id} value={String(option.id)}>
+                                    {option.name}
+                                </SelectItem>
+                            ))
+                        ) : (
+                            <div className="py-2 px-3 text-sm text-muted-foreground">No stores available</div>
+                        )}
+                    </SelectContent>
+                </Select>
+            </div>
+
             <div className="flex-1 min-w-[200px]">
                 <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">
                     Date
@@ -79,19 +107,6 @@ export function DashboardFilters({
                     onChange={(ids) => onFilterChange({ ...filters, brandIds: ids })}
                     placeholder="All Brands"
                     searchPlaceholder="Search brand..."
-                />
-            </div>
-
-            <div className="flex-1 min-w-[200px]">
-                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">
-                    Store
-                </Label>
-                <OptionsMultiSelect
-                    options={storeOptions}
-                    selectedIds={filters.storeIds}
-                    onChange={(ids) => onFilterChange({ ...filters, storeIds: ids })}
-                    placeholder="All Stores"
-                    searchPlaceholder="Search store..."
                 />
             </div>
 
