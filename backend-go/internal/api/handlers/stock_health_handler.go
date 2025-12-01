@@ -63,6 +63,10 @@ func (h *StockHealthHandler) parseFilter(c *gin.Context) domain.StockHealthFilte
 		filter.SKUIds = strings.Split(skus, ",")
 	}
 
+	if grouping := strings.TrimSpace(c.Query("grouping")); grouping != "" {
+		filter.Grouping = strings.ToLower(grouping)
+	}
+
 	return filter
 }
 
