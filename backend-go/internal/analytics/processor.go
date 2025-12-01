@@ -210,6 +210,15 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			continue
 		}
 
+		hppValue := 0.0
+		if idx, ok := colMap["hpp"]; ok {
+			if raw := strings.TrimSpace(record[idx]); raw != "" {
+				if parsed, err := strconv.ParseFloat(raw, 64); err == nil {
+					hppValue = parsed
+				}
+			}
+		}
+
 		var productID int
 		err = tx.QueryRowContext(ctx, "SELECT id FROM products WHERE sku = $1", sku).Scan(&productID)
 		if err != nil && err != sql.ErrNoRows {
@@ -222,6 +231,15 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			).Scan(&productID)
 			if err != nil {
 				return fmt.Errorf("failed to create product: %w", err)
+			}
+		}
+
+		if hppValue > 0 {
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE products SET hpp = $2, updated_at = NOW() WHERE id = $1 AND (hpp IS NULL OR hpp = 0)",
+				productID, hppValue,
+			); err != nil {
+				return fmt.Errorf("failed to update product hpp: %w", err)
 			}
 		}
 
