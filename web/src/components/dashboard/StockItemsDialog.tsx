@@ -28,6 +28,7 @@ interface StockItem {
     sku_name: string;
     brand_name: string;
     current_stock: number;
+    daily_stock_cover: number;
     days_of_cover: number;
     condition: ConditionKey;
     hpp: number;
@@ -110,6 +111,7 @@ export function StockItemsDialog({
                 sku_name: item.product_name,
                 brand_name: item.brand_name,
                 current_stock: item.current_stock,
+                daily_stock_cover: item.daily_stock_cover,
                 days_of_cover: item.days_of_cover,
                 condition: (item.stock_condition as ConditionKey) ?? 'out_of_stock',
                 hpp: item.hpp ?? 0,
@@ -208,7 +210,7 @@ export function StockItemsDialog({
                                 <SortableHeader label="SKU Name" field="sku_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="Brand" field="brand_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label={metricConfig.label} field={metricConfig.field} currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
-                                <SortableHeader label="Days of Cover" field="days_of_cover" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                <SortableHeader label="Daily Stock Cover" field="days_of_cover" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
                                 {activeGrouping === 'value' && (
                                     <SortableHeader label="HPP" field="hpp" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
                                 )}
@@ -235,7 +237,7 @@ export function StockItemsDialog({
                                         <TableCell className="max-w-[300px] truncate" title={item.sku_name}>{item.sku_name}</TableCell>
                                         <TableCell>{item.brand_name}</TableCell>
                                         <TableCell className="text-right font-mono">{metricConfig.render(item)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatDecimal(item.days_of_cover)}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatDecimal(item.daily_stock_cover)}</TableCell>
                                         {activeGrouping === 'value' && (
                                             <TableCell className="text-right font-mono">{formatCurrency(item.hpp)}</TableCell>
                                         )}

@@ -13,6 +13,7 @@ export interface StockHealthApiItem {
   brand_id: number;
   brand_name: string;
   current_stock: number;
+  daily_stock_cover: number;
   days_of_cover: number;
   stock_date: string;
   last_updated: string;
