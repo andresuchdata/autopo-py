@@ -334,6 +334,7 @@ func (p *AnalyticsProcessor) flushStockHealthBatch(ctx context.Context, tx *sql.
 			continue
 		}
 		seen[key] = len(unique)
+		unique = append(unique, rec)
 	}
 	argCount := len(unique) * 11
 	valueStrings := make([]string, 0, len(unique))
