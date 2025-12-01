@@ -67,6 +67,16 @@ func (h *StockHealthHandler) parseFilter(c *gin.Context) domain.StockHealthFilte
 		filter.Grouping = strings.ToLower(grouping)
 	}
 
+	if sortField := strings.TrimSpace(c.Query("sort_field")); sortField != "" {
+		filter.SortField = strings.ToLower(sortField)
+	}
+
+	sortDir := strings.ToLower(strings.TrimSpace(c.Query("sort_direction")))
+	if sortDir != "desc" {
+		sortDir = "asc"
+	}
+	filter.SortDir = sortDir
+
 	return filter
 }
 

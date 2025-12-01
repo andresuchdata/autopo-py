@@ -6,7 +6,7 @@ import {
   type ConditionKey,
 } from '@/services/dashboardService';
 import { stockHealthService, type StockHealthItemsResponse } from '@/services/stockHealthService';
-import { type SummaryGrouping } from '@/types/stockHealth';
+import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from '@/types/stockHealth';
 
 export interface LabeledOption {
   id: number | null;
@@ -116,6 +116,8 @@ export function useStockData() {
       page?: number;
       pageSize?: number;
       grouping?: SummaryGrouping;
+      sortField?: StockItemsSortField;
+      sortDirection?: SortDirection;
     }): Promise<StockHealthItemsResponse> => {
       const stockDate = params.date ?? lastDate ?? getTodayDate();
       if (!stockDate) {
@@ -130,6 +132,8 @@ export function useStockData() {
         brandIds: lastFilters?.brandIds,
         storeIds: lastFilters?.storeIds,
         grouping: params.grouping,
+        sortField: params.sortField,
+        sortDirection: params.sortDirection,
       });
     },
     [getTodayDate, lastDate, lastFilters]

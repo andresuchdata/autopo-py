@@ -104,6 +104,8 @@ type StockHealthFilter struct {
 	Page      int      `json:"page"`
 	PageSize  int      `json:"page_size"`
 	Grouping  string   `json:"grouping"`
+	SortField string   `json:"sort_field"`
+	SortDir   string   `json:"sort_direction"`
 }
 
 // StockHealthDashboard represents the dashboard data
