@@ -22,17 +22,28 @@ export function useStockData() {
   const [lastFilters, setLastFilters] = useState<DashboardFilters | undefined>(undefined);
   const [lastDate, setLastDate] = useState<string | null>(null);
 
+  const getTodayDate = useCallback(() => new Date().toISOString().split('T')[0], []);
+
   useEffect(() => {
     const fetchDates = async () => {
       try {
         const { dates } = await stockHealthService.getAvailableDatesWithLatest();
-        setAvailableDates(dates);
+        if (dates.length === 0) {
+          const today = getTodayDate();
+          setAvailableDates([today]);
+          setLastDate((prev) => prev ?? today);
+        } else {
+          setAvailableDates(dates);
+        }
       } catch (err) {
         console.error('Failed to fetch available dates:', err);
+        const today = getTodayDate();
+        setAvailableDates([today]);
+        setLastDate((prev) => prev ?? today);
       }
     };
     fetchDates();
-  }, []);
+  }, [getTodayDate]);
 
   const refresh = useCallback(async (date: string, filters?: DashboardFilters) => {
     setLoading(true);
@@ -67,7 +78,7 @@ export function useStockData() {
       pageSize?: number;
       grouping?: SummaryGrouping;
     }): Promise<StockHealthItemsResponse> => {
-      const stockDate = params.date ?? lastDate;
+      const stockDate = params.date ?? lastDate ?? getTodayDate();
       if (!stockDate) {
         throw new Error('No stock date selected');
       }
@@ -82,7 +93,7 @@ export function useStockData() {
         grouping: params.grouping,
       });
     },
-    [lastDate, lastFilters]
+    [getTodayDate, lastDate, lastFilters]
   );
 
   const buildOptions = useCallback(
