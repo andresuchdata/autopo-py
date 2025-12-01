@@ -274,7 +274,14 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		stock, _ := strconv.Atoi(record[colMap["stock"]])
 		dailySales, _ := strconv.ParseFloat(record[colMap["Daily Sales"]], 64)
 		maxDailySales, _ := strconv.ParseFloat(record[colMap["Max. Daily Sales"]], 64)
-		dailyStockCover := parseOptionalFloat(record, colMap, "daily_stock_cover")
+
+		// Calculate daily_stock_cover from stock and sales data
+		var dailyStockCover float64
+		if dailySales > 0 {
+			dailyStockCover = float64(stock) / dailySales
+		} else {
+			dailyStockCover = 0
+		}
 
 		rec := stockHealthRecord{
 			snapshotTime:      snapshotTime,
@@ -311,22 +318,6 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 
 	log.Printf("Successfully processed %d stock health records from %s", processedCount, filePath)
 	return nil
-}
-
-func parseOptionalFloat(record []string, colMap map[string]int, column string) float64 {
-	idx, ok := colMap[column]
-	if !ok || idx >= len(record) {
-		return 0
-	}
-	value := strings.TrimSpace(record[idx])
-	if value == "" {
-		return 0
-	}
-	parsed, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return 0
-	}
-	return parsed
 }
 
 func (p *AnalyticsProcessor) flushStockHealthBatch(ctx context.Context, tx *sql.Tx, batch []stockHealthRecord) error {
