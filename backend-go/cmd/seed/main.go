@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,10 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/urfave/cli/v2"
 )
+
+type contextKey string
+
+const resetAppliedKey contextKey = "reset-applied"
 
 func newDBURLFlag() *cli.StringFlag {
 	return &cli.StringFlag{
@@ -52,6 +57,19 @@ func initDB(c *cli.Context) error {
 	return nil
 }
 
+func dropDatabaseSchema(ctx context.Context, db *sql.DB) error {
+	log.Println("Dropping and recreating public schema (development reset)...")
+	if _, err := db.ExecContext(ctx, `
+		DROP SCHEMA public CASCADE;
+		CREATE SCHEMA public;
+		GRANT ALL ON SCHEMA public TO CURRENT_USER;
+		GRANT ALL ON SCHEMA public TO public;
+	`); err != nil {
+		return fmt.Errorf("failed to recreate public schema: %w", err)
+	}
+	return nil
+}
+
 func resetMasterTables(ctx context.Context, tx *sql.Tx) error {
 	log.Println("Resetting master tables before seeding...")
 	stmt := `
@@ -78,6 +96,86 @@ func closeDB(c *cli.Context) error {
 	return nil
 }
 
+func runAnalyticsSeeder(c *cli.Context) error {
+	db, ok := c.Context.Value(types.DBKey).(*sql.DB)
+	var cleanup func()
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !ok || db == nil {
+		var err error
+		db, err = sql.Open("pgx", c.String("db-url"))
+		if err != nil {
+			return fmt.Errorf("failed to connect to database: %w", err)
+		}
+		cleanup = func() { db.Close() }
+		ctx = context.Background()
+	} else {
+		cleanup = func() {}
+	}
+	defer cleanup()
+
+	if err := maybeResetDatabase(c, db); err != nil {
+		return err
+	}
+
+	prevCtx := c.Context
+	seedCtx := context.WithValue(ctx, types.DBKey, db)
+	c.Context = seedCtx
+	defer func() { c.Context = prevCtx }()
+
+	return SeedAnalyticsData(c)
+}
+
+func runMigrations(ctx context.Context, db *sql.DB, dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to read migrations dir: %w", err)
+	}
+	files := make([]os.DirEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		files = append(files, entry)
+	}
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Name() < files[j].Name()
+	})
+	for _, file := range files {
+		path := filepath.Join(dir, file.Name())
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read migration %s: %w", file.Name(), err)
+		}
+		if _, err := db.ExecContext(ctx, string(contents)); err != nil {
+			return fmt.Errorf("failed to apply migration %s: %w", file.Name(), err)
+		}
+		log.Printf("Applied migration %s", file.Name())
+	}
+	return nil
+}
+
+func maybeResetDatabase(c *cli.Context, db *sql.DB) error {
+	if !c.Bool("reset-db") {
+		return nil
+	}
+	if applied, ok := c.Context.Value(resetAppliedKey).(bool); ok && applied {
+		return nil
+	}
+	ctx := context.Background()
+	if err := dropDatabaseSchema(ctx, db); err != nil {
+		return err
+	}
+	migrationsDir := c.String("migrations-dir")
+	if err := runMigrations(ctx, db, migrationsDir); err != nil {
+		return err
+	}
+	c.Context = context.WithValue(c.Context, resetAppliedKey, true)
+	return nil
+}
+
 func main() {
 	if err := godotenv.Load(".env"); err != nil {
 		log.Printf("warning: could not load .env file: %v", err)
@@ -95,6 +193,17 @@ func main() {
 				Usage: "Seed master data (brands, suppliers, stores, etc.)",
 				Flags: []cli.Flag{
 					newDBURLFlag(),
+					&cli.StringFlag{
+						Name:    "migrations-dir",
+						Usage:   "Directory containing SQL migrations for reset",
+						Value:   "./backend-go/scripts/migrations",
+						EnvVars: []string{"MIGRATIONS_DIR"},
+					},
+					&cli.BoolFlag{
+						Name:    "reset-db",
+						Usage:   "Drop schema and re-run migrations before seeding (development only)",
+						EnvVars: []string{"RESET_DB"},
+					},
 					&cli.StringFlag{
 						Name:    "data-dir",
 						Usage:   "Directory containing master seed data",
@@ -146,7 +255,12 @@ func main() {
 				},
 				Before: initDB,
 				After:  closeDB,
-				Action: SeedAnalyticsData,
+				Action: func(c *cli.Context) error {
+					if err := runAnalyticsSeeder(c); err != nil {
+						return fmt.Errorf("failed to seed analytics data: %w", err)
+					}
+					return nil
+				},
 			},
 			{
 				Name:  "all",
@@ -185,12 +299,10 @@ func main() {
 				Before: initDB,
 				After:  closeDB,
 				Action: func(c *cli.Context) error {
-					// First run master seed
 					if err := runSeeder(c); err != nil {
 						return fmt.Errorf("error running master seed: %w", err)
 					}
-					// Then run analytics seed
-					if err := SeedAnalyticsData(c); err != nil {
+					if err := runAnalyticsSeeder(c); err != nil {
 						return fmt.Errorf("error running analytics seed: %w", err)
 					}
 					return nil
@@ -216,7 +328,11 @@ func runSeeder(c *cli.Context) error {
 	}
 	defer db.Close()
 
-	ctx := context.Background()
+	ctx := c.Context
+
+	if err := maybeResetDatabase(c, db); err != nil {
+		return err
+	}
 
 	// Start a transaction
 	tx, err := db.BeginTx(ctx, nil)
