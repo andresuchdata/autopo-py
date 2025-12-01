@@ -2,6 +2,7 @@
 package api
 
 import (
+	"strings"
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/api/handlers"
@@ -22,8 +23,9 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 	// Add middleware
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+	defaultOrigins := []string{"http://localhost:3000", "http://127.0.0.1:3000"}
 	corsConfig := cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://127.0.0.1:3000"},
+		AllowOrigins:     defaultOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -31,7 +33,13 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 		MaxAge:           12 * time.Hour,
 	}
 	if len(allowedOrigins) > 0 {
-		corsConfig.AllowOrigins = allowedOrigins
+		normalizedOrigins, allowAll := normalizeAllowedOrigins(allowedOrigins)
+		if allowAll {
+			corsConfig.AllowOrigins = nil
+			corsConfig.AllowOriginFunc = func(origin string) bool { return true }
+		} else if len(normalizedOrigins) > 0 {
+			corsConfig.AllowOrigins = normalizedOrigins
+		}
 	}
 	router.Use(cors.New(corsConfig))
 
@@ -68,4 +76,26 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 func errorResponse(c *gin.Context, statusCode int, message string) {
 	log.Error().Msg(message)
 	c.JSON(statusCode, gin.H{"error": message})
+}
+
+func normalizeAllowedOrigins(origins []string) ([]string, bool) {
+	var (
+		parsed   []string
+		allowAll bool
+	)
+	for _, origin := range origins {
+		parts := strings.Split(origin, ",")
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed == "" {
+				continue
+			}
+			if trimmed == "*" {
+				allowAll = true
+				continue
+			}
+			parsed = append(parsed, trimmed)
+		}
+	}
+	return parsed, allowAll
 }
