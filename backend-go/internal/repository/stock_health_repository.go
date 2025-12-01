@@ -372,7 +372,7 @@ func (r *stockHealthRepository) GetTimeSeriesData(ctx context.Context, days int,
 }
 
 func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx int, includeCondition bool) (string, []interface{}, int) {
-	conditions := []string{fmt.Sprintf("COALESCE(%s.daily_stock_cover, -1::double precision) >= 0", alias)}
+	conditions := []string{fmt.Sprintf("COALESCE(%s.daily_stock_cover, 0::double precision) >= 0", alias)}
 	var args []interface{}
 	idx := startIdx
 
