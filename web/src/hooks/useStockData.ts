@@ -13,6 +13,8 @@ export interface LabeledOption {
   name: string;
 }
 
+const MIN_DATE_OPTIONS = 30;
+
 export function useStockData() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -24,26 +26,63 @@ export function useStockData() {
 
   const getTodayDate = useCallback(() => new Date().toISOString().split('T')[0], []);
 
+  const generateFallbackDates = useCallback((days: number) => {
+    const today = new Date();
+    return Array.from({ length: days }, (_, index) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() - index);
+      return date.toISOString().split('T')[0];
+    });
+  }, []);
+
+  const ensureDateCoverage = useCallback(
+    (dates: string[]): string[] => {
+      if (!dates || dates.length === 0) {
+        return generateFallbackDates(MIN_DATE_OPTIONS);
+      }
+
+      const uniqueDates = Array.from(new Set(dates));
+      uniqueDates.sort((a, b) => {
+        if (a === b) return 0;
+        return a > b ? -1 : 1;
+      });
+
+      if (uniqueDates.length >= MIN_DATE_OPTIONS) {
+        return uniqueDates;
+      }
+
+      const fallbackDates = generateFallbackDates(MIN_DATE_OPTIONS);
+      const mergedDates = Array.from(new Set([...fallbackDates, ...uniqueDates]));
+      mergedDates.sort((a, b) => {
+        if (a === b) return 0;
+        return a > b ? -1 : 1;
+      });
+      return mergedDates;
+    },
+    [generateFallbackDates]
+  );
+
   useEffect(() => {
     const fetchDates = async () => {
       try {
         const { dates } = await stockHealthService.getAvailableDatesWithLatest();
-        if (dates.length === 0) {
-          const today = getTodayDate();
-          setAvailableDates([today]);
-          setLastDate((prev) => prev ?? today);
-        } else {
-          setAvailableDates(dates);
+        const normalizedDates = ensureDateCoverage(dates);
+        setAvailableDates(normalizedDates);
+
+        if (dates.length === 0 && normalizedDates.length > 0) {
+          setLastDate((prev) => prev ?? normalizedDates[0]);
         }
       } catch (err) {
         console.error('Failed to fetch available dates:', err);
-        const today = getTodayDate();
-        setAvailableDates([today]);
-        setLastDate((prev) => prev ?? today);
+        const fallbackDates = generateFallbackDates(MIN_DATE_OPTIONS);
+        setAvailableDates(fallbackDates);
+        if (fallbackDates.length > 0) {
+          setLastDate((prev) => prev ?? fallbackDates[0]);
+        }
       }
     };
     fetchDates();
-  }, [getTodayDate]);
+  }, [ensureDateCoverage, generateFallbackDates]);
 
   const refresh = useCallback(async (date: string, filters?: DashboardFilters) => {
     setLoading(true);
