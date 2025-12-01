@@ -391,19 +391,6 @@ func seedSupplierBrandMappings(ctx context.Context, tx *sql.Tx, dataDir string) 
 func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error {
 	log.Printf("Seeding product_mappings\n")
 
-	brandIDs, err := loadOriginalIDMap(ctx, tx, "brands")
-	if err != nil {
-		return err
-	}
-	storeIDs, err := loadOriginalIDMap(ctx, tx, "stores")
-	if err != nil {
-		return err
-	}
-	supplierIDs, err := loadOriginalIDMap(ctx, tx, "suppliers")
-	if err != nil {
-		return err
-	}
-
 	file, err := os.Open(filepath.Join(dataDir, "product_brand_store_supplier_mappings.csv"))
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -418,38 +405,85 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 		return fmt.Errorf("failed to read header: %w", err)
 	}
 
-	const query = `
-		WITH new_product AS (
-			INSERT INTO products (name, sku, hpp, created_at, updated_at)
-			VALUES ($1, $2, $3, NOW(), NOW())
-			ON CONFLICT (sku) DO UPDATE 
-			SET name = EXCLUDED.name,
-				hpp = EXCLUDED.hpp,
-				updated_at = NOW()
-			RETURNING id, sku
-		)
-		INSERT INTO product_mappings (
-			product_id, sku, original_product_name, brand_id, store_id, supplier_id
-		)
-		SELECT 
-			np.id, np.sku, $4, $5, $6, $7
-		FROM new_product np
-		ON CONFLICT (product_id, brand_id, store_id, supplier_id) 
-		DO UPDATE SET
-			sku = EXCLUDED.sku,
-			original_product_name = EXCLUDED.original_product_name,
-			updated_at = NOW()
-	`
-
-	stmt, err := tx.PrepareContext(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to prepare product mapping statement: %w", err)
+	const batchSize = 1000
+	type record struct {
+		brandOriginal    string
+		storeOriginal    string
+		supplierOriginal string
+		sku              string
+		productName      string
+		hpp              sql.NullFloat64
 	}
-	defer stmt.Close()
 
-	rowCount := 0
+	var (
+		batch    []record
+		rowCount int
+	)
+
+	flushBatch := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+
+		valueStrings := make([]string, 0, len(batch))
+		args := make([]interface{}, 0, len(batch)*6)
+		for i, rec := range batch {
+			base := i*6 + 1
+			valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5))
+			args = append(args,
+				rec.brandOriginal,
+				rec.sku,
+				rec.productName,
+				rec.storeOriginal,
+				rec.supplierOriginal,
+				nullFloatToInterface(rec.hpp),
+			)
+		}
+
+		query := fmt.Sprintf(`
+			WITH input_data (brand_original_id, sku, product_name, store_original_id, supplier_original_id, hpp) AS (
+				VALUES %s
+			),
+			upserted_products AS (
+				INSERT INTO products (name, sku, hpp, created_at, updated_at)
+				SELECT DISTINCT product_name, sku, hpp, NOW(), NOW()
+				FROM input_data
+				ON CONFLICT (sku) DO UPDATE
+				SET name = EXCLUDED.name,
+					hpp = EXCLUDED.hpp,
+					updated_at = NOW()
+				RETURNING id, sku
+			)
+			INSERT INTO product_mappings (product_id, sku, original_product_name, brand_id, store_id, supplier_id)
+			SELECT
+				upserted_products.id,
+				upserted_products.sku,
+				input_data.product_name,
+				b.id,
+				st.id,
+				s.id
+			FROM input_data
+			JOIN upserted_products ON upserted_products.sku = input_data.sku
+			JOIN brands b ON b.original_id = input_data.brand_original_id
+			JOIN stores st ON st.original_id = input_data.store_original_id
+			JOIN suppliers s ON s.original_id = input_data.supplier_original_id
+			ON CONFLICT (product_id, brand_id, store_id, supplier_id)
+			DO UPDATE SET
+				sku = EXCLUDED.sku,
+				original_product_name = EXCLUDED.original_product_name,
+				updated_at = NOW()
+		`, strings.Join(valueStrings, ","))
+
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return fmt.Errorf("failed to bulk upsert product mappings: %w", err)
+		}
+
+		batch = batch[:0]
+		return nil
+	}
+
 	for {
-		record, err := reader.Read()
+		recordData, err := reader.Read()
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -457,84 +491,48 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 			return fmt.Errorf("failed to read record: %w", err)
 		}
 
-		if len(record) < 7 {
-			return fmt.Errorf("invalid record (expected at least 7 columns): %v", record)
+		if len(recordData) < 7 {
+			return fmt.Errorf("invalid record (expected at least 7 columns): %v", recordData)
 		}
 
-		brandKey := strings.TrimSpace(record[0])
-		storeKey := strings.TrimSpace(record[4])
-		supplierKey := strings.TrimSpace(record[6])
-
-		brandID, ok := brandIDs[brandKey]
-		if !ok {
-			return fmt.Errorf("brand original_id %s not found", brandKey)
-		}
-		storeID, ok := storeIDs[storeKey]
-		if !ok {
-			return fmt.Errorf("store original_id %s not found", storeKey)
-		}
-		supplierID, ok := supplierIDs[supplierKey]
-		if !ok {
-			return fmt.Errorf("supplier original_id %s not found", supplierKey)
-		}
-
-		productName := strings.TrimSpace(record[3])
-		sku := strings.TrimSpace(record[2])
-		hppValue, err := parseNullableFloat(record[8])
+		hppValue, err := parseNullableFloat(safeField(recordData, 8))
 		if err != nil {
-			return fmt.Errorf("invalid hpp for sku %s: %w", sku, err)
+			return fmt.Errorf("invalid hpp for sku %s: %w", safeField(recordData, 2), err)
 		}
 
-		if _, err := stmt.ExecContext(ctx,
-			productName, // $1 product_name
-			sku,         // $2 sku
-			hppValue,    // $3 hpp
-			productName, // $4 original_product_name
-			brandID,     // $5 brand_id
-			storeID,     // $6 store_id
-			supplierID,  // $7 supplier_id
-		); err != nil {
-			return fmt.Errorf("failed to upsert product mapping for sku %s: %w", sku, err)
-		}
+		batch = append(batch, record{
+			brandOriginal:    strings.TrimSpace(recordData[0]),
+			storeOriginal:    strings.TrimSpace(recordData[4]),
+			supplierOriginal: strings.TrimSpace(recordData[6]),
+			sku:              strings.TrimSpace(recordData[2]),
+			productName:      strings.TrimSpace(recordData[3]),
+			hpp:              hppValue,
+		})
 
 		rowCount++
-		if rowCount%5000 == 0 {
-			log.Printf("Seeded %d product mappings...", rowCount)
+		if len(batch) == batchSize {
+			if err := flushBatch(); err != nil {
+				return err
+			}
 		}
+		if rowCount%10000 == 0 {
+			log.Printf("Queued %d product mappings...", rowCount)
+		}
+	}
+
+	if err := flushBatch(); err != nil {
+		return err
 	}
 
 	log.Printf("Successfully seeded product_mappings (%d records)\n", rowCount)
 	return nil
 }
 
-func loadOriginalIDMap(ctx context.Context, tx *sql.Tx, tableName string) (map[string]int64, error) {
-	query := fmt.Sprintf("SELECT original_id, id FROM %s", tableName)
-	rows, err := tx.QueryContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load %s original IDs: %w", tableName, err)
+func nullFloatToInterface(val sql.NullFloat64) interface{} {
+	if val.Valid {
+		return val.Float64
 	}
-	defer rows.Close()
-
-	result := make(map[string]int64)
-	for rows.Next() {
-		var (
-			originalID sql.NullString
-			id         int64
-		)
-		if err := rows.Scan(&originalID, &id); err != nil {
-			return nil, fmt.Errorf("failed to scan %s IDs: %w", tableName, err)
-		}
-		if !originalID.Valid {
-			continue
-		}
-		result[originalID.String] = id
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate %s IDs: %w", tableName, err)
-	}
-
-	return result, nil
+	return nil
 }
 
 func parseNullableFloat(value string) (sql.NullFloat64, error) {
@@ -589,4 +587,11 @@ func stringJoin(slice []string, sep string) string {
 		result += sep + s
 	}
 	return result
+}
+
+func safeField(record []string, idx int) string {
+	if idx < len(record) {
+		return record[idx]
+	}
+	return ""
 }
