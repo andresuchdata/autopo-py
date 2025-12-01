@@ -13,12 +13,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-type contextKey string
-
-const (
-	DBKey contextKey = "db"
-)
-
 // SeedAnalyticsData handles the analytics data seeding
 func SeedAnalyticsData(c *cli.Context) error {
 	// Get database connection from context
