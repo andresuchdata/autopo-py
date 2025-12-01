@@ -229,9 +229,13 @@ func (r *stockHealthRepository) getAggregatedStockItems(ctx context.Context, fil
 				%s AS total_daily_sales,
 				SUM(COALESCE(dsd.stock, 0) * COALESCE(pr.hpp, 0)) AS total_value,
 				%s AS days_of_cover,
-				%s AS stock_condition
+				%s AS stock_condition,
+				COUNT(DISTINCT COALESCE(dsd.store_id, 0)) AS store_count,
+				MIN(COALESCE(dsd.store_id, 0)) AS single_store_id,
+				MIN(COALESCE(st.name, '')) AS single_store_name
 			FROM daily_stock_data dsd
 			LEFT JOIN products pr ON pr.id = dsd.product_id
+			LEFT JOIN stores st ON st.id = dsd.store_id
 			LEFT JOIN brands br ON br.id = dsd.brand_id
 			WHERE 1=1%s
 			GROUP BY COALESCE(dsd.product_id, 0), dsd.sku, pr.name, dsd.brand_id, br.name
@@ -256,21 +260,6 @@ func (r *stockHealthRepository) getAggregatedStockItems(ctx context.Context, fil
 		selectArgs = append(selectArgs, filter.Condition)
 	}
 
-	storeID := int64(0)
-	storeName := "All Stores"
-	if len(filter.StoreIDs) == 1 {
-		resolvedName, err := r.getStoreName(ctx, filter.StoreIDs[0])
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to resolve store name: %w", err)
-		}
-		storeID = filter.StoreIDs[0]
-		storeName = resolvedName
-	}
-
-	storeIDSlot := len(selectArgs) + 1
-	storeNameSlot := storeIDSlot + 1
-	selectArgs = append(selectArgs, storeID, storeName)
-
 	countQuery := cte + "SELECT COUNT(*) FROM aggregated" + conditionClause
 	var total int
 	if err := r.db.GetContext(ctx, &total, countQuery, countArgs...); err != nil {
@@ -280,8 +269,8 @@ func (r *stockHealthRepository) getAggregatedStockItems(ctx context.Context, fil
 	query := cte + fmt.Sprintf(`
 		SELECT
 			aggregated.id,
-			$%d AS store_id,
-			$%d AS store_name,
+			CASE WHEN aggregated.store_count = 1 THEN aggregated.single_store_id ELSE 0 END AS store_id,
+			CASE WHEN aggregated.store_count = 1 THEN aggregated.single_store_name ELSE 'All Stores' END AS store_name,
 			aggregated.sku_id,
 			aggregated.sku_code,
 			aggregated.product_name,
@@ -296,7 +285,7 @@ func (r *stockHealthRepository) getAggregatedStockItems(ctx context.Context, fil
 			CASE WHEN aggregated.total_stock > 0 THEN aggregated.total_value / NULLIF(aggregated.total_stock, 0) ELSE 0 END AS hpp
 		FROM aggregated%s
 		%s
-	`, storeIDSlot, storeNameSlot, conditionClause, orderClause)
+	`, conditionClause, orderClause)
 
 	if filter.PageSize > 0 {
 		if filter.Page <= 0 {
@@ -311,6 +300,17 @@ func (r *stockHealthRepository) getAggregatedStockItems(ctx context.Context, fil
 	var items []domain.StockHealth
 	if err := r.db.SelectContext(ctx, &items, query, selectArgs...); err != nil {
 		return nil, 0, fmt.Errorf("error getting aggregated stock items: %w", err)
+	}
+
+	if len(filter.StoreIDs) == 1 {
+		storeName, err := r.getStoreName(ctx, filter.StoreIDs[0])
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to resolve store name: %w", err)
+		}
+		for i := range items {
+			items[i].StoreID = filter.StoreIDs[0]
+			items[i].StoreName = storeName
+		}
 	}
 
 	return items, total, nil
