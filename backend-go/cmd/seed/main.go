@@ -32,6 +32,60 @@ func newDBURLFlag() *cli.StringFlag {
 	}
 }
 
+func analyticsFlags() []cli.Flag {
+	return []cli.Flag{
+		newDBURLFlag(),
+		&cli.StringFlag{
+			Name:    "migrations-dir",
+			Usage:   "Directory containing SQL migrations for reset",
+			Value:   "./backend-go/scripts/migrations",
+			EnvVars: []string{"MIGRATIONS_DIR"},
+		},
+		&cli.BoolFlag{
+			Name:    "reset-db",
+			Usage:   "Drop schema and re-run migrations before seeding (development only)",
+			EnvVars: []string{"RESET_DB"},
+		},
+		&cli.StringFlag{
+			Name:    "stock-health-dir",
+			Usage:   "Directory containing stock health CSV files",
+			Value:   "./data/seeds/stock_health",
+			EnvVars: []string{"STOCK_HEALTH_DIR"},
+		},
+		&cli.StringFlag{
+			Name:    "po-snapshots-dir",
+			Usage:   "Directory containing PO snapshot CSV files",
+			Value:   "./data/seeds/po_snapshots",
+			EnvVars: []string{"PO_SNAPSHOTS_DIR"},
+		},
+		&cli.BoolFlag{
+			Name:    "reset-analytics",
+			Usage:   "Truncate analytics tables before seeding",
+			EnvVars: []string{"RESET_ANALYTICS_SEED"},
+		},
+		&cli.BoolFlag{
+			Name:  "stock-health-only",
+			Usage: "Only process stock health files, skip PO snapshots",
+			Value: false,
+		},
+		&cli.BoolFlag{
+			Name:  "po-snapshots-only",
+			Usage: "Only process PO snapshot files, skip stock health",
+			Value: false,
+		},
+	}
+}
+
+func setAnalyticsMode(c *cli.Context, stockOnly, poOnly bool) error {
+	if err := c.Set("stock-health-only", strconv.FormatBool(stockOnly)); err != nil {
+		return fmt.Errorf("failed to set stock-health-only flag: %w", err)
+	}
+	if err := c.Set("po-snapshots-only", strconv.FormatBool(poOnly)); err != nil {
+		return fmt.Errorf("failed to set po-snapshots-only flag: %w", err)
+	}
+	return nil
+}
+
 // nullIfEmpty returns NULL if the string is empty, otherwise returns the string
 func nullIfEmpty(s string) sql.NullString {
 	if s == "" {
@@ -221,38 +275,9 @@ func main() {
 				Action: runSeeder,
 			},
 			{
-				Name:  "analytics",
-				Usage: "Seed analytics data (stock health and PO snapshots)",
-				Flags: []cli.Flag{
-					newDBURLFlag(),
-					&cli.StringFlag{
-						Name:    "stock-health-dir",
-						Usage:   "Directory containing stock health CSV files",
-						Value:   "./data/seeds/stock_health",
-						EnvVars: []string{"STOCK_HEALTH_DIR"},
-					},
-					&cli.StringFlag{
-						Name:    "po-snapshots-dir",
-						Usage:   "Directory containing PO snapshot CSV files",
-						Value:   "./data/seeds/po_snapshots",
-						EnvVars: []string{"PO_SNAPSHOTS_DIR"},
-					},
-					&cli.BoolFlag{
-						Name:    "reset-analytics",
-						Usage:   "Truncate analytics tables before seeding",
-						EnvVars: []string{"RESET_ANALYTICS_SEED"},
-					},
-					&cli.BoolFlag{
-						Name:  "stock-health-only",
-						Usage: "Only process stock health files, skip PO snapshots",
-						Value: false,
-					},
-					&cli.BoolFlag{
-						Name:  "po-snapshots-only",
-						Usage: "Only process PO snapshot files, skip stock health",
-						Value: false,
-					},
-				},
+				Name:   "analytics",
+				Usage:  "Seed analytics data (stock health and PO snapshots)",
+				Flags:  analyticsFlags(),
 				Before: initDB,
 				After:  closeDB,
 				Action: func(c *cli.Context) error {
@@ -263,10 +288,53 @@ func main() {
 				},
 			},
 			{
+				Name:   "analytics-stock",
+				Usage:  "Seed only analytics stock health data",
+				Flags:  analyticsFlags(),
+				Before: initDB,
+				After:  closeDB,
+				Action: func(c *cli.Context) error {
+					if err := setAnalyticsMode(c, true, false); err != nil {
+						return err
+					}
+					if err := runAnalyticsSeeder(c); err != nil {
+						return fmt.Errorf("failed to seed stock health analytics data: %w", err)
+					}
+					return nil
+				},
+			},
+			{
+				Name:   "analytics-po",
+				Usage:  "Seed only analytics PO snapshot data",
+				Flags:  analyticsFlags(),
+				Before: initDB,
+				After:  closeDB,
+				Action: func(c *cli.Context) error {
+					if err := setAnalyticsMode(c, false, true); err != nil {
+						return err
+					}
+					if err := runAnalyticsSeeder(c); err != nil {
+						return fmt.Errorf("failed to seed PO snapshot analytics data: %w", err)
+					}
+					return nil
+				},
+			},
+			{
 				Name:  "all",
 				Usage: "Seed both master data and analytics data",
 				Flags: []cli.Flag{
 					newDBURLFlag(),
+					&cli.StringFlag{
+						Name:    "migrations-dir",
+						Usage:   "Directory containing SQL migrations for reset",
+						Value:   "./backend-go/scripts/migrations",
+						EnvVars: []string{"MIGRATIONS_DIR"},
+					},
+					&cli.BoolFlag{
+						Name:    "reset-db",
+						Usage:   "Drop schema and re-run migrations before seeding (development only)",
+						EnvVars: []string{"RESET_DB"},
+					},
 					&cli.StringFlag{
 						Name:    "data-dir",
 						Usage:   "Directory containing master seed data",
