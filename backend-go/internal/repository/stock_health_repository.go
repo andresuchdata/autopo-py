@@ -400,7 +400,10 @@ func (r *stockHealthRepository) GetTimeSeriesData(ctx context.Context, days int,
 }
 
 func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx int, includeCondition bool) (string, []interface{}, int) {
-	conditions := []string{fmt.Sprintf("COALESCE(%s.daily_stock_cover, 0::double precision) >= 0", alias)}
+	conditions := []string{
+		fmt.Sprintf("COALESCE(%s.daily_stock_cover, 0::double precision) >= 0", alias),
+		fmt.Sprintf("COALESCE(%s.daily_sales, 0::double precision) > 0", alias),
+	}
 	var args []interface{}
 	idx := startIdx
 
@@ -498,13 +501,4 @@ func buildOrderClause(fieldMap map[string]string, filter domain.StockHealthFilte
 	}
 
 	return orderClause
-}
-
-func (r *stockHealthRepository) getStoreName(ctx context.Context, storeID int64) (string, error) {
-	var name string
-	query := `SELECT COALESCE(name, '') FROM stores WHERE id = $1`
-	if err := r.db.GetContext(ctx, &name, query, storeID); err != nil {
-		return "", err
-	}
-	return name, nil
 }
