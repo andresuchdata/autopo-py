@@ -57,7 +57,7 @@ func Load() *Config {
 		viper.SetDefault("DB_PASSWORD", "postgres")
 		viper.SetDefault("DB_NAME", "autopo")
 		viper.SetDefault("DB_SSLMODE", "disable")
-		viper.SetDefault("SERVER_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"})
+		viper.SetDefault("SERVER_ALLOWED_ORIGINS", []string{"*"})
 		viper.SetDefault("APP_UPLOAD_DIR", "./data/uploads")
 		viper.SetDefault("APP_DATA_DIR", "./data/output")
 
