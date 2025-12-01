@@ -49,6 +49,28 @@ func NewStockHealthRepository(db *sqlx.DB) StockHealthRepository {
 	return &stockHealthRepository{db: db}
 }
 
+var skuSortFieldMap = map[string]string{
+	"store_name":      "store_name",
+	"sku_code":        "sku_code",
+	"sku_name":        "product_name",
+	"brand_name":      "brand_name",
+	"current_stock":   "current_stock",
+	"days_of_cover":   "days_of_cover",
+	"hpp":             "hpp",
+	"inventory_value": "(COALESCE(dsd.stock, 0) * COALESCE(pr.hpp, 0))",
+}
+
+var aggregatedSortFieldMap = map[string]string{
+	"store_name":      "aggregated.store_name",
+	"sku_code":        "aggregated.sku_code",
+	"sku_name":        "aggregated.product_name",
+	"brand_name":      "aggregated.brand_name",
+	"current_stock":   "aggregated.total_stock",
+	"days_of_cover":   "aggregated.days_of_cover",
+	"hpp":             "hpp",
+	"inventory_value": "aggregated.total_value",
+}
+
 func (r *stockHealthRepository) GetStockHealthSummary(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealthSummary, error) {
 	filterClause, args, _ := buildFilterClause(filter, "dsd", 1, false)
 
@@ -164,7 +186,8 @@ func (r *stockHealthRepository) getSkuStockItems(ctx context.Context, filter dom
 	}
 
 	selectClause, selectArgs, nextIdx := buildFilterClause(filter, "dsd", 1, true)
-	orderClause := "ORDER BY dsd.\"time\" DESC, dsd.store_id, dsd.product_id"
+	fallbackOrder := "ORDER BY dsd.\"time\" DESC, dsd.store_id, dsd.product_id"
+	orderClause := buildOrderClause(skuSortFieldMap, filter, fallbackOrder, "dsd.\"time\" DESC, dsd.store_id, dsd.product_id")
 
 	query := fmt.Sprintf(`
 		SELECT 
@@ -248,13 +271,14 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 		)
 	`, sumStockExpr, sumSalesExpr, coverExpr, conditionExpr, filterClause)
 
-	orderClause := "ORDER BY aggregated.product_name ASC"
+	fallbackOrder := "ORDER BY aggregated.product_name ASC"
 	switch grouping {
 	case "stock":
-		orderClause = "ORDER BY aggregated.total_stock DESC, aggregated.product_name ASC"
+		fallbackOrder = "ORDER BY aggregated.total_stock DESC, aggregated.product_name ASC"
 	case "value":
-		orderClause = "ORDER BY aggregated.total_value DESC, aggregated.product_name ASC"
+		fallbackOrder = "ORDER BY aggregated.total_value DESC, aggregated.product_name ASC"
 	}
+	orderClause := buildOrderClause(aggregatedSortFieldMap, filter, fallbackOrder, "aggregated.product_name ASC")
 
 	conditionClause := ""
 	countArgs := append([]interface{}{}, baseArgs...)
@@ -444,6 +468,32 @@ func stockConditionCaseExpression(coverExpr string) string {
 		ELSE 'out_of_stock'
 	END`,
 		coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr)
+}
+
+func buildOrderClause(fieldMap map[string]string, filter domain.StockHealthFilter, fallbackOrder string, secondaryOrder string) string {
+	sortField := strings.ToLower(strings.TrimSpace(filter.SortField))
+	column, ok := fieldMap[sortField]
+	if !ok || column == "" {
+		return fallbackOrder
+	}
+
+	direction := strings.ToUpper(filter.SortDir)
+	if direction != "DESC" {
+		direction = "ASC"
+	}
+
+	orderClause := fmt.Sprintf("ORDER BY %s %s", column, direction)
+	trimmedSecondary := strings.TrimSpace(secondaryOrder)
+	if trimmedSecondary != "" {
+		// ensure secondary doesn't start with ORDER BY
+		if strings.HasPrefix(strings.ToUpper(trimmedSecondary), "ORDER BY ") {
+			orderClause += ", " + strings.TrimSpace(trimmedSecondary[8:])
+		} else {
+			orderClause += ", " + trimmedSecondary
+		}
+	}
+
+	return orderClause
 }
 
 func (r *stockHealthRepository) getStoreName(ctx context.Context, storeID int64) (string, error) {

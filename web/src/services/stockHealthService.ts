@@ -1,5 +1,5 @@
 import { api } from '@/services/api';
-import { type SummaryGrouping } from '@/types/stockHealth';
+import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from '@/types/stockHealth';
 
 const ANALYTICS_BASE = '/analytics/stock_health';
 
@@ -70,6 +70,8 @@ export interface StockHealthFilterParams {
   brandIds?: number[];
   storeIds?: number[];
   grouping?: SummaryGrouping;
+  sortField?: StockItemsSortField;
+  sortDirection?: SortDirection;
 }
 
 const serializeIds = (ids?: number[]) => (ids && ids.length > 0 ? ids.join(',') : undefined);
@@ -85,6 +87,8 @@ export const stockHealthService = {
         brand_ids: serializeIds(params.brandIds),
         store_ids: serializeIds(params.storeIds),
         grouping: params.grouping,
+        sort_field: params.sortField,
+        sort_direction: params.sortDirection,
       },
     });
 
