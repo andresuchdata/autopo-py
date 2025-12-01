@@ -241,7 +241,7 @@ export function StockItemsDialog({
                                 </TableRow>
                             ) : processedItems.length > 0 ? (
                                 processedItems.map((item) => (
-                                    <TableRow key={item.id} className="hover:bg-muted/50">
+                                    <TableRow key={`${item.id}-${item.store_name}`} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{item.store_name}</TableCell>
                                         <TableCell className="font-mono text-xs">{item.sku_code}</TableCell>
                                         <TableCell className="max-w-[300px] truncate" title={item.sku_name}>{item.sku_name}</TableCell>

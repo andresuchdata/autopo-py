@@ -46,11 +46,18 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
   STOCK_HEALTH_DIR=${STOCK_HEALTH_DIR:-$SEED_DATA_DIR/stock_health}
   PO_SNAPSHOTS_DIR=${PO_SNAPSHOTS_DIR:-$SEED_DATA_DIR/po_snapshots}
 
+  RESET_MASTER_SEED=${RESET_MASTER_SEED:-false}
+  RESET_FLAG=""
+  if [ "$RESET_MASTER_SEED" = "true" ]; then
+    RESET_FLAG="--reset-master"
+  fi
+
   /app/bin/seed all \
     --db-url "$SEED_DB_URL" \
     --data-dir "$SEED_DATA_DIR" \
     --stock-health-dir "$STOCK_HEALTH_DIR" \
-    --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
+    --po-snapshots-dir "$PO_SNAPSHOTS_DIR" \
+    $RESET_FLAG
 fi
 
 # Start the application
