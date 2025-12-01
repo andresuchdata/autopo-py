@@ -504,20 +504,34 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 					updated_at = NOW()
 				RETURNING id, sku
 			),
-			resolved_mappings AS (
+			ranked_mappings AS (
 				SELECT
 					up.id AS product_id,
 					up.sku,
-					MAX(input_data.product_name) AS product_name,
+					input_data.product_name,
 					b.id AS brand_id,
 					st.id AS store_id,
-					s.id AS supplier_id
+					s.id AS supplier_id,
+					ROW_NUMBER() OVER (
+						PARTITION BY up.id, b.id, st.id, s.id
+						ORDER BY input_data.product_name
+					) AS rn
 				FROM input_data
 				JOIN upserted_products up ON up.sku = input_data.sku
 				JOIN brands b ON b.original_id = input_data.brand_original_id
 				JOIN stores st ON st.original_id = input_data.store_original_id
 				JOIN suppliers s ON s.original_id = input_data.supplier_original_id
-				GROUP BY up.id, up.sku, b.id, st.id, s.id
+			),
+			resolved_mappings AS (
+				SELECT
+					product_id,
+					sku,
+					product_name,
+					brand_id,
+					store_id,
+					supplier_id
+				FROM ranked_mappings
+				WHERE rn = 1
 			)
 			INSERT INTO product_mappings (product_id, sku, original_product_name, brand_id, store_id, supplier_id)
 			SELECT
