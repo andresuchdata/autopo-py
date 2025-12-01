@@ -61,14 +61,15 @@ var skuSortFieldMap = map[string]string{
 }
 
 var aggregatedSortFieldMap = map[string]string{
-	"store_name":      "aggregated.store_name",
-	"sku_code":        "aggregated.sku_code",
-	"sku_name":        "aggregated.product_name",
-	"brand_name":      "aggregated.brand_name",
-	"current_stock":   "aggregated.total_stock",
-	"days_of_cover":   "aggregated.days_of_cover",
-	"hpp":             "hpp",
-	"inventory_value": "aggregated.total_value",
+	"store_name":        "aggregated.store_name",
+	"sku_code":          "aggregated.sku_code",
+	"sku_name":          "aggregated.product_name",
+	"brand_name":        "aggregated.brand_name",
+	"current_stock":     "aggregated.total_stock",
+	"daily_stock_cover": "aggregated.daily_stock_cover",
+	"days_of_cover":     "aggregated.days_of_cover",
+	"hpp":               "hpp",
+	"inventory_value":   "aggregated.total_value",
 }
 
 func (r *stockHealthRepository) GetStockHealthSummary(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealthSummary, error) {
@@ -201,6 +202,7 @@ func (r *stockHealthRepository) getSkuStockItems(ctx context.Context, filter dom
 			COALESCE(br.name, '') AS brand_name,
 			COALESCE(dsd.stock, 0) AS current_stock,
 			COALESCE(dsd.daily_sales, 0) AS daily_sales,
+			%s AS daily_stock_cover,
 			%s AS days_of_cover,
 			dsd."time"::date AS stock_date,
 			COALESCE(dsd.updated_at, dsd.created_at) AS last_updated,
@@ -212,7 +214,7 @@ func (r *stockHealthRepository) getSkuStockItems(ctx context.Context, filter dom
 		LEFT JOIN brands br ON br.id = dsd.brand_id
 		WHERE 1=1%s
 		%s
-	`, daysOfCoverExpression("dsd"), stockConditionExpression("dsd"), selectClause, orderClause)
+	`, sanitizedDailyStockCoverExpr("dsd"), daysOfCoverExpression("dsd"), stockConditionExpression("dsd"), selectClause, orderClause)
 
 	if filter.PageSize > 0 {
 		if filter.Page <= 0 {
@@ -253,6 +255,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				%s AS total_stock,
 				%s AS total_daily_sales,
 				SUM(COALESCE(dsd.stock, 0) * COALESCE(pr.hpp, 0)) AS total_value,
+				AVG(%s) AS daily_stock_cover,
 				%s AS days_of_cover,
 				%s AS stock_condition
 			FROM daily_stock_data dsd
@@ -269,7 +272,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				COALESCE(dsd.store_id, 0),
 				COALESCE(st.name, '')
 		)
-	`, sumStockExpr, sumSalesExpr, coverExpr, conditionExpr, filterClause)
+	`, sumStockExpr, sumSalesExpr, sanitizedDailyStockCoverExpr("dsd"), coverExpr, conditionExpr, filterClause)
 
 	fallbackOrder := "ORDER BY aggregated.product_name ASC"
 	switch grouping {
@@ -308,6 +311,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 			aggregated.brand_name,
 			aggregated.total_stock AS current_stock,
 			aggregated.total_daily_sales AS daily_sales,
+			aggregated.daily_stock_cover,
 			aggregated.days_of_cover,
 			current_date AS stock_date,
 			NOW() AS last_updated,

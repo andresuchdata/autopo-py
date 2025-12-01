@@ -51,21 +51,22 @@ type PORecord struct {
 
 // StockHealth represents the stock health status for a product in a store
 type StockHealth struct {
-	ID             int64     `json:"id" db:"id"`
-	StoreID        int64     `json:"store_id" db:"store_id"`
-	StoreName      string    `json:"store_name" db:"store_name"`
-	SKUID          string    `json:"sku_id" db:"sku_id"`
-	SKUCode        string    `json:"sku_code" db:"sku_code"`
-	ProductName    string    `json:"product_name" db:"product_name"`
-	BrandID        int64     `json:"brand_id" db:"brand_id"`
-	BrandName      string    `json:"brand_name" db:"brand_name"`
-	CurrentStock   int       `json:"current_stock" db:"current_stock"`
-	DailySales     float64   `json:"daily_sales" db:"daily_sales"`
-	DaysOfCover    int       `json:"days_of_cover" db:"days_of_cover"`
-	StockDate      time.Time `json:"stock_date" db:"stock_date"`
-	LastUpdated    time.Time `json:"last_updated" db:"last_updated"`
-	StockCondition string    `json:"stock_condition" db:"stock_condition"`
-	HPP            float64   `json:"hpp" db:"hpp"`
+	ID              int64     `json:"id" db:"id"`
+	StoreID         int64     `json:"store_id" db:"store_id"`
+	StoreName       string    `json:"store_name" db:"store_name"`
+	SKUID           string    `json:"sku_id" db:"sku_id"`
+	SKUCode         string    `json:"sku_code" db:"sku_code"`
+	ProductName     string    `json:"product_name" db:"product_name"`
+	BrandID         int64     `json:"brand_id" db:"brand_id"`
+	BrandName       string    `json:"brand_name" db:"brand_name"`
+	CurrentStock    int       `json:"current_stock" db:"current_stock"`
+	DailySales      float64   `json:"daily_sales" db:"daily_sales"`
+	DailyStockCover float64   `json:"daily_stock_cover" db:"daily_stock_cover"`
+	DaysOfCover     int       `json:"days_of_cover" db:"days_of_cover"`
+	StockDate       time.Time `json:"stock_date" db:"stock_date"`
+	LastUpdated     time.Time `json:"last_updated" db:"last_updated"`
+	StockCondition  string    `json:"stock_condition" db:"stock_condition"`
+	HPP             float64   `json:"hpp" db:"hpp"`
 }
 
 // StockHealthSummary represents a summary of stock conditions
