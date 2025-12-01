@@ -140,6 +140,16 @@ func (r *stockHealthRepository) GetStoreBreakdown(ctx context.Context, filter do
 }
 
 func (r *stockHealthRepository) GetStockItems(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealth, int, error) {
+	grouping := strings.ToLower(filter.Grouping)
+	switch grouping {
+	case "stock", "value":
+		return r.getAggregatedStockItems(ctx, filter, grouping)
+	default:
+		return r.getSkuStockItems(ctx, filter)
+	}
+}
+
+func (r *stockHealthRepository) getSkuStockItems(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealth, int, error) {
 	countClause, countArgs, _ := buildFilterClause(filter, "dsd", 1, true)
 	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
@@ -154,6 +164,8 @@ func (r *stockHealthRepository) GetStockItems(ctx context.Context, filter domain
 	}
 
 	selectClause, selectArgs, nextIdx := buildFilterClause(filter, "dsd", 1, true)
+	orderClause := "ORDER BY dsd.\"time\" DESC, dsd.store_id, dsd.product_id"
+
 	query := fmt.Sprintf(`
 		SELECT 
 			COALESCE(dsd.product_id, 0) AS id,
@@ -176,8 +188,8 @@ func (r *stockHealthRepository) GetStockItems(ctx context.Context, filter domain
 		LEFT JOIN products pr ON pr.id = dsd.product_id
 		LEFT JOIN brands br ON br.id = dsd.brand_id
 		WHERE 1=1%s
-		ORDER BY dsd."time" DESC, dsd.store_id, dsd.product_id
-	`, daysOfCoverExpression("dsd"), stockConditionExpression("dsd"), selectClause)
+		%s
+	`, daysOfCoverExpression("dsd"), stockConditionExpression("dsd"), selectClause, orderClause)
 
 	if filter.PageSize > 0 {
 		if filter.Page <= 0 {
@@ -192,6 +204,113 @@ func (r *stockHealthRepository) GetStockItems(ctx context.Context, filter domain
 	err = r.db.SelectContext(ctx, &items, query, selectArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("error getting stock items: %w", err)
+	}
+
+	return items, total, nil
+}
+
+func (r *stockHealthRepository) getAggregatedStockItems(ctx context.Context, filter domain.StockHealthFilter, grouping string) ([]domain.StockHealth, int, error) {
+	filterClause, baseArgs, _ := buildFilterClause(filter, "dsd", 1, true)
+	sumStockExpr := "SUM(COALESCE(dsd.stock, 0))"
+	sumSalesExpr := "SUM(COALESCE(dsd.daily_sales, 0))"
+	coverExpr := aggregatedDaysOfCoverExpression(sumStockExpr, sumSalesExpr)
+	conditionExpr := aggregatedStockConditionExpression(sumStockExpr, sumSalesExpr)
+
+	cte := fmt.Sprintf(`
+		WITH aggregated AS (
+			SELECT 
+				COALESCE(dsd.product_id, 0) AS id,
+				dsd.sku AS sku_id,
+				dsd.sku AS sku_code,
+				COALESCE(pr.name, '') AS product_name,
+				dsd.brand_id,
+				COALESCE(br.name, '') AS brand_name,
+				%s AS total_stock,
+				%s AS total_daily_sales,
+				SUM(COALESCE(dsd.stock, 0) * COALESCE(pr.hpp, 0)) AS total_value,
+				%s AS days_of_cover,
+				%s AS stock_condition
+			FROM daily_stock_data dsd
+			LEFT JOIN products pr ON pr.id = dsd.product_id
+			LEFT JOIN brands br ON br.id = dsd.brand_id
+			WHERE 1=1%s
+			GROUP BY COALESCE(dsd.product_id, 0), dsd.sku, pr.name, dsd.brand_id, br.name
+		)
+	`, sumStockExpr, sumSalesExpr, coverExpr, conditionExpr, filterClause)
+
+	orderClause := "ORDER BY aggregated.product_name ASC"
+	switch grouping {
+	case "stock":
+		orderClause = "ORDER BY aggregated.total_stock DESC, aggregated.product_name ASC"
+	case "value":
+		orderClause = "ORDER BY aggregated.total_value DESC, aggregated.product_name ASC"
+	}
+
+	conditionClause := ""
+	countArgs := append([]interface{}{}, baseArgs...)
+	selectArgs := append([]interface{}{}, baseArgs...)
+	if filter.Condition != "" {
+		slot := len(baseArgs) + 1
+		conditionClause = fmt.Sprintf(" WHERE aggregated.stock_condition = $%d", slot)
+		countArgs = append(countArgs, filter.Condition)
+		selectArgs = append(selectArgs, filter.Condition)
+	}
+
+	storeID := int64(0)
+	storeName := "All Stores"
+	if len(filter.StoreIDs) == 1 {
+		resolvedName, err := r.getStoreName(ctx, filter.StoreIDs[0])
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to resolve store name: %w", err)
+		}
+		storeID = filter.StoreIDs[0]
+		storeName = resolvedName
+	}
+
+	storeIDSlot := len(selectArgs) + 1
+	storeNameSlot := storeIDSlot + 1
+	selectArgs = append(selectArgs, storeID, storeName)
+
+	countQuery := cte + "SELECT COUNT(*) FROM aggregated" + conditionClause
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery, countArgs...); err != nil {
+		return nil, 0, fmt.Errorf("error counting aggregated stock items: %w", err)
+	}
+
+	query := cte + fmt.Sprintf(`
+		SELECT
+			aggregated.id,
+			$%d AS store_id,
+			$%d AS store_name,
+			aggregated.sku_id,
+			aggregated.sku_code,
+			aggregated.product_name,
+			aggregated.brand_id,
+			aggregated.brand_name,
+			aggregated.total_stock AS current_stock,
+			aggregated.total_daily_sales AS daily_sales,
+			aggregated.days_of_cover,
+			current_date AS stock_date,
+			NOW() AS last_updated,
+			aggregated.stock_condition,
+			CASE WHEN aggregated.total_stock > 0 THEN aggregated.total_value / NULLIF(aggregated.total_stock, 0) ELSE 0 END AS hpp
+		FROM aggregated%s
+		%s
+	`, storeIDSlot, storeNameSlot, conditionClause, orderClause)
+
+	if filter.PageSize > 0 {
+		if filter.Page <= 0 {
+			filter.Page = 1
+		}
+		offset := (filter.Page - 1) * filter.PageSize
+		slot := len(selectArgs) + 1
+		query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", slot, slot+1)
+		selectArgs = append(selectArgs, filter.PageSize, offset)
+	}
+
+	var items []domain.StockHealth
+	if err := r.db.SelectContext(ctx, &items, query, selectArgs...); err != nil {
+		return nil, 0, fmt.Errorf("error getting aggregated stock items: %w", err)
 	}
 
 	return items, total, nil
@@ -316,4 +435,31 @@ func stockConditionExpression(alias string) string {
 		ELSE 'out_of_stock'
 	END`,
 		alias, alias, coverExpr, coverExpr, coverExpr, coverExpr)
+}
+
+func aggregatedDaysOfCoverExpression(sumStockExpr, sumSalesExpr string) string {
+	return fmt.Sprintf(`COALESCE(CASE WHEN %s IS NULL OR %s = 0 THEN 0 ELSE FLOOR(%s / NULLIF(%s, 0))::int END, 0)`,
+		sumSalesExpr, sumSalesExpr, sumStockExpr, sumSalesExpr)
+}
+
+func aggregatedStockConditionExpression(sumStockExpr, sumSalesExpr string) string {
+	coverExpr := aggregatedDaysOfCoverExpression(sumStockExpr, sumSalesExpr)
+	return fmt.Sprintf(`CASE
+		WHEN %s <= 0 OR %s <= 0 THEN 'out_of_stock'
+		WHEN %s > 31 THEN 'overstock'
+		WHEN %s >= 21 THEN 'healthy'
+		WHEN %s >= 7 THEN 'low'
+		WHEN %s >= 1 THEN 'nearly_out'
+		ELSE 'out_of_stock'
+	END`,
+		sumStockExpr, sumSalesExpr, coverExpr, coverExpr, coverExpr, coverExpr)
+}
+
+func (r *stockHealthRepository) getStoreName(ctx context.Context, storeID int64) (string, error) {
+	var name string
+	query := `SELECT COALESCE(name, '') FROM stores WHERE id = $1`
+	if err := r.db.GetContext(ctx, &name, query, storeID); err != nil {
+		return "", err
+	}
+	return name, nil
 }

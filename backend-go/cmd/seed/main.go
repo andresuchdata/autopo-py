@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/types"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -390,7 +391,19 @@ func seedSupplierBrandMappings(ctx context.Context, tx *sql.Tx, dataDir string) 
 func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error {
 	log.Printf("Seeding product_mappings\n")
 
-	// First, load the mapping data
+	brandIDs, err := loadOriginalIDMap(ctx, tx, "brands")
+	if err != nil {
+		return err
+	}
+	storeIDs, err := loadOriginalIDMap(ctx, tx, "stores")
+	if err != nil {
+		return err
+	}
+	supplierIDs, err := loadOriginalIDMap(ctx, tx, "suppliers")
+	if err != nil {
+		return err
+	}
+
 	file, err := os.Open(filepath.Join(dataDir, "product_brand_store_supplier_mappings.csv"))
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -398,35 +411,29 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 	defer file.Close()
 
 	reader := csv.NewReader(file)
-	reader.Comma = ';' // Set the delimiter to semicolon
+	reader.Comma = ';'
+	reader.FieldsPerRecord = -1
 
-	// Skip header
 	if _, err := reader.Read(); err != nil {
 		return fmt.Errorf("failed to read header: %w", err)
 	}
 
-	// Prepare the query
-	query := `
+	const query = `
 		WITH new_product AS (
-			INSERT INTO products (name, sku, created_at, updated_at)
-			VALUES ($1, $2, NOW(), NOW())
+			INSERT INTO products (name, sku, hpp, created_at, updated_at)
+			VALUES ($1, $2, $3, NOW(), NOW())
 			ON CONFLICT (sku) DO UPDATE 
-			SET name = EXCLUDED.name, updated_at = NOW()
+			SET name = EXCLUDED.name,
+				hpp = EXCLUDED.hpp,
+				updated_at = NOW()
 			RETURNING id, sku
 		)
 		INSERT INTO product_mappings (
 			product_id, sku, original_product_name, brand_id, store_id, supplier_id
-		) SELECT 
-			np.id, np.sku, $3, b.id, st.id, s.id
-		FROM 
-			new_product np,
-			brands b, 
-			stores st, 
-			suppliers s
-		WHERE 
-			b.original_id = $4 AND
-			st.original_id = $5 AND
-			s.original_id = $6
+		)
+		SELECT 
+			np.id, np.sku, $4, $5, $6, $7
+		FROM new_product np
 		ON CONFLICT (product_id, brand_id, store_id, supplier_id) 
 		DO UPDATE SET
 			sku = EXCLUDED.sku,
@@ -434,33 +441,115 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 			updated_at = NOW()
 	`
 
-	// Process each record
+	stmt, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("failed to prepare product mapping statement: %w", err)
+	}
+	defer stmt.Close()
+
+	rowCount := 0
 	for {
 		record, err := reader.Read()
 		if err != nil {
-			if err.Error() == "EOF" {
+			if err == io.EOF {
 				break
 			}
 			return fmt.Errorf("failed to read record: %w", err)
 		}
 
-		// Execute the query
-		_, err = tx.ExecContext(ctx, query,
-			record[3], // $1 product_name
-			record[2], // $2 sku
-			record[3], // $3 original_product_name
-			record[0], // $4 brand_id (original_id)
-			record[4], // $5 store_id (original_id)
-			record[6], // $6 supplier_id (original_id)
-		)
+		if len(record) < 7 {
+			return fmt.Errorf("invalid record (expected at least 7 columns): %v", record)
+		}
 
+		brandKey := strings.TrimSpace(record[0])
+		storeKey := strings.TrimSpace(record[4])
+		supplierKey := strings.TrimSpace(record[6])
+
+		brandID, ok := brandIDs[brandKey]
+		if !ok {
+			return fmt.Errorf("brand original_id %s not found", brandKey)
+		}
+		storeID, ok := storeIDs[storeKey]
+		if !ok {
+			return fmt.Errorf("store original_id %s not found", storeKey)
+		}
+		supplierID, ok := supplierIDs[supplierKey]
+		if !ok {
+			return fmt.Errorf("supplier original_id %s not found", supplierKey)
+		}
+
+		productName := strings.TrimSpace(record[3])
+		sku := strings.TrimSpace(record[2])
+		hppValue, err := parseNullableFloat(record[8])
 		if err != nil {
-			return fmt.Errorf("failed to insert product mapping: %w", err)
+			return fmt.Errorf("invalid hpp for sku %s: %w", sku, err)
+		}
+
+		if _, err := stmt.ExecContext(ctx,
+			productName, // $1 product_name
+			sku,         // $2 sku
+			hppValue,    // $3 hpp
+			productName, // $4 original_product_name
+			brandID,     // $5 brand_id
+			storeID,     // $6 store_id
+			supplierID,  // $7 supplier_id
+		); err != nil {
+			return fmt.Errorf("failed to upsert product mapping for sku %s: %w", sku, err)
+		}
+
+		rowCount++
+		if rowCount%5000 == 0 {
+			log.Printf("Seeded %d product mappings...", rowCount)
 		}
 	}
 
-	log.Println("Successfully seeded product_mappings")
+	log.Printf("Successfully seeded product_mappings (%d records)\n", rowCount)
 	return nil
+}
+
+func loadOriginalIDMap(ctx context.Context, tx *sql.Tx, tableName string) (map[string]int64, error) {
+	query := fmt.Sprintf("SELECT original_id, id FROM %s", tableName)
+	rows, err := tx.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load %s original IDs: %w", tableName, err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]int64)
+	for rows.Next() {
+		var (
+			originalID sql.NullString
+			id         int64
+		)
+		if err := rows.Scan(&originalID, &id); err != nil {
+			return nil, fmt.Errorf("failed to scan %s IDs: %w", tableName, err)
+		}
+		if !originalID.Valid {
+			continue
+		}
+		result[originalID.String] = id
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate %s IDs: %w", tableName, err)
+	}
+
+	return result, nil
+}
+
+func parseNullableFloat(value string) (sql.NullFloat64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return sql.NullFloat64{}, nil
+	}
+
+	cleaned := strings.ReplaceAll(value, ",", "")
+	num, err := strconv.ParseFloat(cleaned, 64)
+	if err != nil {
+		return sql.NullFloat64{}, fmt.Errorf("invalid float value %s: %w", value, err)
+	}
+
+	return sql.NullFloat64{Float64: num, Valid: true}, nil
 }
 
 func buildColumnList(columns []string) string {
