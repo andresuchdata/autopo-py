@@ -33,7 +33,7 @@ func newDBURLFlag() *cli.StringFlag {
 }
 
 func seedProductsMaster(ctx context.Context, tx *sql.Tx, dataDir string) error {
-	path := filepath.Join(dataDir, "products_with_hpp.csv")
+	path := filepath.Join(dataDir, "products.csv")
 	log.Printf("Seeding products from %s\n", path)
 
 	file, err := os.Open(path)
@@ -379,6 +379,10 @@ func main() {
 						Usage:   "Truncate master data tables before seeding",
 						EnvVars: []string{"RESET_MASTER_SEED"},
 					},
+					&cli.BoolFlag{
+						Name:  "include-mappings",
+						Usage: "Seed supplier-brand and product mappings (default: skip)",
+					},
 				},
 				Before: initDB,
 				After:  closeDB,
@@ -498,6 +502,7 @@ func runSeeder(c *cli.Context) error {
 	dbURL := c.String("db-url")
 	dataDir := c.String("data-dir")
 	resetMaster := c.Bool("reset-master")
+	includeMappings := c.Bool("include-mappings")
 
 	// Initialize database connection
 	db, err := sql.Open("pgx", dbURL)
@@ -524,7 +529,7 @@ func runSeeder(c *cli.Context) error {
 	log.Println("Starting database seeding...")
 
 	// Seed master data
-	if err := seedMasterData(ctx, tx, dataDir, resetMaster); err != nil {
+	if err := seedMasterData(ctx, tx, dataDir, resetMaster, includeMappings); err != nil {
 		return fmt.Errorf("failed to seed master data: %w", err)
 	}
 
@@ -537,7 +542,7 @@ func runSeeder(c *cli.Context) error {
 	return nil
 }
 
-func seedMasterData(ctx context.Context, tx *sql.Tx, dataDir string, reset bool) error {
+func seedMasterData(ctx context.Context, tx *sql.Tx, dataDir string, reset bool, includeMappings bool) error {
 	if reset {
 		if err := resetMasterTables(ctx, tx); err != nil {
 			return fmt.Errorf("failed to reset master tables: %w", err)
@@ -561,19 +566,26 @@ func seedMasterData(ctx context.Context, tx *sql.Tx, dataDir string, reset bool)
 		return fmt.Errorf("failed to seed stores: %w", err)
 	}
 
-	// Seed supplier_brand_mappings
-	if err := seedSupplierBrandMappings(ctx, tx, dataDir); err != nil {
-		return fmt.Errorf("failed to seed supplier brand mappings: %w", err)
-	}
-
-	// Seed master products from pricing reference before mapping
+	// Still ensure products table has basic entries even when mappings are skipped
 	if err := seedProductsMaster(ctx, tx, dataDir); err != nil {
 		return fmt.Errorf("failed to seed products: %w", err)
 	}
 
-	// Seed product_mappings
-	if err := seedProductMappings(ctx, tx, dataDir); err != nil {
-		return fmt.Errorf("failed to seed product mappings: %w", err)
+	if includeMappings {
+		// Seed supplier_brand_mappings
+		if err := seedSupplierBrandMappings(ctx, tx, dataDir); err != nil {
+			return fmt.Errorf("failed to seed supplier brand mappings: %w", err)
+		}
+
+		// Seed master products from pricing reference before mapping
+		if err := seedProductsMaster(ctx, tx, dataDir); err != nil {
+			return fmt.Errorf("failed to seed products: %w", err)
+		}
+
+		// Seed product_mappings
+		if err := seedProductMappings(ctx, tx, dataDir); err != nil {
+			return fmt.Errorf("failed to seed product mappings: %w", err)
+		}
 	}
 
 	return nil
