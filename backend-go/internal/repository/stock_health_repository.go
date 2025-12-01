@@ -213,8 +213,8 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 	filterClause, baseArgs, _ := buildFilterClause(filter, "dsd", 1, true)
 	sumStockExpr := "SUM(COALESCE(dsd.stock, 0))"
 	sumSalesExpr := "SUM(COALESCE(dsd.daily_sales, 0))"
-	coverExpr := aggregatedDaysOfCoverExpression(sumStockExpr, sumSalesExpr)
-	conditionExpr := aggregatedStockConditionExpression(sumStockExpr, sumSalesExpr)
+	coverExpr := aggregatedDaysOfCoverExpression("dsd")
+	conditionExpr := aggregatedStockConditionExpression("dsd")
 
 	cte := fmt.Sprintf(`
 		WITH aggregated AS (
@@ -372,7 +372,7 @@ func (r *stockHealthRepository) GetTimeSeriesData(ctx context.Context, days int,
 }
 
 func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx int, includeCondition bool) (string, []interface{}, int) {
-	var conditions []string
+	conditions := []string{fmt.Sprintf("COALESCE(%s.daily_stock_cover, -1::double precision) >= 0", alias)}
 	var args []interface{}
 	idx := startIdx
 
@@ -414,40 +414,36 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 	return clause, args, idx
 }
 
+func sanitizedDailyStockCoverExpr(alias string) string {
+	return fmt.Sprintf("GREATEST(COALESCE(%s.daily_stock_cover, 0::double precision), 0::double precision)", alias)
+}
+
 func daysOfCoverExpression(alias string) string {
-	return fmt.Sprintf(`COALESCE(CASE WHEN %s.daily_sales IS NULL OR %s.daily_sales = 0 THEN 0 ELSE FLOOR(%s.stock / NULLIF(%s.daily_sales, 0))::int END, 0)`,
-		alias, alias, alias, alias)
+	return fmt.Sprintf("COALESCE(FLOOR(%s)::int, 0)", sanitizedDailyStockCoverExpr(alias))
 }
 
 func stockConditionExpression(alias string) string {
-	coverExpr := daysOfCoverExpression(alias)
-	return fmt.Sprintf(`CASE
-		WHEN COALESCE(%s.stock, 0) <= 0 OR COALESCE(%s.daily_sales, 0) <= 0 THEN 'out_of_stock'
-		WHEN %s > 31 THEN 'overstock'
-		WHEN %s >= 21 THEN 'healthy'
-		WHEN %s >= 7 THEN 'low'
-		WHEN %s >= 1 THEN 'nearly_out'
-		ELSE 'out_of_stock'
-	END`,
-		alias, alias, coverExpr, coverExpr, coverExpr, coverExpr)
+	return stockConditionCaseExpression(sanitizedDailyStockCoverExpr(alias))
 }
 
-func aggregatedDaysOfCoverExpression(sumStockExpr, sumSalesExpr string) string {
-	return fmt.Sprintf(`COALESCE(CASE WHEN %s IS NULL OR %s = 0 THEN 0 ELSE FLOOR(%s / NULLIF(%s, 0))::int END, 0)`,
-		sumSalesExpr, sumSalesExpr, sumStockExpr, sumSalesExpr)
+func aggregatedDaysOfCoverExpression(alias string) string {
+	return fmt.Sprintf("COALESCE(FLOOR(AVG(%s))::int, 0)", sanitizedDailyStockCoverExpr(alias))
 }
 
-func aggregatedStockConditionExpression(sumStockExpr, sumSalesExpr string) string {
-	coverExpr := aggregatedDaysOfCoverExpression(sumStockExpr, sumSalesExpr)
+func aggregatedStockConditionExpression(alias string) string {
+	return stockConditionCaseExpression(fmt.Sprintf("AVG(%s)", sanitizedDailyStockCoverExpr(alias)))
+}
+
+func stockConditionCaseExpression(coverExpr string) string {
 	return fmt.Sprintf(`CASE
-		WHEN %s <= 0 OR %s <= 0 THEN 'out_of_stock'
-		WHEN %s > 31 THEN 'overstock'
-		WHEN %s >= 21 THEN 'healthy'
-		WHEN %s >= 7 THEN 'low'
-		WHEN %s >= 1 THEN 'nearly_out'
+		WHEN %s = 0 THEN 'out_of_stock'
+		WHEN %s > 0 AND %s <= 7 THEN 'nearly_out'
+		WHEN %s > 7 AND %s <= 21 THEN 'low'
+		WHEN %s > 21 AND %s <= 30 THEN 'healthy'
+		WHEN %s > 30 THEN 'overstock'
 		ELSE 'out_of_stock'
 	END`,
-		sumStockExpr, sumSalesExpr, coverExpr, coverExpr, coverExpr, coverExpr)
+		coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr)
 }
 
 func (r *stockHealthRepository) getStoreName(ctx context.Context, storeID int64) (string, error) {
