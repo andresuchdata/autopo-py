@@ -93,9 +93,9 @@ func (r *IngestRepository) UpsertStore(ctx context.Context, store *domain.Store)
 
 func (r *IngestRepository) UpsertProduct(ctx context.Context, product *domain.Product) (int64, error) {
 	query := `
-		INSERT INTO products (sku_code, name, brand_id, supplier_id, hpp, price, updated_at)
+		INSERT INTO products (sku, name, brand_id, supplier_id, hpp, price, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW())
-		ON CONFLICT (sku_code) 
+		ON CONFLICT (sku) 
 		DO UPDATE SET 
 			name = EXCLUDED.name,
 			brand_id = EXCLUDED.brand_id,

@@ -139,7 +139,7 @@ type Supplier struct {
 // Product represents a product entity
 type Product struct {
 	ID         int64     `json:"id" db:"id"`
-	SKUCode    string    `json:"sku_code" db:"sku_code"`
+	SKUCode    string    `json:"sku_code" db:"sku"`
 	Name       string    `json:"name" db:"name"`
 	BrandID    int64     `json:"brand_id" db:"brand_id"`
 	SupplierID int64     `json:"supplier_id" db:"supplier_id"`

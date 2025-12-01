@@ -106,6 +106,7 @@ type stockHealthRecord struct {
 	maxDailySales     float64
 	origDailySales    float64
 	origMaxDailySales float64
+	dailyStockCover   float64
 }
 
 type poSnapshotRecord struct {
@@ -273,6 +274,7 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		stock, _ := strconv.Atoi(record[colMap["stock"]])
 		dailySales, _ := strconv.ParseFloat(record[colMap["Daily Sales"]], 64)
 		maxDailySales, _ := strconv.ParseFloat(record[colMap["Max. Daily Sales"]], 64)
+		dailyStockCover := parseOptionalFloat(record, colMap, "daily_stock_cover")
 
 		rec := stockHealthRecord{
 			snapshotTime:      snapshotTime,
@@ -285,6 +287,7 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			maxDailySales:     maxDailySales,
 			origDailySales:    dailySales,
 			origMaxDailySales: maxDailySales,
+			dailyStockCover:   dailyStockCover,
 		}
 
 		batch = append(batch, rec)
@@ -310,6 +313,22 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	return nil
 }
 
+func parseOptionalFloat(record []string, colMap map[string]int, column string) float64 {
+	idx, ok := colMap[column]
+	if !ok || idx >= len(record) {
+		return 0
+	}
+	value := strings.TrimSpace(record[idx])
+	if value == "" {
+		return 0
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0
+	}
+	return parsed
+}
+
 func (p *AnalyticsProcessor) flushStockHealthBatch(ctx context.Context, tx *sql.Tx, batch []stockHealthRecord) error {
 	if len(batch) == 0 {
 		return nil
@@ -324,14 +343,13 @@ func (p *AnalyticsProcessor) flushStockHealthBatch(ctx context.Context, tx *sql.
 			continue
 		}
 		seen[key] = len(unique)
-		unique = append(unique, rec)
 	}
-
+	argCount := len(unique) * 11
 	valueStrings := make([]string, 0, len(unique))
-	args := make([]interface{}, 0, len(unique)*10)
+	args := make([]interface{}, 0, argCount)
 	for i, rec := range unique {
-		base := i*10 + 1
-		valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9))
+		base := i*11 + 1
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10))
 		args = append(args,
 			rec.snapshotTime,
 			rec.storeID,
@@ -343,6 +361,7 @@ func (p *AnalyticsProcessor) flushStockHealthBatch(ctx context.Context, tx *sql.
 			rec.maxDailySales,
 			rec.origDailySales,
 			rec.origMaxDailySales,
+			rec.dailyStockCover,
 		)
 	}
 
@@ -350,7 +369,8 @@ func (p *AnalyticsProcessor) flushStockHealthBatch(ctx context.Context, tx *sql.
 		INSERT INTO daily_stock_data (
 			time, store_id, product_id, brand_id, sku,
 			stock, daily_sales, max_daily_sales,
-			orig_daily_sales, orig_max_daily_sales
+			orig_daily_sales, orig_max_daily_sales,
+			daily_stock_cover
 		) VALUES %s
 		ON CONFLICT (time, store_id, sku, brand_id)
 		DO UPDATE SET
@@ -360,6 +380,7 @@ func (p *AnalyticsProcessor) flushStockHealthBatch(ctx context.Context, tx *sql.
 			max_daily_sales = EXCLUDED.max_daily_sales,
 			orig_daily_sales = EXCLUDED.orig_daily_sales,
 			orig_max_daily_sales = EXCLUDED.orig_max_daily_sales,
+			daily_stock_cover = EXCLUDED.daily_stock_cover,
 			updated_at = NOW()
 	`, strings.Join(valueStrings, ","))
 
