@@ -429,7 +429,7 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 		args := make([]interface{}, 0, len(batch)*6)
 		for i, rec := range batch {
 			base := i*6 + 1
-			valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5))
+			valueStrings = append(valueStrings, fmt.Sprintf("($%d::text,$%d::text,$%d::text,$%d::text,$%d::text,$%d::numeric)", base, base+1, base+2, base+3, base+4, base+5))
 			args = append(args,
 				rec.brandOriginal,
 				rec.sku,
