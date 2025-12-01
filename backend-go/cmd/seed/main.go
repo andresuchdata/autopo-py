@@ -475,9 +475,32 @@ func seedProductMappings(ctx context.Context, tx *sql.Tx, dataDir string) error 
 		}
 		endRow := startRow + batchLen - 1
 
-		valueStrings := make([]string, 0, batchLen)
-		args := make([]interface{}, 0, batchLen*6)
-		for i, rec := range batch {
+		type dedupKey struct {
+			brand    string
+			store    string
+			supplier string
+			sku      string
+		}
+
+		uniqueRecords := make([]record, 0, batchLen)
+		seen := make(map[dedupKey]struct{}, batchLen)
+		for _, rec := range batch {
+			key := dedupKey{
+				brand:    rec.brandOriginal,
+				store:    rec.storeOriginal,
+				supplier: rec.supplierOriginal,
+				sku:      rec.sku,
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			uniqueRecords = append(uniqueRecords, rec)
+		}
+
+		valueStrings := make([]string, 0, len(uniqueRecords))
+		args := make([]interface{}, 0, len(uniqueRecords)*6)
+		for i, rec := range uniqueRecords {
 			base := i*6 + 1
 			valueStrings = append(valueStrings, fmt.Sprintf("($%d::text,$%d::text,$%d::text,$%d::text,$%d::text,$%d::numeric)", base, base+1, base+2, base+3, base+4, base+5))
 			args = append(args,
