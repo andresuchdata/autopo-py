@@ -39,25 +39,79 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
   if [ -n "$DATABASE_URL" ]; then
     SEED_DB_URL="$DATABASE_URL"
   else
-    SEED_DB_URL="postgres://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?sslmode=${DB_SSLMODE:-disable}"
+    SEED_DB_URL="postgres://$DB_USER:$DB_PASSWORD@$DB_HOST@$DB_PORT/$DB_NAME?sslmode=${DB_SSLMODE:-disable}"
   fi
 
+  SEED_TARGET=${SEED_TARGET:-all}
   SEED_DATA_DIR=${SEED_DATA_DIR:-/app/data/seeds}
   STOCK_HEALTH_DIR=${STOCK_HEALTH_DIR:-$SEED_DATA_DIR/stock_health}
   PO_SNAPSHOTS_DIR=${PO_SNAPSHOTS_DIR:-$SEED_DATA_DIR/po_snapshots}
-
+  MIGRATIONS_DIR=${MIGRATIONS_DIR:-/app/scripts/migrations}
+  RESET_DB=${RESET_DB:-false}
   RESET_MASTER_SEED=${RESET_MASTER_SEED:-false}
-  RESET_FLAG=""
-  if [ "$RESET_MASTER_SEED" = "true" ]; then
-    RESET_FLAG="--reset-master"
-  fi
+  RESET_ANALYTICS_SEED=${RESET_ANALYTICS_SEED:-false}
 
-  /app/bin/seed all \
-    --db-url "$SEED_DB_URL" \
-    --data-dir "$SEED_DATA_DIR" \
-    --stock-health-dir "$STOCK_HEALTH_DIR" \
-    --po-snapshots-dir "$PO_SNAPSHOTS_DIR" \
-    $RESET_FLAG
+  build_common_args() {
+    set -- /app/bin/seed "$1" --db-url "$SEED_DB_URL" --migrations-dir "$MIGRATIONS_DIR"
+    if [ "$RESET_DB" = "true" ]; then
+      set -- "$@" --reset-db
+    fi
+    echo "$@"
+  }
+
+  run_seed_command() {
+    echo "Executing: $*"
+    "$@"
+  }
+
+  case "$SEED_TARGET" in
+    master)
+      eval set -- $(build_common_args "master")
+      set -- "$@" --data-dir "$SEED_DATA_DIR"
+      if [ "$RESET_MASTER_SEED" = "true" ]; then
+        set -- "$@" --reset-master
+      fi
+      run_seed_command "$@"
+      ;;
+    analytics)
+      eval set -- $(build_common_args "analytics")
+      set -- "$@" --stock-health-dir "$STOCK_HEALTH_DIR" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
+      if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
+        set -- "$@" --reset-analytics
+      fi
+      run_seed_command "$@"
+      ;;
+    analytics-stock)
+      eval set -- $(build_common_args "analytics-stock")
+      set -- "$@" --stock-health-dir "$STOCK_HEALTH_DIR"
+      if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
+        set -- "$@" --reset-analytics
+      fi
+      run_seed_command "$@"
+      ;;
+    analytics-po)
+      eval set -- $(build_common_args "analytics-po")
+      set -- "$@" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
+      if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
+        set -- "$@" --reset-analytics
+      fi
+      run_seed_command "$@"
+      ;;
+    all)
+      eval set -- $(build_common_args "all")
+      set -- "$@" --data-dir "$SEED_DATA_DIR" --stock-health-dir "$STOCK_HEALTH_DIR" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
+      if [ "$RESET_MASTER_SEED" = "true" ]; then
+        set -- "$@" --reset-master
+      fi
+      if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
+        set -- "$@" --reset-analytics
+      fi
+      run_seed_command "$@"
+      ;;
+    *)
+      echo "Unknown SEED_TARGET '$SEED_TARGET', skipping seed run."
+      ;;
+  esac
 fi
 
 # Start the application
