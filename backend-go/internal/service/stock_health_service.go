@@ -44,20 +44,32 @@ func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter 
 	if err != nil {
 		return nil, err
 	}
+	if summary == nil {
+		summary = make([]domain.StockHealthSummary, 0)
+	}
 
 	timeSeries, err := s.GetTimeSeries(ctx, days, filter)
 	if err != nil {
 		return nil, err
+	}
+	if timeSeries == nil {
+		timeSeries = make(map[string][]domain.TimeSeriesData)
 	}
 
 	brandBreakdown, err := s.repo.GetBrandBreakdown(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
+	if brandBreakdown == nil {
+		brandBreakdown = make([]domain.ConditionBreakdown, 0)
+	}
 
 	storeBreakdown, err := s.repo.GetStoreBreakdown(ctx, filter)
 	if err != nil {
 		return nil, err
+	}
+	if storeBreakdown == nil {
+		storeBreakdown = make([]domain.ConditionBreakdown, 0)
 	}
 
 	return &domain.StockHealthDashboard{
