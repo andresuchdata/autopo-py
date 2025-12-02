@@ -1,9 +1,6 @@
 -- 002_add_timescaledb_daily_stock_data.sql
 -- Migration to convert daily_stock_data to a TimescaleDB hypertable
 
--- Enable TimescaleDB extension
-CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-
 -- Create daily_stock_data as a hypertable
 CREATE TABLE IF NOT EXISTS daily_stock_data (
     time TIMESTAMPTZ NOT NULL,
@@ -14,6 +11,7 @@ CREATE TABLE IF NOT EXISTS daily_stock_data (
     
     -- Stock and Sales Metrics
     stock INTEGER DEFAULT 0,
+    hpp NUMERIC(15, 2),
     daily_sales NUMERIC(10, 2),
     max_daily_sales NUMERIC(10, 2),
     orig_daily_sales NUMERIC(10, 2),

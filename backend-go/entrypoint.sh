@@ -44,6 +44,7 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
 
   SEED_TARGET=${SEED_TARGET:-all}
   SEED_DATA_DIR=${SEED_DATA_DIR:-/app/data/seeds}
+  MASTER_DATA_DIR=${MASTER_DATA_DIR:-$SEED_DATA_DIR/master_data}
   STOCK_HEALTH_DIR=${STOCK_HEALTH_DIR:-$SEED_DATA_DIR/stock_health}
   PO_SNAPSHOTS_DIR=${PO_SNAPSHOTS_DIR:-$SEED_DATA_DIR/po_snapshots}
   MIGRATIONS_DIR=${MIGRATIONS_DIR:-/app/scripts/migrations}
@@ -68,7 +69,7 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
     master)
       (
         eval set -- $(build_common_args "master")
-        set -- "$@" --data-dir "$SEED_DATA_DIR"
+        set -- "$@" --data-dir "$MASTER_DATA_DIR"
         if [ "$RESET_MASTER_SEED" = "true" ]; then
           set -- "$@" --reset-master
         fi
@@ -108,7 +109,7 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
     all)
       (
         eval set -- $(build_common_args "all")
-        set -- "$@" --data-dir "$SEED_DATA_DIR" --stock-health-dir "$STOCK_HEALTH_DIR" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
+        set -- "$@" --data-dir "$MASTER_DATA_DIR" --stock-health-dir "$STOCK_HEALTH_DIR" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
         if [ "$RESET_MASTER_SEED" = "true" ]; then
           set -- "$@" --reset-master
         fi

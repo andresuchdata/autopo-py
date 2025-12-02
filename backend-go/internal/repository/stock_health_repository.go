@@ -55,9 +55,10 @@ var skuSortFieldMap = map[string]string{
 	"sku_name":          "product_name",
 	"brand_name":        "brand_name",
 	"current_stock":     "current_stock",
+	"daily_sales":       "daily_sales",
 	"daily_stock_cover": "daily_stock_cover",
 	"hpp":               "hpp",
-	"inventory_value":   "(COALESCE(dsd.stock, 0) * COALESCE(pr.hpp, 0))",
+	"inventory_value":   "(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0))",
 }
 
 var aggregatedSortFieldMap = map[string]string{
@@ -66,6 +67,7 @@ var aggregatedSortFieldMap = map[string]string{
 	"sku_name":          "aggregated.product_name",
 	"brand_name":        "aggregated.brand_name",
 	"current_stock":     "aggregated.total_stock",
+	"daily_sales":       "aggregated.total_daily_sales",
 	"daily_stock_cover": "aggregated.daily_stock_cover",
 	"hpp":               "hpp",
 	"inventory_value":   "aggregated.total_value",
@@ -79,7 +81,7 @@ func (r *stockHealthRepository) GetStockHealthSummary(ctx context.Context, filte
 			%s AS stock_condition,
 			COUNT(*) AS count,
 			COALESCE(SUM(dsd.stock), 0) AS total_stock,
-			COALESCE(SUM(dsd.stock * COALESCE(pr.hpp, 0)), 0) AS total_value
+			COALESCE(SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0)), 0) AS total_value
 		FROM daily_stock_data dsd
 		LEFT JOIN products pr ON pr.id = dsd.product_id
 		WHERE 1=1%s
@@ -114,7 +116,7 @@ func (r *stockHealthRepository) GetBrandBreakdown(ctx context.Context, filter do
 			%s AS stock_condition,
 			COUNT(*) AS count,
 			COALESCE(SUM(dsd.stock), 0) AS total_stock,
-			COALESCE(SUM(dsd.stock * COALESCE(pr.hpp, 0)), 0) AS total_value
+			COALESCE(SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0)), 0) AS total_value
 		FROM daily_stock_data dsd
 		LEFT JOIN brands br ON br.id = dsd.brand_id
 		LEFT JOIN products pr ON pr.id = dsd.product_id
@@ -144,7 +146,7 @@ func (r *stockHealthRepository) GetStoreBreakdown(ctx context.Context, filter do
 			%s AS stock_condition,
 			COUNT(*) AS count,
 			COALESCE(SUM(dsd.stock), 0) AS total_stock,
-			COALESCE(SUM(dsd.stock * COALESCE(pr.hpp, 0)), 0) AS total_value
+			COALESCE(SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0)), 0) AS total_value
 		FROM daily_stock_data dsd
 		LEFT JOIN stores st ON st.id = dsd.store_id
 		LEFT JOIN products pr ON pr.id = dsd.product_id
@@ -205,7 +207,7 @@ func (r *stockHealthRepository) getSkuStockItems(ctx context.Context, filter dom
 			dsd."time"::date AS stock_date,
 			COALESCE(dsd.updated_at, dsd.created_at) AS last_updated,
 			%s AS stock_condition,
-			COALESCE(dsd.hpp, pr.hpp, 0) AS hpp
+			COALESCE(dsd.hpp, 0) AS hpp
 		FROM daily_stock_data dsd
 		LEFT JOIN stores st ON st.id = dsd.store_id
 		LEFT JOIN products pr ON pr.id = dsd.product_id
@@ -257,7 +259,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				COALESCE(st.name, '') AS store_name,
 				%s AS total_stock,
 				%s AS total_daily_sales,
-				SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, pr.hpp, 0)) AS total_value,
+				SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0)) AS total_value,
 				%s AS daily_stock_cover,
 				%s AS stock_condition
 			FROM daily_stock_data dsd
