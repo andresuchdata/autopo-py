@@ -87,7 +87,17 @@ function SkuMultiSelect({
 
     const selectedLabels = useMemo(() => selectedCodes.map((code) => optionMap.get(code) ?? code), [optionMap, selectedCodes]);
     const pinnedOptions = useMemo(
-        () => selectedCodes.map((code) => ({ code, label: optionMap.get(code) ?? code })),
+        () =>
+            selectedCodes.map((code) => {
+                const label = optionMap.get(code) ?? code;
+                const nameOnly = label.includes(" - ") ? label.split(" - ", 2)[1] : undefined;
+                return {
+                    code,
+                    label,
+                    name: nameOnly,
+                    display: nameOnly ? `${code} - ${nameOnly}` : label,
+                };
+            }),
         [optionMap, selectedCodes]
     );
     const availableOptions = useMemo(() => options.filter((option) => !selectedCodes.includes(option.code)), [options, selectedCodes]);
@@ -154,7 +164,7 @@ function SkuMultiSelect({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[260px] md:w-[320px] p-0" align="start">
+            <PopoverContent className="w-[260px] md:w-[420px] p-0" align="start">
                 <Command>
                     <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={handleSearchChange} />
                     <CommandList ref={listRef} onScroll={handleListScroll} className="max-h-64 overflow-y-auto">
@@ -178,7 +188,10 @@ function SkuMultiSelect({
                                         >
                                             <Check className={cn("h-4 w-4")} />
                                         </div>
-                                        {option.label}
+                                        <div className="flex flex-col">
+                                            <span className="font-medium text-sm leading-none">{option.code}</span>
+                                            {option.name && <span className="text-xs text-muted-foreground">{option.name}</span>}
+                                        </div>
                                     </CommandItem>
                                 ))}
                             </CommandGroup>
