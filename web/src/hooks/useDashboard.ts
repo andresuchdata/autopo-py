@@ -3,13 +3,15 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStockData, type LabeledOption } from './useStockData';
 import { stockHealthService } from '@/services/stockHealthService';
 import { poService } from '@/services/api';
+import { useSkuOptions, type SkuOption } from './useSkuOptions';
 
 export interface DashboardFiltersState {
   brandIds: number[];
   storeIds: number[];
+  skuCodes: string[];
 }
 
-const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [] };
+const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [], skuCodes: [] };
 const DEFAULT_STORE_NAME = 'miss glam padang';
 
 export function useDashboard() {
@@ -33,6 +35,15 @@ export function useDashboard() {
 
   const derivedBrandOptions = useMemo(() => getBrandOptions(), [getBrandOptions]);
   const derivedStoreOptions = useMemo(() => getStoreOptions(), [getStoreOptions]);
+
+  const {
+    options: skuOptions,
+    loading: skuSearchLoading,
+    loadMoreLoading: skuLoadMoreLoading,
+    hasMore: skuHasMoreOptions,
+    search: handleSkuSearch,
+    loadMore: handleSkuLoadMore,
+  } = useSkuOptions();
 
   const brandOptions = useMemo(() => {
     return masterBrandOptions.length > 0 ? masterBrandOptions : derivedBrandOptions;
@@ -209,6 +220,7 @@ export function useDashboard() {
     filters,
     brandOptions,
     storeOptions,
+    skuOptions,
     availableDates,
     onDateChange: handleDateChange,
     onFiltersChange: handleFilterChange,
@@ -216,5 +228,10 @@ export function useDashboard() {
     fetchItems,
     brandList: brandOptions,
     storeList: storeOptions,
+    onSkuSearch: handleSkuSearch,
+    skuSearchLoading,
+    onSkuLoadMore: handleSkuLoadMore,
+    skuHasMoreOptions,
+    skuLoadMoreLoading,
   };
 }

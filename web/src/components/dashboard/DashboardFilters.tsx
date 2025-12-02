@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { type DashboardFiltersState } from "@/hooks/useDashboard";
+import { type SkuOption } from "@/hooks/useSkuOptions";
 import { type LabeledOption } from "@/hooks/useStockData";
 
 interface DashboardFiltersProps {
@@ -34,7 +35,195 @@ interface DashboardFiltersProps {
     selectedDate: string | null;
     availableDates: string[];
     onDateChange: (date: string) => void;
+    skuOptions: SkuOption[];
+    onSkuSearch: (search?: string) => void;
+    skuSearchLoading: boolean;
+    onSkuLoadMore: () => void;
+    skuHasMoreOptions: boolean;
+    skuLoadMoreLoading: boolean;
 }
+
+interface SkuMultiSelectProps {
+    options: SkuOption[];
+    selectedCodes: string[];
+    onChange: (codes: string[]) => void;
+    onSearch: (search?: string) => void;
+    onLoadMore: () => void;
+    hasMore: boolean;
+    isLoadingMore?: boolean;
+    placeholder: string;
+    searchPlaceholder: string;
+    isLoading?: boolean;
+}
+
+function SkuMultiSelect({
+    options = [],
+    selectedCodes = [],
+    onChange,
+    onSearch,
+    onLoadMore,
+    hasMore,
+    isLoadingMore,
+    placeholder,
+    searchPlaceholder,
+    isLoading,
+}: SkuMultiSelectProps) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const listRef = useRef<HTMLDivElement | null>(null);
+
+    const handleSearchChange = (value: string) => {
+        setSearch(value);
+        onSearch(value);
+    };
+
+    const optionMap = useMemo(() => {
+        const map = new Map<string, string>();
+        options.forEach((option) => {
+            map.set(option.code, option.label);
+        });
+        return map;
+    }, [options]);
+
+    const selectedLabels = useMemo(() => selectedCodes.map((code) => optionMap.get(code) ?? code), [optionMap, selectedCodes]);
+    const pinnedOptions = useMemo(
+        () => selectedCodes.map((code) => ({ code, label: optionMap.get(code) ?? code })),
+        [optionMap, selectedCodes]
+    );
+    const availableOptions = useMemo(() => options.filter((option) => !selectedCodes.includes(option.code)), [options, selectedCodes]);
+
+    const toggleOption = (code: string) => {
+        if (selectedCodes.includes(code)) {
+            onChange(selectedCodes.filter((value) => value !== code));
+        } else {
+            onChange([...selectedCodes, code]);
+        }
+    };
+
+    const handleListScroll = useCallback(
+        (event: React.UIEvent<HTMLDivElement>) => {
+            if (!hasMore || isLoading || isLoadingMore) {
+                return;
+            }
+            const target = event.currentTarget;
+            const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+            if (distanceToBottom < 48) {
+                onLoadMore();
+            }
+        },
+        [hasMore, isLoading, isLoadingMore, onLoadMore]
+    );
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-auto min-h-10 py-2">
+                    <div className="flex flex-wrap gap-1 items-center flex-1 min-w-0 text-left">
+                        {selectedCodes.length === 0 && placeholder}
+                        {selectedCodes.length > 0 && selectedCodes.length <= 2 && (
+                            selectedLabels.map((label, idx) => (
+                                <span
+                                    key={`${label}-${idx}`}
+                                    className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 mr-1 mb-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
+                                >
+                                    {label}
+                                    <span
+                                        className="ml-1 cursor-pointer"
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            const code = selectedCodes[idx];
+                                            toggleOption(code);
+                                        }}
+                                    >
+                                        <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                    </span>
+                                </span>
+                            ))
+                        )}
+                        {selectedCodes.length > 2 && (
+                            <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 mr-1">
+                                {selectedCodes.length} selected
+                            </span>
+                        )}
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[260px] md:w-[320px] p-0" align="start">
+                <Command>
+                    <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={handleSearchChange} />
+                    <CommandList ref={listRef} onScroll={handleListScroll} className="max-h-64 overflow-y-auto">
+                        <CommandEmpty>No SKU found.</CommandEmpty>
+                        <CommandGroup>
+                            <CommandItem onSelect={() => onChange([])} className="justify-center text-center font-medium text-sm">
+                                Clear selection
+                            </CommandItem>
+                        </CommandGroup>
+                        {pinnedOptions.length > 0 && (
+                            <CommandGroup heading="Selected SKUs">
+                                {pinnedOptions.map((option) => (
+                                    <CommandItem key={`pinned-${option.code}`} value={option.label} onSelect={() => toggleOption(option.code)}>
+                                        <div
+                                            className={cn(
+                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                                selectedCodes.includes(option.code)
+                                                    ? "bg-primary text-primary-foreground"
+                                                    : "opacity-50 [&_svg]:invisible"
+                                            )}
+                                        >
+                                            <Check className={cn("h-4 w-4")} />
+                                        </div>
+                                        {option.label}
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        )}
+                        {isLoading && (
+                            <CommandGroup>
+                                <CommandItem disabled className="justify-center text-muted-foreground text-sm">
+                                    Searching...
+                                </CommandItem>
+                            </CommandGroup>
+                        )}
+                        <CommandGroup>
+                            {availableOptions.map((option) => {
+                                const isSelected = selectedCodes.includes(option.code);
+                                return (
+                                    <CommandItem key={option.code} value={option.label} onSelect={() => toggleOption(option.code)}>
+                                        <div
+                                            className={cn(
+                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                                isSelected
+                                                    ? "bg-primary text-primary-foreground"
+                                                    : "opacity-50 [&_svg]:invisible"
+                                            )}
+                                        >
+                                            <Check className={cn("h-4 w-4")} />
+                                        </div>
+                                        {option.label}
+                                    </CommandItem>
+                                );
+                            })}
+                        </CommandGroup>
+                        {hasMore && !isLoading && (
+                            <CommandGroup>
+                                <CommandItem disabled={isLoadingMore} onSelect={onLoadMore} className="justify-center text-sm text-primary">
+                                    {isLoadingMore ? "Loading more..." : "Load more"}
+                                </CommandItem>
+                            </CommandGroup>
+                        )}
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+}
+
 
 export function DashboardFilters({
     filters,
@@ -44,6 +233,12 @@ export function DashboardFilters({
     selectedDate,
     availableDates,
     onDateChange,
+    skuOptions,
+    onSkuSearch,
+    skuSearchLoading,
+    onSkuLoadMore,
+    skuHasMoreOptions,
+    skuLoadMoreLoading,
 }: DashboardFiltersProps) {
     const selectableStoreOptions = useMemo(() => storeOptions.filter((option) => option.id !== null), [storeOptions]);
     const selectedStoreId = filters.storeIds[0] ?? null;
@@ -75,7 +270,7 @@ export function DashboardFilters({
                 </Select>
             </div>
 
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 max-w-[200px]">
                 <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">
                     Date
                 </Label>
@@ -110,10 +305,28 @@ export function DashboardFilters({
                 />
             </div>
 
+            <div className="flex-1 min-w-[320px]">
+                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">
+                    SKU
+                </Label>
+                <SkuMultiSelect
+                    options={skuOptions}
+                    selectedCodes={filters.skuCodes}
+                    onChange={(codes: string[]) => onFilterChange({ ...filters, skuCodes: codes })}
+                    onSearch={onSkuSearch}
+                    onLoadMore={onSkuLoadMore}
+                    hasMore={skuHasMoreOptions}
+                    isLoadingMore={skuLoadMoreLoading}
+                    placeholder="All SKUs"
+                    searchPlaceholder="Search SKU..."
+                    isLoading={skuSearchLoading}
+                />
+            </div>
+
             <div className="flex items-end">
                 <Button
                     variant="outline"
-                    onClick={() => onFilterChange({ brandIds: [], storeIds: [] })}
+                    onClick={() => onFilterChange({ brandIds: [], storeIds: [], skuCodes: [] })}
                     className="w-full md:w-auto whitespace-nowrap"
                 >
                     Clear Filters

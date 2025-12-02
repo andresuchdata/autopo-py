@@ -12,4 +12,5 @@ type PORepository interface {
 	GetStoreResults(ctx context.Context, storeName string) ([]*domain.POResult, error)
 	GetStores(ctx context.Context) ([]*domain.Store, error)
 	GetBrands(ctx context.Context) ([]*domain.Brand, error)
+	GetSkus(ctx context.Context, search string, limit, offset int) ([]*domain.Product, error)
 }
