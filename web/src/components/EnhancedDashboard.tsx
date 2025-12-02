@@ -55,6 +55,7 @@ export function EnhancedDashboard() {
     onSkuLoadMore,
     skuHasMoreOptions,
     skuLoadMoreLoading,
+    resolveSkuOption,
     fetchItems,
   } = useDashboard();
 
@@ -140,6 +141,7 @@ export function EnhancedDashboard() {
         onSkuLoadMore={onSkuLoadMore}
         skuHasMoreOptions={skuHasMoreOptions}
         skuLoadMoreLoading={skuLoadMoreLoading}
+        resolveSkuOption={resolveSkuOption}
       />
 
       <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={loading} />
