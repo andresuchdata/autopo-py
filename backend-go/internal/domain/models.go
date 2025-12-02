@@ -62,7 +62,6 @@ type StockHealth struct {
 	CurrentStock    int       `json:"current_stock" db:"current_stock"`
 	DailySales      float64   `json:"daily_sales" db:"daily_sales"`
 	DailyStockCover float64   `json:"daily_stock_cover" db:"daily_stock_cover"`
-	DaysOfCover     int       `json:"days_of_cover" db:"days_of_cover"`
 	StockDate       time.Time `json:"stock_date" db:"stock_date"`
 	LastUpdated     time.Time `json:"last_updated" db:"last_updated"`
 	StockCondition  string    `json:"stock_condition" db:"stock_condition"`
