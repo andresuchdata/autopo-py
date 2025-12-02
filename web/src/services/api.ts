@@ -83,9 +83,20 @@ export const poService = {
         }
     },
 
-    getSkus: async (search?: string) => {
+    getSkus: async (params?: { search?: string; limit?: number; offset?: number }) => {
+        const query: Record<string, string | number> = {};
+        if (params?.search) {
+            query.search = params.search;
+        }
+        if (typeof params?.limit === 'number') {
+            query.limit = params.limit;
+        }
+        if (typeof params?.offset === 'number') {
+            query.offset = params.offset;
+        }
+
         try {
-            const response = await api.get('/po/skus', search ? { params: { search } } : undefined);
+            const response = await api.get('/po/skus', Object.keys(query).length ? { params: query } : undefined);
             return response.data;
         } catch (error) {
             console.error('Error fetching SKUs:', error);

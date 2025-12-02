@@ -70,12 +70,14 @@ export interface StockHealthFilterParams {
   condition?: string;
   brandIds?: number[];
   storeIds?: number[];
+  skuCodes?: string[];
   grouping?: SummaryGrouping;
   sortField?: StockItemsSortField;
   sortDirection?: SortDirection;
 }
 
 const serializeIds = (ids?: number[]) => (ids && ids.length > 0 ? ids.join(',') : undefined);
+const serializeStrings = (values?: string[]) => (values && values.length > 0 ? values.join(',') : undefined);
 
 export const stockHealthService = {
   async getItems(params: StockHealthFilterParams): Promise<StockHealthItemsResponse> {
@@ -87,6 +89,7 @@ export const stockHealthService = {
         condition: params.condition,
         brand_ids: serializeIds(params.brandIds),
         store_ids: serializeIds(params.storeIds),
+        sku_ids: serializeStrings(params.skuCodes),
         grouping: params.grouping,
         sort_field: params.sortField,
         sort_direction: params.sortDirection,
@@ -121,6 +124,7 @@ export const stockHealthService = {
         stock_date: params.stockDate,
       },
     });
+
     return response.data;
   },
 
@@ -134,13 +138,14 @@ export const stockHealthService = {
     return response.data;
   },
 
-  async getDashboard(params: { stockDate: string; brandIds?: number[]; storeIds?: number[]; days?: number }): Promise<StockHealthDashboardResponse> {
+  async getDashboard(params: { stockDate: string; brandIds?: number[]; storeIds?: number[]; skuCodes?: string[]; days?: number }): Promise<StockHealthDashboardResponse> {
     const response = await api.get<StockHealthDashboardResponse>(`${ANALYTICS_BASE}/dashboard`, {
       params: {
         stock_date: params.stockDate,
         days: params.days ?? 30,
         brand_ids: serializeIds(params.brandIds),
         store_ids: serializeIds(params.storeIds),
+        sku_ids: serializeStrings(params.skuCodes),
       },
     });
     return response.data;
