@@ -15,6 +15,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/lib/pq"
 )
 
 // EntityIDResolver handles ID lookups for various entities
@@ -110,6 +111,19 @@ type stockHealthRecord struct {
 	hpp               float64
 }
 
+type rawStockHealthRow struct {
+	storeName         string
+	sku               string
+	brandName         string
+	stock             int
+	dailySales        float64
+	maxDailySales     float64
+	origDailySales    float64
+	origMaxDailySales float64
+	dailyStockCover   float64
+	hpp               float64
+}
+
 type poSnapshotRecord struct {
 	snapshotTime     time.Time
 	poNumber         string
@@ -195,8 +209,11 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	}
 	defer tx.Rollback()
 
-	processedCount := 0
-	batch := make([]stockHealthRecord, 0, analyticsBatchSize)
+	rawRows := make([]rawStockHealthRow, 0)
+	productSKUs := make(map[string]struct{})
+	storeNames := make(map[string]string)
+	brandNames := make(map[string]string)
+	skuHPP := make(map[string]float64)
 
 	for {
 		record, err := reader.Read()
@@ -212,86 +229,42 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			continue
 		}
 
-		hppValue := 0.0
-		if idx, ok := colMap["hpp"]; ok {
-			if raw := strings.TrimSpace(record[idx]); raw != "" {
-				if parsed, err := strconv.ParseFloat(raw, 64); err == nil {
-					hppValue = parsed
-				}
-			}
-		}
-
-		var productID int
-		err = tx.QueryRowContext(ctx, "SELECT id FROM products WHERE sku = $1", sku).Scan(&productID)
-		if err != nil && err != sql.ErrNoRows {
-			return fmt.Errorf("failed to resolve product: %w", err)
-		}
-		if err == sql.ErrNoRows || productID == 0 {
-			err = tx.QueryRowContext(ctx,
-				"INSERT INTO products (sku, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id",
-				sku, "Product "+sku,
-			).Scan(&productID)
-			if err != nil {
-				return fmt.Errorf("failed to create product: %w", err)
-			}
-		}
-
+		hppValue := parseOptionalFloat(record, colMap, "hpp")
 		if hppValue > 0 {
-			if _, err := tx.ExecContext(ctx,
-				"UPDATE products SET hpp = $2, updated_at = NOW() WHERE id = $1 AND (hpp IS NULL OR hpp = 0)",
-				productID, hppValue,
-			); err != nil {
-				return fmt.Errorf("failed to update product hpp: %w", err)
+			if _, exists := skuHPP[sku]; !exists {
+				skuHPP[sku] = hppValue
 			}
 		}
 
 		brandName := strings.TrimSpace(record[colMap["brand"]])
-		var brandID sql.NullInt64
-		if brandName != "" {
-			err = tx.QueryRowContext(ctx, "SELECT id FROM brands WHERE name = $1", brandName).Scan(&brandID.Int64)
-			if err != nil {
-				if err == sql.ErrNoRows {
-					err = tx.QueryRowContext(ctx,
-						"INSERT INTO brands (name, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id",
-						brandName,
-					).Scan(&brandID.Int64)
-					if err != nil {
-						return fmt.Errorf("failed to create brand: %w", err)
-					}
-					brandID.Valid = true
-				} else {
-					return fmt.Errorf("failed to resolve brand: %w", err)
-				}
-			} else {
-				brandID.Valid = true
-			}
+		storeName := strings.TrimSpace(record[colMap["store"]])
+		if storeName == "" {
+			return fmt.Errorf("record missing store name")
 		}
 
-		storeID, err := resolveStoreID(ctx, tx, strings.TrimSpace(record[colMap["store"]]))
-		if err != nil {
-			return err
-		}
+		stock := parseOptionalInt(record[colMap["stock"]])
+		dailySales := parseOptionalFloat(record, colMap, "Daily Sales")
+		maxDailySales := parseOptionalFloat(record, colMap, "Max. Daily Sales")
+		origDailySales := parseOptionalFloat(record, colMap, "Orig Daily Sales")
+		origMaxDailySales := parseOptionalFloat(record, colMap, "Orig Max. Daily Sales")
 
-		stock, _ := strconv.Atoi(record[colMap["stock"]])
-		dailySales, _ := strconv.ParseFloat(record[colMap["Daily Sales"]], 64)
-		maxDailySales, _ := strconv.ParseFloat(record[colMap["Max. Daily Sales"]], 64)
-		origDailySales, _ := strconv.ParseFloat(record[colMap["Orig Daily Sales"]], 64)
-		origMaxDailySales, _ := strconv.ParseFloat(record[colMap["Orig Max. Daily Sales"]], 64)
-
-		// Calculate daily_stock_cover from stock and sales data
 		var dailyStockCover float64
 		if dailySales > 0 {
 			dailyStockCover = float64(stock) / dailySales
 		} else {
-			dailyStockCover = -999999 // marking for zero daily sales
+			dailyStockCover = -999999
 		}
 
-		rec := stockHealthRecord{
-			snapshotTime:      snapshotTime,
-			storeID:           storeID,
-			productID:         productID,
-			brandID:           brandID,
+		productSKUs[sku] = struct{}{}
+		storeNames[strings.ToLower(storeName)] = storeName
+		if brandName != "" {
+			brandNames[strings.ToLower(brandName)] = brandName
+		}
+
+		rawRows = append(rawRows, rawStockHealthRow{
+			storeName:         storeName,
 			sku:               sku,
+			brandName:         brandName,
 			stock:             stock,
 			dailySales:        dailySales,
 			maxDailySales:     maxDailySales,
@@ -299,20 +272,71 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			origMaxDailySales: origMaxDailySales,
 			dailyStockCover:   dailyStockCover,
 			hpp:               hppValue,
-		}
-
-		batch = append(batch, rec)
-		processedCount++
-
-		if len(batch) == analyticsBatchSize {
-			if err := p.flushStockHealthBatch(ctx, tx, batch); err != nil {
-				return err
-			}
-			batch = batch[:0]
-		}
+		})
 	}
 
-	if err := p.flushStockHealthBatch(ctx, tx, batch); err != nil {
+	productIDs, err := p.ensureProductsBulk(ctx, tx, productSKUs)
+	if err != nil {
+		return err
+	}
+	if err := p.updateProductHPPBulk(ctx, tx, skuHPP); err != nil {
+		return err
+	}
+	storeIDs, err := ensureStoresBulk(ctx, tx, storeNames)
+	if err != nil {
+		return err
+	}
+	brandIDs, err := ensureBrandsBulk(ctx, tx, brandNames)
+	if err != nil {
+		return err
+	}
+
+	records := make([]stockHealthRecord, 0, len(rawRows))
+	seen := make(map[stockHealthKey]int)
+	for _, raw := range rawRows {
+		storeID, ok := storeIDs[strings.ToLower(raw.storeName)]
+		if !ok {
+			return fmt.Errorf("store %s not resolved", raw.storeName)
+		}
+		productID, ok := productIDs[raw.sku]
+		if !ok {
+			return fmt.Errorf("product %s not resolved", raw.sku)
+		}
+
+		var brandID sql.NullInt64
+		if raw.brandName != "" {
+			if id, ok := brandIDs[strings.ToLower(raw.brandName)]; ok {
+				brandID = sql.NullInt64{Int64: int64(id), Valid: true}
+			} else {
+				return fmt.Errorf("brand %s not resolved", raw.brandName)
+			}
+		}
+
+		rec := stockHealthRecord{
+			snapshotTime:      snapshotTime,
+			storeID:           storeID,
+			productID:         productID,
+			brandID:           brandID,
+			sku:               raw.sku,
+			stock:             raw.stock,
+			dailySales:        raw.dailySales,
+			maxDailySales:     raw.maxDailySales,
+			origDailySales:    raw.origDailySales,
+			origMaxDailySales: raw.origMaxDailySales,
+			dailyStockCover:   raw.dailyStockCover,
+			hpp:               raw.hpp,
+		}
+
+		key := makeStockHealthKey(rec)
+		if idx, exists := seen[key]; exists {
+			records[idx] = rec
+			continue
+		}
+		seen[key] = len(records)
+		records = append(records, rec)
+	}
+
+	if err := p.insertStockHealthRecords(ctx, tx, records); err != nil {
 		return err
 	}
 
@@ -320,72 +344,7 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Printf("Successfully processed %d stock health records from %s", processedCount, filePath)
-	return nil
-}
-
-func (p *AnalyticsProcessor) flushStockHealthBatch(ctx context.Context, tx *sql.Tx, batch []stockHealthRecord) error {
-	if len(batch) == 0 {
-		return nil
-	}
-
-	seen := make(map[stockHealthKey]int, len(batch))
-	unique := make([]stockHealthRecord, 0, len(batch))
-	for _, rec := range batch {
-		key := makeStockHealthKey(rec)
-		if idx, exists := seen[key]; exists {
-			unique[idx] = rec
-			continue
-		}
-		seen[key] = len(unique)
-		unique = append(unique, rec)
-	}
-	argCount := len(unique) * 12
-	valueStrings := make([]string, 0, len(unique))
-	args := make([]interface{}, 0, argCount)
-
-	for i, rec := range unique {
-		base := i*12 + 1
-		valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11))
-		args = append(args,
-			rec.snapshotTime,
-			rec.storeID,
-			rec.productID,
-			toNullableInt64(rec.brandID),
-			rec.sku,
-			rec.stock,
-			rec.dailySales,
-			rec.maxDailySales,
-			rec.origDailySales,
-			rec.origMaxDailySales,
-			rec.dailyStockCover,
-			rec.hpp,
-		)
-	}
-
-	query := fmt.Sprintf(`
-		INSERT INTO daily_stock_data (
-			time, store_id, product_id, brand_id, sku,
-			stock, daily_sales, max_daily_sales,
-			orig_daily_sales, orig_max_daily_sales,
-			daily_stock_cover, hpp
-		) VALUES %s
-		ON CONFLICT (time, store_id, sku, brand_id)
-		DO UPDATE SET
-			product_id = EXCLUDED.product_id,
-			stock = EXCLUDED.stock,
-			daily_sales = EXCLUDED.daily_sales,
-			max_daily_sales = EXCLUDED.max_daily_sales,
-			orig_daily_sales = EXCLUDED.orig_daily_sales,
-			orig_max_daily_sales = EXCLUDED.orig_max_daily_sales,
-			daily_stock_cover = EXCLUDED.daily_stock_cover,
-			hpp = EXCLUDED.hpp,
-			updated_at = NOW()
-	`, strings.Join(valueStrings, ","))
-
-	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-		return fmt.Errorf("failed to upsert stock health batch: %w", err)
-	}
+	log.Printf("Successfully processed %d stock health records from %s", len(records), filePath)
 	return nil
 }
 
@@ -736,4 +695,310 @@ func makePOSnapshotKey(rec poSnapshotRecord) poSnapshotKey {
 		supplierID:    supplierID,
 		supplierValid: supplierValid,
 	}
+}
+
+func parseOptionalFloat(record []string, colMap map[string]int, column string) float64 {
+	idx, ok := colMap[column]
+	if !ok || idx >= len(record) {
+		return 0
+	}
+	value := strings.TrimSpace(record[idx])
+	if value == "" {
+		return 0
+	}
+	value = strings.ReplaceAll(value, ",", "")
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0
+	}
+	return parsed
+}
+
+func parseOptionalInt(value string) int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0
+	}
+	return parsed
+}
+
+func (p *AnalyticsProcessor) ensureProductsBulk(ctx context.Context, tx *sql.Tx, skus map[string]struct{}) (map[string]int, error) {
+	result := make(map[string]int, len(skus))
+	if len(skus) == 0 {
+		return result, nil
+	}
+	skuList := make([]string, 0, len(skus))
+	for sku := range skus {
+		skuList = append(skuList, sku)
+	}
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT sku, id FROM products WHERE sku = ANY($1)`,
+		pq.Array(skuList),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load product ids: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sku string
+		var id int
+		if err := rows.Scan(&sku, &id); err != nil {
+			return nil, fmt.Errorf("failed to scan product id: %w", err)
+		}
+		result[sku] = id
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("product id rows error: %w", err)
+	}
+
+	insertStmt := `
+		INSERT INTO products (sku, name, created_at, updated_at)
+		VALUES ($1, $2, NOW(), NOW())
+		ON CONFLICT (sku) DO UPDATE
+			SET name = EXCLUDED.name,
+			    updated_at = NOW()
+		RETURNING id
+	`
+	for _, sku := range skuList {
+		if _, exists := result[sku]; exists {
+			continue
+		}
+		var id int
+		if err := tx.QueryRowContext(ctx, insertStmt, sku, "Product "+sku).Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to upsert product %s: %w", sku, err)
+		}
+		result[sku] = id
+	}
+	return result, nil
+}
+
+func (p *AnalyticsProcessor) updateProductHPPBulk(ctx context.Context, tx *sql.Tx, skuHPP map[string]float64) error {
+	if len(skuHPP) == 0 {
+		return nil
+	}
+	const stmt = `
+		UPDATE products
+		SET hpp = $2, updated_at = NOW()
+		WHERE sku = $1 AND (hpp IS NULL OR hpp = 0)
+	`
+	for sku, hpp := range skuHPP {
+		if hpp <= 0 {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, stmt, sku, hpp); err != nil {
+			return fmt.Errorf("failed to update hpp for sku %s: %w", sku, err)
+		}
+	}
+	return nil
+}
+
+func ensureStoresBulk(ctx context.Context, tx *sql.Tx, names map[string]string) (map[string]int, error) {
+	result := make(map[string]int, len(names))
+	if len(names) == 0 {
+		return result, nil
+	}
+	lowerNames := make([]string, 0, len(names))
+	for key := range names {
+		lowerNames = append(lowerNames, key)
+	}
+	rows, err := tx.QueryContext(ctx,
+		`SELECT LOWER(name) AS key, id FROM stores WHERE LOWER(name) = ANY($1)`,
+		pq.Array(lowerNames),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load store ids: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		var id int
+		if err := rows.Scan(&key, &id); err != nil {
+			return nil, fmt.Errorf("failed to scan store id: %w", err)
+		}
+		result[key] = id
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store rows error: %w", err)
+	}
+
+	insertStmt := `
+		INSERT INTO stores (name, created_at, updated_at)
+		VALUES ($1, NOW(), NOW())
+		ON CONFLICT (name) DO UPDATE SET updated_at = NOW()
+		RETURNING id
+	`
+	for key, displayName := range names {
+		if _, exists := result[key]; exists {
+			continue
+		}
+		var id int
+		if err := tx.QueryRowContext(ctx, insertStmt, displayName).Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to upsert store %s: %w", displayName, err)
+		}
+		result[key] = id
+	}
+	return result, nil
+}
+
+func ensureBrandsBulk(ctx context.Context, tx *sql.Tx, names map[string]string) (map[string]int, error) {
+	result := make(map[string]int, len(names))
+	if len(names) == 0 {
+		return result, nil
+	}
+	lowerNames := make([]string, 0, len(names))
+	for key := range names {
+		lowerNames = append(lowerNames, key)
+	}
+	rows, err := tx.QueryContext(ctx,
+		`SELECT LOWER(name) AS key, id FROM brands WHERE LOWER(name) = ANY($1)`,
+		pq.Array(lowerNames),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load brand ids: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		var id int
+		if err := rows.Scan(&key, &id); err != nil {
+			return nil, fmt.Errorf("failed to scan brand id: %w", err)
+		}
+		result[key] = id
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("brand rows error: %w", err)
+	}
+
+	insertStmt := `
+		INSERT INTO brands (name, created_at, updated_at)
+		VALUES ($1, NOW(), NOW())
+		ON CONFLICT (name) DO UPDATE SET updated_at = NOW()
+		RETURNING id
+	`
+	for key, displayName := range names {
+		if _, exists := result[key]; exists {
+			continue
+		}
+		var id int
+		if err := tx.QueryRowContext(ctx, insertStmt, displayName).Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to upsert brand %s: %w", displayName, err)
+		}
+		result[key] = id
+	}
+	return result, nil
+}
+
+func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *sql.Tx, records []stockHealthRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	stagingName := fmt.Sprintf("stock_health_stage_%d", time.Now().UnixNano())
+	quotedTable := pq.QuoteIdentifier(stagingName)
+	createStmt := fmt.Sprintf(`
+		CREATE TEMP TABLE %s (
+			time TIMESTAMPTZ NOT NULL,
+			store_id INTEGER NOT NULL,
+			product_id INTEGER NOT NULL,
+			brand_id INTEGER,
+			sku VARCHAR(255) NOT NULL,
+			stock INTEGER,
+			daily_sales DOUBLE PRECISION,
+			max_daily_sales DOUBLE PRECISION,
+			orig_daily_sales DOUBLE PRECISION,
+			orig_max_daily_sales DOUBLE PRECISION,
+			daily_stock_cover DOUBLE PRECISION,
+			hpp DOUBLE PRECISION
+		) ON COMMIT DROP
+	`, quotedTable)
+	if _, err := tx.ExecContext(ctx, createStmt); err != nil {
+		return fmt.Errorf("failed to create stock health staging table: %w", err)
+	}
+
+	if err := copyStockHealthToStaging(ctx, tx, stagingName, records); err != nil {
+		return err
+	}
+
+	insertStmt := fmt.Sprintf(`
+		INSERT INTO daily_stock_data (
+			time, store_id, product_id, brand_id, sku,
+			stock, daily_sales, max_daily_sales,
+			orig_daily_sales, orig_max_daily_sales,
+			daily_stock_cover, hpp
+		)
+		SELECT
+			time, store_id, product_id, brand_id, sku,
+			stock, daily_sales, max_daily_sales,
+			orig_daily_sales, orig_max_daily_sales,
+			daily_stock_cover, hpp
+		FROM %s
+		ON CONFLICT (time, store_id, sku, brand_id)
+		DO UPDATE SET
+			product_id = EXCLUDED.product_id,
+			stock = EXCLUDED.stock,
+			daily_sales = EXCLUDED.daily_sales,
+			max_daily_sales = EXCLUDED.max_daily_sales,
+			orig_daily_sales = EXCLUDED.orig_daily_sales,
+			orig_max_daily_sales = EXCLUDED.orig_max_daily_sales,
+			daily_stock_cover = EXCLUDED.daily_stock_cover,
+			hpp = EXCLUDED.hpp,
+			updated_at = NOW()
+	`, quotedTable)
+
+	if _, err := tx.ExecContext(ctx, insertStmt); err != nil {
+		return fmt.Errorf("failed to upsert stock health records from staging: %w", err)
+	}
+
+	return nil
+}
+
+func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string, records []stockHealthRecord) error {
+	stmt, err := tx.PrepareContext(ctx, pq.CopyIn(tableName,
+		"time",
+		"store_id",
+		"product_id",
+		"brand_id",
+		"sku",
+		"stock",
+		"daily_sales",
+		"max_daily_sales",
+		"orig_daily_sales",
+		"orig_max_daily_sales",
+		"daily_stock_cover",
+		"hpp",
+	))
+	if err != nil {
+		return fmt.Errorf("failed to prepare stock health COPY: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, rec := range records {
+		if _, err := stmt.Exec(
+			rec.snapshotTime,
+			rec.storeID,
+			rec.productID,
+			toNullableInt64(rec.brandID),
+			rec.sku,
+			rec.stock,
+			rec.dailySales,
+			rec.maxDailySales,
+			rec.origDailySales,
+			rec.origMaxDailySales,
+			rec.dailyStockCover,
+			rec.hpp,
+		); err != nil {
+			return fmt.Errorf("failed to stream stock health row: %w", err)
+		}
+	}
+
+	if _, err := stmt.Exec(); err != nil {
+		return fmt.Errorf("failed to finalize stock health COPY: %w", err)
+	}
+
+	return nil
 }
