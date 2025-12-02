@@ -55,9 +55,10 @@ var skuSortFieldMap = map[string]string{
 	"sku_name":          "product_name",
 	"brand_name":        "brand_name",
 	"current_stock":     "current_stock",
+	"daily_sales":       "daily_sales",
 	"daily_stock_cover": "daily_stock_cover",
 	"hpp":               "hpp",
-	"inventory_value":   "(COALESCE(dsd.stock, 0) * COALESCE(pr.hpp, 0))",
+	"inventory_value":   "(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0))",
 }
 
 var aggregatedSortFieldMap = map[string]string{
@@ -66,6 +67,7 @@ var aggregatedSortFieldMap = map[string]string{
 	"sku_name":          "aggregated.product_name",
 	"brand_name":        "aggregated.brand_name",
 	"current_stock":     "aggregated.total_stock",
+	"daily_sales":       "aggregated.total_daily_sales",
 	"daily_stock_cover": "aggregated.daily_stock_cover",
 	"hpp":               "hpp",
 	"inventory_value":   "aggregated.total_value",
