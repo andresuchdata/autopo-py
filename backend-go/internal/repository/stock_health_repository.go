@@ -50,14 +50,14 @@ func NewStockHealthRepository(db *sqlx.DB) StockHealthRepository {
 }
 
 var skuSortFieldMap = map[string]string{
-	"store_name":      "store_name",
-	"sku_code":        "sku_code",
-	"sku_name":        "product_name",
-	"brand_name":      "brand_name",
-	"current_stock":   "current_stock",
-	"days_of_cover":   "days_of_cover",
-	"hpp":             "hpp",
-	"inventory_value": "(COALESCE(dsd.stock, 0) * COALESCE(pr.hpp, 0))",
+	"store_name":        "store_name",
+	"sku_code":          "sku_code",
+	"sku_name":          "product_name",
+	"brand_name":        "brand_name",
+	"current_stock":     "current_stock",
+	"daily_stock_cover": "daily_stock_cover",
+	"hpp":               "hpp",
+	"inventory_value":   "(COALESCE(dsd.stock, 0) * COALESCE(pr.hpp, 0))",
 }
 
 var aggregatedSortFieldMap = map[string]string{
@@ -67,7 +67,6 @@ var aggregatedSortFieldMap = map[string]string{
 	"brand_name":        "aggregated.brand_name",
 	"current_stock":     "aggregated.total_stock",
 	"daily_stock_cover": "aggregated.daily_stock_cover",
-	"days_of_cover":     "aggregated.days_of_cover",
 	"hpp":               "hpp",
 	"inventory_value":   "aggregated.total_value",
 }
@@ -203,18 +202,17 @@ func (r *stockHealthRepository) getSkuStockItems(ctx context.Context, filter dom
 			COALESCE(dsd.stock, 0) AS current_stock,
 			COALESCE(dsd.daily_sales, 0) AS daily_sales,
 			%s AS daily_stock_cover,
-			%s AS days_of_cover,
 			dsd."time"::date AS stock_date,
 			COALESCE(dsd.updated_at, dsd.created_at) AS last_updated,
 			%s AS stock_condition,
-			COALESCE(pr.hpp, 0) AS hpp
+			COALESCE(dsd.hpp, pr.hpp, 0) AS hpp
 		FROM daily_stock_data dsd
 		LEFT JOIN stores st ON st.id = dsd.store_id
 		LEFT JOIN products pr ON pr.id = dsd.product_id
 		LEFT JOIN brands br ON br.id = dsd.brand_id
 		WHERE 1=1%s
 		%s
-	`, sanitizedDailyStockCoverExpr("dsd"), daysOfCoverExpression("dsd"), stockConditionExpression("dsd"), selectClause, orderClause)
+	`, sanitizedDailyStockCoverExpr("dsd"), stockConditionExpression("dsd"), selectClause, orderClause)
 
 	if filter.PageSize > 0 {
 		if filter.Page <= 0 {
@@ -238,8 +236,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 	filterClause, baseArgs, _ := buildFilterClause(filter, "dsd", 1, true)
 	sumStockExpr := "SUM(COALESCE(dsd.stock, 0))"
 	sumSalesExpr := "SUM(COALESCE(dsd.daily_sales, 0))"
-	coverExpr := aggregatedDaysOfCoverExpression("dsd")
-	conditionExpr := aggregatedStockConditionExpression("dsd")
+	conditionExpr := stockConditionExpression("dsd")
 
 	cte := fmt.Sprintf(`
 		WITH aggregated AS (
@@ -254,9 +251,8 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				COALESCE(st.name, '') AS store_name,
 				%s AS total_stock,
 				%s AS total_daily_sales,
-				SUM(COALESCE(dsd.stock, 0) * COALESCE(pr.hpp, 0)) AS total_value,
+				SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, pr.hpp, 0)) AS total_value,
 				AVG(%s) AS daily_stock_cover,
-				%s AS days_of_cover,
 				%s AS stock_condition
 			FROM daily_stock_data dsd
 			LEFT JOIN products pr ON pr.id = dsd.product_id
@@ -272,7 +268,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				COALESCE(dsd.store_id, 0),
 				COALESCE(st.name, '')
 		)
-	`, sumStockExpr, sumSalesExpr, sanitizedDailyStockCoverExpr("dsd"), coverExpr, conditionExpr, filterClause)
+	`, sumStockExpr, sumSalesExpr, sanitizedDailyStockCoverExpr("dsd"), conditionExpr, filterClause)
 
 	fallbackOrder := "ORDER BY aggregated.product_name ASC"
 	switch grouping {
@@ -312,7 +308,6 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 			aggregated.total_stock AS current_stock,
 			aggregated.total_daily_sales AS daily_sales,
 			aggregated.daily_stock_cover,
-			aggregated.days_of_cover,
 			current_date AS stock_date,
 			NOW() AS last_updated,
 			aggregated.stock_condition,
@@ -400,10 +395,8 @@ func (r *stockHealthRepository) GetTimeSeriesData(ctx context.Context, days int,
 }
 
 func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx int, includeCondition bool) (string, []interface{}, int) {
-	conditions := []string{
-		fmt.Sprintf("COALESCE(%s.daily_stock_cover, 0::double precision) >= 0", alias),
-		fmt.Sprintf("COALESCE(%s.daily_sales, 0::double precision) > 0", alias),
-	}
+	conditions := []string{}
+
 	var args []interface{}
 	idx := startIdx
 
@@ -446,23 +439,11 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 }
 
 func sanitizedDailyStockCoverExpr(alias string) string {
-	return fmt.Sprintf("GREATEST(COALESCE(%s.daily_stock_cover, 0::double precision), 0::double precision)", alias)
-}
-
-func daysOfCoverExpression(alias string) string {
-	return fmt.Sprintf("COALESCE(FLOOR(%s)::int, 0)", sanitizedDailyStockCoverExpr(alias))
+	return fmt.Sprintf("COALESCE(%s.daily_stock_cover, 0::double precision)", alias)
 }
 
 func stockConditionExpression(alias string) string {
 	return stockConditionCaseExpression(sanitizedDailyStockCoverExpr(alias))
-}
-
-func aggregatedDaysOfCoverExpression(alias string) string {
-	return fmt.Sprintf("COALESCE(FLOOR(AVG(%s))::int, 0)", sanitizedDailyStockCoverExpr(alias))
-}
-
-func aggregatedStockConditionExpression(alias string) string {
-	return stockConditionCaseExpression(fmt.Sprintf("AVG(%s)", sanitizedDailyStockCoverExpr(alias)))
 }
 
 func stockConditionCaseExpression(coverExpr string) string {
