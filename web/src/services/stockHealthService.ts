@@ -14,11 +14,11 @@ export interface StockHealthApiItem {
   brand_name: string;
   current_stock: number;
   daily_stock_cover: number;
-  days_of_cover: number;
   stock_date: string;
   last_updated: string;
   stock_condition: string;
   hpp?: number;
+  daily_sales: number;
 }
 
 export interface StockHealthItemsResponse {

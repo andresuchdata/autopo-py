@@ -66,47 +66,57 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
 
   case "$SEED_TARGET" in
     master)
-      eval set -- $(build_common_args "master")
-      set -- "$@" --data-dir "$SEED_DATA_DIR"
-      if [ "$RESET_MASTER_SEED" = "true" ]; then
-        set -- "$@" --reset-master
-      fi
-      run_seed_command "$@"
+      (
+        eval set -- $(build_common_args "master")
+        set -- "$@" --data-dir "$SEED_DATA_DIR"
+        if [ "$RESET_MASTER_SEED" = "true" ]; then
+          set -- "$@" --reset-master
+        fi
+        run_seed_command "$@"
+      )
       ;;
     analytics)
-      eval set -- $(build_common_args "analytics")
-      set -- "$@" --stock-health-dir "$STOCK_HEALTH_DIR" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
-      if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
-        set -- "$@" --reset-analytics
-      fi
-      run_seed_command "$@"
+      (
+        eval set -- $(build_common_args "analytics")
+        set -- "$@" --stock-health-dir "$STOCK_HEALTH_DIR" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
+        if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
+          set -- "$@" --reset-analytics
+        fi
+        run_seed_command "$@"
+      )
       ;;
     analytics-stock)
-      eval set -- $(build_common_args "analytics-stock")
-      set -- "$@" --stock-health-dir "$STOCK_HEALTH_DIR"
-      if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
-        set -- "$@" --reset-analytics
-      fi
-      run_seed_command "$@"
+      (
+        eval set -- $(build_common_args "analytics-stock")
+        set -- "$@" --stock-health-dir "$STOCK_HEALTH_DIR"
+        if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
+          set -- "$@" --reset-analytics
+        fi
+        run_seed_command "$@"
+      )
       ;;
     analytics-po)
-      eval set -- $(build_common_args "analytics-po")
-      set -- "$@" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
-      if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
-        set -- "$@" --reset-analytics
-      fi
-      run_seed_command "$@"
+      (
+        eval set -- $(build_common_args "analytics-po")
+        set -- "$@" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
+        if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
+          set -- "$@" --reset-analytics
+        fi
+        run_seed_command "$@"
+      )
       ;;
     all)
-      eval set -- $(build_common_args "all")
-      set -- "$@" --data-dir "$SEED_DATA_DIR" --stock-health-dir "$STOCK_HEALTH_DIR" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
-      if [ "$RESET_MASTER_SEED" = "true" ]; then
-        set -- "$@" --reset-master
-      fi
-      if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
-        set -- "$@" --reset-analytics
-      fi
-      run_seed_command "$@"
+      (
+        eval set -- $(build_common_args "all")
+        set -- "$@" --data-dir "$SEED_DATA_DIR" --stock-health-dir "$STOCK_HEALTH_DIR" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
+        if [ "$RESET_MASTER_SEED" = "true" ]; then
+          set -- "$@" --reset-master
+        fi
+        if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
+          set -- "$@" --reset-analytics
+        fi
+        run_seed_command "$@"
+      )
       ;;
     *)
       echo "Unknown SEED_TARGET '$SEED_TARGET', skipping seed run."
