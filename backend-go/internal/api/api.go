@@ -65,6 +65,7 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 				poGroup.POST("/upload", poHandler.UploadPO)
 				poGroup.GET("/stores", poHandler.GetStores)
 				poGroup.GET("/brands", poHandler.GetBrands)
+				poGroup.GET("/skus", poHandler.GetSkus)
 				poGroup.GET("/stores/:store/results", poHandler.GetStoreResults)
 			}
 		}

@@ -187,3 +187,8 @@ func (s *POService) GetStores(ctx context.Context) ([]*domain.Store, error) {
 func (s *POService) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
 	return s.repo.GetBrands(ctx)
 }
+
+// GetSkus returns a list of SKUs matching the optional search term with pagination
+func (s *POService) GetSkus(ctx context.Context, search string, limit, offset int) ([]*domain.Product, error) {
+	return s.repo.GetSkus(ctx, search, limit, offset)
+}
