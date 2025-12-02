@@ -8,6 +8,7 @@ export type StockItemsSortField =
   | 'sku_name'
   | 'brand_name'
   | 'current_stock'
-  | 'days_of_cover'
+  | 'daily_stock_cover'
   | 'hpp'
-  | 'inventory_value';
+  | 'inventory_value'
+  | 'daily_sales';
