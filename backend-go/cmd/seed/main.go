@@ -223,6 +223,8 @@ func initDB(c *cli.Context) error {
 
 func dropDatabaseSchema(ctx context.Context, db *sql.DB) error {
 	log.Println("Dropping and recreating public schema (development reset)...")
+	// Note: We do NOT drop the timescaledb extension because it cannot be cleanly
+	// recreated in the same database session. The extension will persist and be reused.
 	if _, err := db.ExecContext(ctx, `
 		DROP SCHEMA public CASCADE;
 		CREATE SCHEMA public;
