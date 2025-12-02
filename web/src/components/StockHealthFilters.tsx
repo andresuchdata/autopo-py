@@ -81,7 +81,7 @@ export function StockHealthFilters({ onFilterChange, loading }: StockHealthFilte
   const handleSkuSearch = async (search: string) => {
     setSearchTerm(prev => ({ ...prev, sku: search }));
     try {
-      const res = await poService.getSkus(search);
+      const res = await poService.getSkus(search ? { search } : undefined);
       setSkus(res.data);
     } catch (error) {
       console.error('Error searching SKUs:', error);
