@@ -236,7 +236,13 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 	filterClause, baseArgs, _ := buildFilterClause(filter, "dsd", 1, true)
 	sumStockExpr := "SUM(COALESCE(dsd.stock, 0))"
 	sumSalesExpr := "SUM(COALESCE(dsd.daily_sales, 0))"
-	conditionExpr := stockConditionExpression("dsd")
+	dailyCoverExpr := fmt.Sprintf(`
+		CASE
+			WHEN %s > 0 THEN %s / NULLIF(%s, 0)
+			ELSE 0::double precision
+		END
+	`, sumSalesExpr, sumStockExpr, sumSalesExpr)
+	conditionExpr := stockConditionCaseExpression(dailyCoverExpr)
 
 	cte := fmt.Sprintf(`
 		WITH aggregated AS (
@@ -252,7 +258,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				%s AS total_stock,
 				%s AS total_daily_sales,
 				SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, pr.hpp, 0)) AS total_value,
-				AVG(%s) AS daily_stock_cover,
+				%s AS daily_stock_cover,
 				%s AS stock_condition
 			FROM daily_stock_data dsd
 			LEFT JOIN products pr ON pr.id = dsd.product_id
@@ -268,7 +274,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				COALESCE(dsd.store_id, 0),
 				COALESCE(st.name, '')
 		)
-	`, sumStockExpr, sumSalesExpr, sanitizedDailyStockCoverExpr("dsd"), conditionExpr, filterClause)
+	`, sumStockExpr, sumSalesExpr, dailyCoverExpr, conditionExpr, filterClause)
 
 	fallbackOrder := "ORDER BY aggregated.product_name ASC"
 	switch grouping {
@@ -395,7 +401,7 @@ func (r *stockHealthRepository) GetTimeSeriesData(ctx context.Context, days int,
 }
 
 func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx int, includeCondition bool) (string, []interface{}, int) {
-	conditions := []string{}
+	conditions := []string{validStockDataCondition(alias)}
 
 	var args []interface{}
 	idx := startIdx
@@ -440,6 +446,10 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 
 func sanitizedDailyStockCoverExpr(alias string) string {
 	return fmt.Sprintf("COALESCE(%s.daily_stock_cover, 0::double precision)", alias)
+}
+
+func validStockDataCondition(alias string) string {
+	return fmt.Sprintf("(COALESCE(%s.daily_stock_cover, 0::double precision) >= 0 AND COALESCE(%s.daily_sales, 0::double precision) > 0)", alias, alias)
 }
 
 func stockConditionExpression(alias string) string {
