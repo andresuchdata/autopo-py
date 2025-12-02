@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -182,6 +183,12 @@ func analyticsFlags() []cli.Flag {
 			Name:  "po-snapshots-only",
 			Usage: "Only process PO snapshot files, skip stock health",
 			Value: false,
+		},
+		&cli.IntFlag{
+			Name:    "analytics-workers",
+			Usage:   "Number of concurrent workers for analytics seeding",
+			Value:   runtime.NumCPU(),
+			EnvVars: []string{"ANALYTICS_WORKERS"},
 		},
 	}
 }
