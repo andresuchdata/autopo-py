@@ -4,6 +4,7 @@ import { poService } from '@/services/api';
 export interface SkuOption {
   code: string;
   label: string;
+  name?: string;
 }
 
 const SKU_PAGE_SIZE = 50;
@@ -14,7 +15,7 @@ type FetchOptions = {
 };
 
 const normalizeSkuOptions = (items: Array<Record<string, unknown>> = []): SkuOption[] => {
-  const dedup = new Map<string, string>();
+  const dedup = new Map<string, { label: string; name?: string }>();
 
   items.forEach((item) => {
     const rawCode =
@@ -31,14 +32,15 @@ const normalizeSkuOptions = (items: Array<Record<string, unknown>> = []): SkuOpt
       (typeof item.product_name === 'string' && item.product_name.trim()) ||
       '';
 
-    const label = name ? `${rawCode} - ${name}` : rawCode;
+    const trimmedName = name || undefined;
+    const label = trimmedName ? `${rawCode} - ${trimmedName}` : rawCode;
 
     if (!dedup.has(rawCode)) {
-      dedup.set(rawCode, label);
+      dedup.set(rawCode, { label, name: trimmedName });
     }
   });
 
-  return Array.from(dedup.entries()).map(([code, label]) => ({ code, label }));
+  return Array.from(dedup.entries()).map(([code, data]) => ({ code, label: data.label, name: data.name }));
 };
 
 export function useSkuOptions(initialSearch = '') {
