@@ -223,14 +223,43 @@ func initDB(c *cli.Context) error {
 
 func dropDatabaseSchema(ctx context.Context, db *sql.DB) error {
 	log.Println("Dropping and recreating public schema (development reset)...")
+	// Note: TimescaleDB extension must be preserved across resets because it cannot
+	// be cleanly recreated in the same database session.
+	// We drop owned objects but keep the extension itself.
+
+	// First, drop all tables and objects in public schema
+	// This is safer than DROP SCHEMA CASCADE which might affect the extension
 	if _, err := db.ExecContext(ctx, `
-		DROP SCHEMA public CASCADE;
-		CREATE SCHEMA public;
-		GRANT ALL ON SCHEMA public TO CURRENT_USER;
-		GRANT ALL ON SCHEMA public TO public;
+		DO $$ 
+		DECLARE
+			r RECORD;
+		BEGIN
+			-- Drop all tables
+			FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+				EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
+			END LOOP;
+			
+			-- Drop all views
+			FOR r IN (SELECT viewname FROM pg_views WHERE schemaname = 'public') LOOP
+				EXECUTE 'DROP VIEW IF EXISTS public.' || quote_ident(r.viewname) || ' CASCADE';
+			END LOOP;
+			
+			-- Drop all materialized views
+			FOR r IN (SELECT matviewname FROM pg_matviews WHERE schemaname = 'public') LOOP
+				EXECUTE 'DROP MATERIALIZED VIEW IF EXISTS public.' || quote_ident(r.matviewname) || ' CASCADE';
+			END LOOP;
+			
+			-- Drop all sequences
+			FOR r IN (SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public') LOOP
+				EXECUTE 'DROP SEQUENCE IF EXISTS public.' || quote_ident(r.sequence_name) || ' CASCADE';
+			END LOOP;
+			
+		END $$;
 	`); err != nil {
-		return fmt.Errorf("failed to recreate public schema: %w", err)
+		return fmt.Errorf("failed to clean public schema: %w", err)
 	}
+
+	log.Println("Public schema cleaned successfully (TimescaleDB extension preserved)")
 	return nil
 }
 
@@ -372,7 +401,7 @@ func main() {
 						Name:    "data-dir",
 						Usage:   "Directory containing master seed data",
 						Value:   "./data/seeds/master_data",
-						EnvVars: []string{"SEED_DATA_DIR"},
+						EnvVars: []string{"MASTER_DATA_DIR"},
 					},
 					&cli.BoolFlag{
 						Name:    "reset-master",
@@ -453,7 +482,7 @@ func main() {
 						Name:    "data-dir",
 						Usage:   "Directory containing master seed data",
 						Value:   "./data/seeds/master_data",
-						EnvVars: []string{"SEED_DATA_DIR"},
+						EnvVars: []string{"MASTER_DATA_DIR"},
 					},
 					&cli.BoolFlag{
 						Name:    "reset-master",
