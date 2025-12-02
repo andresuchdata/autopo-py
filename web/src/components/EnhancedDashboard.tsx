@@ -49,6 +49,12 @@ export function EnhancedDashboard() {
     availableDates,
     onDateChange,
     onFiltersChange,
+    skuOptions,
+    onSkuSearch,
+    skuSearchLoading,
+    onSkuLoadMore,
+    skuHasMoreOptions,
+    skuLoadMoreLoading,
     fetchItems,
   } = useDashboard();
 
@@ -128,6 +134,12 @@ export function EnhancedDashboard() {
         selectedDate={selectedDate}
         availableDates={availableDates}
         onDateChange={onDateChange}
+        skuOptions={skuOptions}
+        onSkuSearch={onSkuSearch}
+        skuSearchLoading={skuSearchLoading}
+        onSkuLoadMore={onSkuLoadMore}
+        skuHasMoreOptions={skuHasMoreOptions}
+        skuLoadMoreLoading={skuLoadMoreLoading}
       />
 
       <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={loading} />

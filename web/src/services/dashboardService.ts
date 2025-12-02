@@ -19,6 +19,7 @@ interface CacheEntry {
 export interface DashboardFilters {
   brandIds?: number[];
   storeIds?: number[];
+  skuCodes?: string[];
 }
 
 export interface DashboardData {
@@ -71,7 +72,8 @@ export class DashboardService {
   private getCacheKey(date: string, filters?: DashboardFilters): string {
     const brandKey = filters?.brandIds?.join('-') || 'all';
     const storeKey = filters?.storeIds?.join('-') || 'all';
-    return `${date}-${brandKey}-${storeKey}`;
+    const skuKey = filters?.skuCodes?.join('-') || 'all';
+    return `${date}-${brandKey}-${storeKey}-${skuKey}`;
   }
 
   async getDashboardData(date: string, filters?: DashboardFilters): Promise<DashboardData> {
@@ -87,6 +89,7 @@ export class DashboardService {
         stockDate: date,
         brandIds: filters?.brandIds,
         storeIds: filters?.storeIds,
+        skuCodes: filters?.skuCodes,
       });
 
       const transformed = this.transformDashboardResponse(response);
