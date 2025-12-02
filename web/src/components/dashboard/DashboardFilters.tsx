@@ -41,6 +41,7 @@ interface DashboardFiltersProps {
     onSkuLoadMore: () => void;
     skuHasMoreOptions: boolean;
     skuLoadMoreLoading: boolean;
+    resolveSkuOption: (code: string) => SkuOption | undefined;
 }
 
 interface SkuMultiSelectProps {
@@ -51,6 +52,7 @@ interface SkuMultiSelectProps {
     onLoadMore: () => void;
     hasMore: boolean;
     isLoadingMore?: boolean;
+    resolveOption?: (code: string) => SkuOption | undefined;
     placeholder: string;
     searchPlaceholder: string;
     isLoading?: boolean;
@@ -64,6 +66,7 @@ function SkuMultiSelect({
     onLoadMore,
     hasMore,
     isLoadingMore,
+    resolveOption,
     placeholder,
     searchPlaceholder,
     isLoading,
@@ -78,27 +81,36 @@ function SkuMultiSelect({
     };
 
     const optionMap = useMemo(() => {
-        const map = new Map<string, string>();
+        const map = new Map<string, SkuOption>();
         options.forEach((option) => {
-            map.set(option.code, option.label);
+            map.set(option.code, option);
         });
         return map;
     }, [options]);
 
-    const selectedLabels = useMemo(() => selectedCodes.map((code) => optionMap.get(code) ?? code), [optionMap, selectedCodes]);
+    const selectedLabels = useMemo(
+        () =>
+            selectedCodes.map((code) => {
+                const option = optionMap.get(code) ?? resolveOption?.(code);
+                return option?.label ?? code;
+            }),
+        [optionMap, resolveOption, selectedCodes]
+    );
     const pinnedOptions = useMemo(
         () =>
             selectedCodes.map((code) => {
-                const label = optionMap.get(code) ?? code;
-                const nameOnly = label.includes(" - ") ? label.split(" - ", 2)[1] : undefined;
+                const option = optionMap.get(code) ?? resolveOption?.(code);
+                const baseLabel = option?.label ?? code;
+                const explicitName = option?.name;
+                const derivedName = !explicitName && baseLabel.includes(" - ") ? baseLabel.split(" - ", 2)[1] : undefined;
+                const name = explicitName ?? derivedName;
                 return {
                     code,
-                    label,
-                    name: nameOnly,
-                    display: nameOnly ? `${code} - ${nameOnly}` : label,
+                    label: baseLabel,
+                    name,
                 };
             }),
-        [optionMap, selectedCodes]
+        [optionMap, resolveOption, selectedCodes]
     );
     const availableOptions = useMemo(() => options.filter((option) => !selectedCodes.includes(option.code)), [options, selectedCodes]);
 
@@ -189,7 +201,7 @@ function SkuMultiSelect({
                                             <Check className={cn("h-4 w-4")} />
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="font-medium text-sm leading-none">{option.code}</span>
+                                            <span className="font-medium text-sm leading-none mb-2">{option.code}</span>
                                             {option.name && <span className="text-xs text-muted-foreground">{option.name}</span>}
                                         </div>
                                     </CommandItem>
@@ -252,6 +264,7 @@ export function DashboardFilters({
     onSkuLoadMore,
     skuHasMoreOptions,
     skuLoadMoreLoading,
+    resolveSkuOption,
 }: DashboardFiltersProps) {
     const selectableStoreOptions = useMemo(() => storeOptions.filter((option) => option.id !== null), [storeOptions]);
     const selectedStoreId = filters.storeIds[0] ?? null;
@@ -330,6 +343,7 @@ export function DashboardFilters({
                     onLoadMore={onSkuLoadMore}
                     hasMore={skuHasMoreOptions}
                     isLoadingMore={skuLoadMoreLoading}
+                    resolveOption={resolveSkuOption}
                     placeholder="All SKUs"
                     searchPlaceholder="Search SKU..."
                     isLoading={skuSearchLoading}

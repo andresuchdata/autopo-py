@@ -43,6 +43,7 @@ export function useDashboard() {
     hasMore: skuHasMoreOptions,
     search: handleSkuSearch,
     loadMore: handleSkuLoadMore,
+    resolveOption: resolveSkuOption,
   } = useSkuOptions();
 
   const brandOptions = useMemo(() => {
@@ -233,5 +234,6 @@ export function useDashboard() {
     onSkuLoadMore: handleSkuLoadMore,
     skuHasMoreOptions,
     skuLoadMoreLoading,
+    resolveSkuOption,
   };
 }

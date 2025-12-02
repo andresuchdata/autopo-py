@@ -51,6 +51,7 @@ export function useSkuOptions(initialSearch = '') {
   const [searchTerm, setSearchTerm] = useState(initialSearch);
 
   const optionsRef = useRef<SkuOption[]>([]);
+  const optionLookupRef = useRef<Map<string, SkuOption>>(new Map());
 
   const fetchOptions = useCallback(
     async ({ searchValue, append }: FetchOptions) => {
@@ -82,6 +83,7 @@ export function useSkuOptions(initialSearch = '') {
           const seen = new Set(base.map((option) => option.code));
 
           normalized.forEach((option) => {
+            optionLookupRef.current.set(option.code, option);
             if (!seen.has(option.code)) {
               base.push(option);
               seen.add(option.code);
@@ -130,6 +132,8 @@ export function useSkuOptions(initialSearch = '') {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const resolveOption = useCallback((code: string) => optionLookupRef.current.get(code), []);
+
   return {
     options,
     loading,
@@ -138,5 +142,6 @@ export function useSkuOptions(initialSearch = '') {
     searchTerm,
     search,
     loadMore,
+    resolveOption,
   };
 }
