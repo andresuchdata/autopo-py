@@ -105,6 +105,46 @@ export const poService = {
     }
 };
 
+export const getDashboardSummary = async () => {
+    try {
+        const response = await api.get('/po/analytics/summary');
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching dashboard summary:', error);
+        throw error;
+    }
+};
+
+export const getPOTrend = async (interval: string = 'day') => {
+    try {
+        const response = await api.get('/po/analytics/trend', { params: { interval } });
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching PO trend:', error);
+        throw error;
+    }
+};
+
+export const getPOAging = async () => {
+    try {
+        const response = await api.get('/po/analytics/aging');
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching PO aging:', error);
+        throw error;
+    }
+};
+
+export const getSupplierPerformance = async () => {
+    try {
+        const response = await api.get('/po/analytics/performance');
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching supplier performance:', error);
+        throw error;
+    }
+};
+
 export const getResults = async () => {
     const response = await api.get('/po/results');
     return response.data;
