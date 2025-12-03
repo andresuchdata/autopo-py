@@ -53,3 +53,29 @@ type DashboardSummary struct {
 	Aging               []POAging             `json:"aging"`
 	SupplierPerformance []SupplierPerformance `json:"supplier_performance"`
 }
+
+// POSnapshotItem represents a single PO snapshot item for the detail dialog
+type POSnapshotItem struct {
+	PONumber     string  `json:"po_number" db:"po_number"`
+	BrandName    string  `json:"brand_name" db:"brand_name"`
+	SKU          string  `json:"sku" db:"sku"`
+	ProductName  string  `json:"product_name" db:"product_name"`
+	StoreName    string  `json:"store_name" db:"store_name"`
+	UnitPrice    float64 `json:"unit_price" db:"unit_price"`
+	TotalAmount  float64 `json:"total_amount" db:"total_amount"`
+	POQty        int     `json:"po_qty" db:"po_qty"`
+	ReceivedQty  *int    `json:"received_qty" db:"received_qty"`
+	POReleasedAt *string `json:"po_released_at" db:"po_released_at"`
+	POSentAt     *string `json:"po_sent_at" db:"po_sent_at"`
+	POApprovedAt *string `json:"po_approved_at" db:"po_approved_at"`
+	POArrivedAt  *string `json:"po_arrived_at" db:"po_arrived_at"`
+}
+
+// POSnapshotItemsResponse represents the paginated response for PO snapshot items
+type POSnapshotItemsResponse struct {
+	Items      []POSnapshotItem `json:"items"`
+	Total      int              `json:"total"`
+	Page       int              `json:"page"`
+	PageSize   int              `json:"page_size"`
+	TotalPages int              `json:"total_pages"`
+}

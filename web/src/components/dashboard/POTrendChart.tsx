@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { getStatusColor } from '@/constants/poStatusColors';
 
 interface TrendData {
     date: string;
@@ -31,8 +32,6 @@ const transformData = (data: TrendData[]) => {
         statusKeys: Array.from(statuses)
     };
 };
-
-const COLORS = ['#f97316', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#10b981'];
 
 export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
     const { chartData, statusKeys } = transformData(data);
@@ -70,11 +69,11 @@ export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
                         iconType="circle"
                         iconSize={8}
                     />
-                    {statusKeys.map((status, index) => (
+                    {statusKeys.map((status) => (
                         <Bar
                             key={status}
                             dataKey={status}
-                            fill={COLORS[index % COLORS.length]}
+                            fill={getStatusColor(status)}
                             radius={[4, 4, 0, 0]}
                             maxBarSize={50}
                         />

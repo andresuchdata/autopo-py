@@ -212,3 +212,8 @@ func (s *POService) GetPOAging(ctx context.Context) ([]domain.POAging, error) {
 func (s *POService) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
 	return s.repo.GetSupplierPerformance(ctx)
 }
+
+// GetPOSnapshotItems returns PO snapshot items filtered by status with pagination and sorting
+func (s *POService) GetPOSnapshotItems(ctx context.Context, status string, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error) {
+	return s.repo.GetPOSnapshotItems(ctx, status, page, pageSize, sortField, sortDirection)
+}
