@@ -202,22 +202,85 @@ func (r *poRepository) GetPOAging(ctx context.Context) ([]domain.POAging, error)
 	// Assuming status < 6 are active.
 
 	query := `
-        SELECT 
-            po.po_number,
-            po.status as status_code,
-            po.po_qty,
-            COALESCE(poi.total_amount, 0) as total_amount,
-            COALESCE(EXTRACT(DAY FROM (NOW() - GREATEST(po.po_released_at, po.po_sent_at, po.po_approved_at, po.po_arrived_at, po.created_at))), 0)::int as days_in_status
-        FROM purchase_orders po
-        LEFT JOIN (
-            SELECT po_id, SUM(amount) as total_amount 
-            FROM purchase_order_items 
-            GROUP BY po_id
-        ) poi ON po.id = poi.po_id
-        WHERE po.status < 6 -- Exclude Received/Completed if desired, or show all. Requirement says "PO Aging vs Today". Usually implies open POs.
-        ORDER BY days_in_status DESC
-        LIMIT 10
-    `
+	        WITH latest_snapshot AS (
+	            SELECT
+	                po_number,
+	                sku,
+	                status,
+	                quantity_ordered,
+	                COALESCE(total_amount, 0) as total_amount,
+	                po_released_at,
+	                po_sent_at,
+	                po_approved_at,
+	                po_arrived_at,
+	                po_received_at,
+	                GREATEST(
+	                    COALESCE(po_released_at, TIMESTAMP 'epoch'),
+	                    COALESCE(po_sent_at, TIMESTAMP 'epoch'),
+	                    COALESCE(po_approved_at, TIMESTAMP 'epoch'),
+	                    COALESCE(po_arrived_at, TIMESTAMP 'epoch'),
+	                    COALESCE(po_received_at, TIMESTAMP 'epoch'),
+	                    time
+	                ) as last_status_change_at
+	            FROM (
+	                SELECT *,
+	                    ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
+	                FROM po_snapshots
+	                WHERE po_number <> ''
+	            ) s
+	            WHERE rn = 1
+	        ),
+	        po_aggregate AS (
+	            SELECT
+	                po_number,
+	                MAX(status) as status_code,
+	                SUM(quantity_ordered) as po_qty,
+	                SUM(total_amount) as total_amount,
+	                MAX(po_released_at) as po_released_at,
+	                MAX(po_sent_at) as po_sent_at,
+	                MAX(po_approved_at) as po_approved_at,
+	                MAX(po_arrived_at) as po_arrived_at,
+	                MAX(po_received_at) as po_received_at,
+	                MAX(last_status_change_at) as last_status_change_at
+	            FROM latest_snapshot
+	            GROUP BY po_number
+	        ),
+	        po_days AS (
+	            SELECT 
+	                po_number,
+	                status_code,
+	                po_qty,
+	                total_amount,
+	                COALESCE(EXTRACT(DAY FROM (NOW() - COALESCE(
+	                    CASE status_code
+	                        WHEN 2 THEN po_released_at
+	                        WHEN 3 THEN po_sent_at
+	                        WHEN 4 THEN po_approved_at
+	                        WHEN 5 THEN po_arrived_at
+	                        WHEN 6 THEN po_received_at
+	                        ELSE last_status_change_at
+	                    END,
+	                    last_status_change_at,
+	                    NOW()
+	                ))), 0)::int as days_in_status
+	            FROM po_aggregate
+	            WHERE status_code < 6
+	        ),
+	        ranked AS (
+	            SELECT *,
+	                ROW_NUMBER() OVER (PARTITION BY status_code ORDER BY days_in_status DESC, po_number ASC) as rn
+	            FROM po_days
+	        )
+	        SELECT 
+	            po_number,
+	            status_code,
+	            po_qty,
+	            total_amount,
+	            days_in_status
+	        FROM ranked
+	        WHERE rn = 1
+	        ORDER BY status_code
+	    `
 
 	var rows []poAgingRow
 	if err := sqlx.SelectContext(ctx, r.db, &rows, query); err != nil {
@@ -239,20 +302,47 @@ func (r *poRepository) GetPOAging(ctx context.Context) ([]domain.POAging, error)
 }
 
 func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
-	// Lead time: Diff PO Sent date and PO Arrived date
+	// Lead time derived from PO snapshots: diff between PO sent and arrived timestamps
 
 	query := `
-		SELECT 
-			s.id as supplier_id,
-			s.name as supplier_name,
-			AVG(EXTRACT(EPOCH FROM (po.po_arrived_at - po.po_sent_at))/86400) as avg_lead_time
-		FROM purchase_orders po
-		JOIN suppliers s ON po.supplier_id = s.id
-		WHERE po.po_sent_at IS NOT NULL AND po.po_arrived_at IS NOT NULL
-		GROUP BY s.id, s.name
-		ORDER BY avg_lead_time ASC
-		LIMIT 5
-	`
+	        WITH latest_snapshot AS (
+	            SELECT
+	                po_number,
+	                sku,
+	                supplier_id,
+	                po_sent_at,
+	                po_arrived_at,
+	                ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
+	            FROM po_snapshots
+	            WHERE po_number <> ''
+	        ),
+	        po_level AS (
+	            SELECT
+	                po_number,
+	                MAX(supplier_id) as supplier_id,
+	                MAX(po_sent_at) as po_sent_at,
+	                MAX(po_arrived_at) as po_arrived_at
+	            FROM latest_snapshot
+	            WHERE rn = 1
+	            GROUP BY po_number
+	        ),
+	        supplier_aggregated AS (
+	            SELECT
+	                supplier_id,
+	                AVG(EXTRACT(EPOCH FROM (po_arrived_at - po_sent_at))/86400) as avg_lead_time
+	            FROM po_level
+	            WHERE supplier_id IS NOT NULL AND po_sent_at IS NOT NULL AND po_arrived_at IS NOT NULL
+	            GROUP BY supplier_id
+	        )
+	        SELECT 
+	            s.id as supplier_id,
+	            s.name as supplier_name,
+	            sa.avg_lead_time
+	        FROM supplier_aggregated sa
+	        JOIN suppliers s ON sa.supplier_id = s.id
+	        ORDER BY sa.avg_lead_time ASC
+	        LIMIT 5
+	    `
 
 	var results []domain.SupplierPerformance
 	err := sqlx.SelectContext(ctx, r.db, &results, query)
