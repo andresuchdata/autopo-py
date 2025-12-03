@@ -150,39 +150,53 @@ func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domai
 	return results, err
 }
 
+type poAgingRow struct {
+	PONumber     string  `db:"po_number"`
+	StatusCode   int     `db:"status_code"`
+	Quantity     int     `db:"po_qty"`
+	TotalAmount  float64 `db:"total_amount"`
+	DaysInStatus int     `db:"days_in_status"`
+}
+
 func (r *poRepository) GetPOAging(ctx context.Context) ([]domain.POAging, error) {
 	// List POs that are not completed (e.g., not Received/Cancelled?)
 	// Assuming status < 6 are active.
 
 	query := `
-		SELECT 
-			po.po_number,
-			CASE 
-				WHEN po.status = 1 THEN 'Draft'
-				WHEN po.status = 2 THEN 'Released'
-				WHEN po.status = 3 THEN 'Sent'
-				WHEN po.status = 4 THEN 'Approved'
-				WHEN po.status = 5 THEN 'Arrived'
-				WHEN po.status = 6 THEN 'Received'
-				ELSE 'Unknown'
-			END as status_label,
-			po.po_qty,
-			COALESCE(poi.total_amount, 0) as total_amount,
-			COALESCE(EXTRACT(DAY FROM (NOW() - GREATEST(po.po_released_at, po.po_sent_at, po.po_approved_at, po.po_arrived_at, po.created_at))), 0)::int as days_in_status
-		FROM purchase_orders po
-		LEFT JOIN (
-			SELECT po_id, SUM(amount) as total_amount 
-			FROM purchase_order_items 
-			GROUP BY po_id
-		) poi ON po.id = poi.po_id
-		WHERE po.status < 6 -- Exclude Received/Completed if desired, or show all. Requirement says "PO Aging vs Today". Usually implies open POs.
-		ORDER BY days_in_status DESC
-		LIMIT 10
-	`
+        SELECT 
+            po.po_number,
+            po.status as status_code,
+            po.po_qty,
+            COALESCE(poi.total_amount, 0) as total_amount,
+            COALESCE(EXTRACT(DAY FROM (NOW() - GREATEST(po.po_released_at, po.po_sent_at, po.po_approved_at, po.po_arrived_at, po.created_at))), 0)::int as days_in_status
+        FROM purchase_orders po
+        LEFT JOIN (
+            SELECT po_id, SUM(amount) as total_amount 
+            FROM purchase_order_items 
+            GROUP BY po_id
+        ) poi ON po.id = poi.po_id
+        WHERE po.status < 6 -- Exclude Received/Completed if desired, or show all. Requirement says "PO Aging vs Today". Usually implies open POs.
+        ORDER BY days_in_status DESC
+        LIMIT 10
+    `
 
-	var results []domain.POAging
-	err := sqlx.SelectContext(ctx, r.db, &results, query)
-	return results, err
+	var rows []poAgingRow
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query); err != nil {
+		return nil, err
+	}
+
+	results := make([]domain.POAging, len(rows))
+	for i, row := range rows {
+		results[i] = domain.POAging{
+			PONumber:     row.PONumber,
+			Status:       domain.POStatusLabel(row.StatusCode),
+			Quantity:     row.Quantity,
+			Value:        row.TotalAmount,
+			DaysInStatus: row.DaysInStatus,
+		}
+	}
+
+	return results, nil
 }
 
 func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
@@ -204,4 +218,113 @@ func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.Sup
 	var results []domain.SupplierPerformance
 	err := sqlx.SelectContext(ctx, r.db, &results, query)
 	return results, err
+}
+
+// GetPOSnapshotItems fetches PO snapshot items filtered by status with pagination and sorting
+func (r *poRepository) GetPOSnapshotItems(ctx context.Context, status string, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error) {
+	// Validate and set defaults
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	// Validate sort field
+	validSortFields := map[string]bool{
+		"po_number":    true,
+		"brand_name":   true,
+		"sku":          true,
+		"product_name": true,
+		"store_name":   true,
+		"unit_price":   true,
+		"total_amount": true,
+		"po_qty":       true,
+	}
+	if !validSortFields[sortField] {
+		sortField = "po_number"
+	}
+
+	// Validate sort direction
+	if sortDirection != "asc" && sortDirection != "desc" {
+		sortDirection = "asc"
+	}
+
+	offset := (page - 1) * pageSize
+
+	// Query to get latest snapshots for the given status
+	query := fmt.Sprintf(`
+		WITH latest_snapshot AS (
+			SELECT 
+				po_number,
+				sku,
+				MAX(time) AS latest_time
+			FROM po_snapshots
+			WHERE status_label = LOWER($1)
+			GROUP BY po_number, sku
+		)
+		SELECT
+			s.po_number,
+			COALESCE(b.name, '') as brand_name,
+			s.sku,
+			s.product_name,
+			COALESCE(st.name, '') as store_name,
+			s.unit_price,
+			s.total_amount,
+			s.quantity_ordered as po_qty,
+			s.quantity_received as received_qty,
+			TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
+			TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
+			TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
+			TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at
+		FROM po_snapshots s
+		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+		LEFT JOIN brands b ON s.brand_id = b.id
+		LEFT JOIN stores st ON s.store_id = st.id
+		ORDER BY %s %s
+		LIMIT $2 OFFSET $3
+	`, sortField, sortDirection)
+
+	// Count query
+	countQuery := `
+		WITH latest_snapshot AS (
+			SELECT 
+				po_number,
+				sku,
+				MAX(time) AS latest_time
+			FROM po_snapshots
+			WHERE status_label = LOWER($1)
+			GROUP BY po_number, sku
+		)
+		SELECT COUNT(*)
+		FROM po_snapshots s
+		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+	`
+
+	// Execute count query
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery, status); err != nil {
+		log.Error().Err(err).Str("status", status).Msg("failed to count PO snapshot items")
+		return nil, fmt.Errorf("failed to count items: %w", err)
+	}
+
+	// Execute main query
+	var items []domain.POSnapshotItem
+	if err := sqlx.SelectContext(ctx, r.db, &items, query, status, pageSize, offset); err != nil {
+		log.Error().Err(err).Str("status", status).Msg("failed to fetch PO snapshot items")
+		return nil, fmt.Errorf("failed to fetch items: %w", err)
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return &domain.POSnapshotItemsResponse{
+		Items:      items,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
 }

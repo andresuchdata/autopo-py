@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUp, ArrowDown, Check } from 'lucide-react';
+import { getStatusColor } from '@/constants/poStatusColors';
 
 interface POStatusCardProps {
     title: string;
@@ -28,8 +29,21 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
     diffDays,
     isActive
 }) => {
+    // Extract status name from title (e.g., "PO Released" -> "Released")
+    const statusName = title.replace('PO ', '');
+    const statusColor = getStatusColor(statusName);
+
     return (
-        <div className={`p-4 rounded-lg border ${isActive ? 'bg-blue-900/20 border-blue-500' : 'bg-card border-border'} flex flex-col items-center justify-center text-center`}>
+        <div
+            className={`p-4 rounded-lg border flex flex-col items-center justify-center text-center transition-all ${isActive
+                    ? 'bg-card/50 shadow-lg'
+                    : 'bg-card'
+                }`}
+            style={{
+                borderColor: isActive ? statusColor : 'hsl(var(--border))',
+                borderWidth: isActive ? '2px' : '1px'
+            }}
+        >
             <h3 className="text-sm font-medium text-muted-foreground mb-2">{title}</h3>
             <div className="text-4xl font-bold mb-2">{count}</div>
 
@@ -40,8 +54,7 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
                         {Math.abs(diffDays)}
                     </span>
                 )}
-                {/* Check icon if completed? Just mimicking the image */}
-                {title === "PO Released" && <Check size={12} className="text-orange-500" />}
+                <Check size={12} style={{ color: statusColor }} />
 
                 <span className="text-muted-foreground">|</span>
                 <span className="font-medium">{formatCurrency(value)}</span>

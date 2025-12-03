@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { getStatusColor } from '@/constants/poStatusColors';
 
 interface FunnelData {
     stage: string;
@@ -39,14 +40,6 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
     const padding = { top: 30, right: 20, bottom: 30, left: 20 };
     const chartHeight = svgHeight - padding.top - padding.bottom;
     const chartWidth = svgWidth - padding.left - padding.right;
-
-    // Color mapping for each stage
-    const stageColors: Record<string, string> = {
-        'Released': '#FF8C61',  // Orange
-        'Sent': '#FF9F66',      // Light Orange
-        'Approved': '#5DBABD',  // Teal/Cyan
-        'Arrived': '#4FA8A8',   // Dark Teal
-    };
 
     // Calculate the width of each segment
     const segmentWidth = chartWidth / data.length;
@@ -141,7 +134,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
                                 {/* Segment shape with curved borders */}
                                 <path
                                     d={path}
-                                    fill={stageColors[item.stage] || '#6B7280'}
+                                    fill={getStatusColor(item.stage)}
                                     stroke="rgba(0, 0, 0, 0.15)"
                                     strokeWidth="0.5"
                                     className="transition-opacity hover:opacity-90 cursor-pointer"
