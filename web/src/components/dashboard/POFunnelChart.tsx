@@ -62,12 +62,23 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
     };
 
     const heights = data.map(item => getHeight(item.total_value));
-    const boundaryHeights = heights.length
-        ? heights.map((_, index) => (index === 0 ? heights[0] : (heights[index - 1] + heights[index]) / 2))
-        : [];
-    if (heights.length) {
-        boundaryHeights.unshift(heights[0]);
-        boundaryHeights.push(heights[heights.length - 1]);
+    const boundaryHeights: number[] = [];
+    if (heights.length === 1) {
+        boundaryHeights.push(heights[0], heights[0]);
+    } else if (heights.length > 1) {
+        for (let i = 0; i <= heights.length; i++) {
+            if (i === 0) {
+                const current = heights[0];
+                const next = heights[1];
+                boundaryHeights.push((current + next) / 2);
+            } else if (i === heights.length) {
+                const prev = heights[i - 1];
+                const prevPrev = heights[i - 2];
+                boundaryHeights.push((prev + prevPrev) / 2);
+            } else {
+                boundaryHeights.push((heights[i - 1] + heights[i]) / 2);
+            }
+        }
     }
 
     // Generate segment with curved borders
@@ -87,14 +98,19 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
         const bottomRight = centerY + rightHeight / 2;
 
         const transitionWidth = segmentWidth * curveStrength;
+        const centerFlatHalf = Math.max(segmentWidth * 0.08, transitionWidth * 0.5);
+        const leftCurveEnd = midX - centerFlatHalf;
+        const rightCurveStart = midX + centerFlatHalf;
 
         const path = `
             M ${startX} ${topLeft}
-            C ${startX + transitionWidth} ${topLeft} ${midX - transitionWidth} ${topCenter} ${midX} ${topCenter}
-            C ${midX + transitionWidth} ${topCenter} ${endX - transitionWidth} ${topRight} ${endX} ${topRight}
+            C ${startX + transitionWidth} ${topLeft} ${leftCurveEnd - transitionWidth} ${topCenter} ${leftCurveEnd} ${topCenter}
+            L ${rightCurveStart} ${topCenter}
+            C ${rightCurveStart + transitionWidth} ${topCenter} ${endX - transitionWidth} ${topRight} ${endX} ${topRight}
             L ${endX} ${bottomRight}
-            C ${endX - transitionWidth} ${bottomRight} ${midX + transitionWidth} ${bottomCenter} ${midX} ${bottomCenter}
-            C ${midX - transitionWidth} ${bottomCenter} ${startX + transitionWidth} ${bottomLeft} ${startX} ${bottomLeft}
+            C ${endX - transitionWidth} ${bottomRight} ${rightCurveStart + transitionWidth} ${bottomCenter} ${rightCurveStart} ${bottomCenter}
+            L ${leftCurveEnd} ${bottomCenter}
+            C ${leftCurveEnd - transitionWidth} ${bottomCenter} ${startX + transitionWidth} ${bottomLeft} ${startX} ${bottomLeft}
             Z
         `;
 
