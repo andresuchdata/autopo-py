@@ -62,6 +62,14 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context) (*domain.Dashboa
 	return summary, nil
 }
 
+type statusSummaryRow struct {
+	StatusCode int     `db:"status_code"`
+	Count      int     `db:"count"`
+	TotalValue float64 `db:"total_value"`
+	AvgDays    float64 `db:"avg_days"`
+	DiffDays   int     `db:"diff_days"`
+}
+
 func (r *poRepository) getStatusSummaries(ctx context.Context) ([]domain.POStatusSummary, error) {
 	// Status mapping: 1: Draft, 2: Released, 3: Sent, 4: Approved, 5: Arrived, 6: Received
 	// We need to join with purchase_order_items to get value?
@@ -84,7 +92,6 @@ func (r *poRepository) getStatusSummaries(ctx context.Context) ([]domain.POStatu
 			SELECT
 				CONCAT(s.po_number, '::', s.sku) AS po_sku_identifier,
 				MAX(s.status) AS status_code,
-				MAX(s.status_label) AS status_label,
 				SUM(s.total_amount) AS total_value,
 				COALESCE(
 					MAX(CASE WHEN s.status = 2 THEN s.po_released_at END),
@@ -98,15 +105,15 @@ func (r *poRepository) getStatusSummaries(ctx context.Context) ([]domain.POStatu
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 			GROUP BY s.po_number, s.sku
 		)
-	SELECT 
-		INITCAP(status_label) as status,
-		COUNT(po_sku_identifier) as count,
-		COALESCE(SUM(total_value), 0) as total_value,
-		COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400), 0) as avg_days,
-		COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400)::int, 0) as diff_days
-	FROM po_values
-	GROUP BY status_label, status_code
-	ORDER BY status_code
+		SELECT 
+			status_code,
+			COUNT(po_sku_identifier) as count,
+			COALESCE(SUM(total_value), 0) as total_value,
+			COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400), 0) as avg_days,
+			COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400)::int, 0) as diff_days
+		FROM po_values
+		GROUP BY status_code
+		ORDER BY status_code
 	`
 	// Note: "Avg Days in Status" is tricky without history.
 	// If we use po_snapshots, we can get exact duration.
@@ -116,9 +123,23 @@ func (r *poRepository) getStatusSummaries(ctx context.Context) ([]domain.POStatu
 	// Let's refine the query to be more accurate if possible, or stick to simple for MVP.
 	// The requirement says "Avg. Days in Status".
 
-	var results []domain.POStatusSummary
-	err := sqlx.SelectContext(ctx, r.db, &results, query)
-	return results, err
+	var rows []statusSummaryRow
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query); err != nil {
+		return nil, err
+	}
+
+	results := make([]domain.POStatusSummary, len(rows))
+	for i, row := range rows {
+		results[i] = domain.POStatusSummary{
+			Status:     domain.POStatusLabel(row.StatusCode),
+			Count:      row.Count,
+			TotalValue: row.TotalValue,
+			AvgDays:    row.AvgDays,
+			DiffDays:   row.DiffDays,
+		}
+	}
+
+	return results, nil
 }
 
 func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error) {
@@ -126,11 +147,17 @@ func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domai
 	// Group by day and status (avoid TimescaleDB dependency)
 
 	// Default to last 30 days
+	type trendRow struct {
+		Date       string `db:"date"`
+		StatusCode int    `db:"status_code"`
+		Count      int    `db:"count"`
+	}
+
 	query := `
 		WITH bucketed AS (
 			SELECT 
 				date_trunc('day', time) AS bucket,
-				status_label,
+				status as status_code,
 				po_number,
 				sku
 			FROM po_snapshots
@@ -138,16 +165,28 @@ func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domai
 		)
 		SELECT 
 			bucket::date::text as date,
-			INITCAP(status_label) as status,
+			status_code,
 			COUNT(DISTINCT CONCAT(po_number, '::', sku)) as count
 		FROM bucketed
-		GROUP BY bucket, status_label
-		ORDER BY bucket, status_label
+		GROUP BY bucket, status_code
+		ORDER BY bucket, status_code
 	`
 
-	var results []domain.POTrend
-	err := sqlx.SelectContext(ctx, r.db, &results, query)
-	return results, err
+	var rows []trendRow
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query); err != nil {
+		return nil, err
+	}
+
+	results := make([]domain.POTrend, len(rows))
+	for i, row := range rows {
+		results[i] = domain.POTrend{
+			Date:   row.Date,
+			Status: domain.POStatusLabel(row.StatusCode),
+			Count:  row.Count,
+		}
+	}
+
+	return results, nil
 }
 
 type poAgingRow struct {
@@ -221,7 +260,7 @@ func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.Sup
 }
 
 // GetPOSnapshotItems fetches PO snapshot items filtered by status with pagination and sorting
-func (r *poRepository) GetPOSnapshotItems(ctx context.Context, status string, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error) {
+func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error) {
 	// Validate and set defaults
 	if page < 1 {
 		page = 1
@@ -260,7 +299,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, status string, pa
 				sku,
 				MAX(time) AS latest_time
 			FROM po_snapshots
-			WHERE status_label = LOWER($1)
+			WHERE status = $1
 			GROUP BY po_number, sku
 		)
 		SELECT
@@ -293,7 +332,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, status string, pa
 				sku,
 				MAX(time) AS latest_time
 			FROM po_snapshots
-			WHERE status_label = LOWER($1)
+			WHERE status = $1
 			GROUP BY po_number, sku
 		)
 		SELECT COUNT(*)
@@ -303,15 +342,15 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, status string, pa
 
 	// Execute count query
 	var total int
-	if err := r.db.GetContext(ctx, &total, countQuery, status); err != nil {
-		log.Error().Err(err).Str("status", status).Msg("failed to count PO snapshot items")
+	if err := r.db.GetContext(ctx, &total, countQuery, statusCode); err != nil {
+		log.Error().Err(err).Int("status_code", statusCode).Msg("failed to count PO snapshot items")
 		return nil, fmt.Errorf("failed to count items: %w", err)
 	}
 
 	// Execute main query
 	var items []domain.POSnapshotItem
-	if err := sqlx.SelectContext(ctx, r.db, &items, query, status, pageSize, offset); err != nil {
-		log.Error().Err(err).Str("status", status).Msg("failed to fetch PO snapshot items")
+	if err := sqlx.SelectContext(ctx, r.db, &items, query, statusCode, pageSize, offset); err != nil {
+		log.Error().Err(err).Int("status_code", statusCode).Msg("failed to fetch PO snapshot items")
 		return nil, fmt.Errorf("failed to fetch items: %w", err)
 	}
 

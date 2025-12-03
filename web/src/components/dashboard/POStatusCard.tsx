@@ -9,6 +9,8 @@ interface POStatusCardProps {
     avgDays: number;
     diffDays?: number; // For the "big number" diff or similar
     isActive?: boolean;
+    onClick?: () => void;
+    className?: string;
 }
 
 const formatCurrency = (value: number) => {
@@ -27,25 +29,41 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
     value,
     avgDays,
     diffDays,
-    isActive
+    isActive,
+    onClick,
+    className
 }) => {
     // Extract status name from title (e.g., "PO Released" -> "Released")
     const statusName = title.replace('PO ', '');
     const statusColor = getStatusColor(statusName);
+    const activeClasses = isActive ? 'bg-primary/10 shadow-lg border-transparent' : 'bg-card border-border hover:border-transparent';
+    const interactiveClasses = onClick ? 'hover:-translate-y-1 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary' : '';
+    const cardClasses = `relative overflow-hidden p-4 rounded-2xl border flex flex-col items-center justify-center text-center cursor-pointer select-none transition-all duration-300 ease-out ${activeClasses} ${interactiveClasses} ${className ?? ''}`.trim();
 
     return (
         <div
-            className={`p-4 rounded-lg border flex flex-col items-center justify-center text-center transition-all ${isActive
-                    ? 'bg-card/50 shadow-lg'
-                    : 'bg-card'
-                }`}
+            role="button"
+            tabIndex={0}
+            onClick={onClick}
+            onKeyDown={(event) => {
+                if (!onClick) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onClick();
+                }
+            }}
+            aria-pressed={isActive}
+            className={cardClasses}
             style={{
-                borderColor: isActive ? statusColor : 'hsl(var(--border))',
-                borderWidth: isActive ? '2px' : '1px'
+                borderColor: isActive ? statusColor : undefined,
             }}
         >
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">{title}</h3>
-            <div className="text-4xl font-bold mb-2">{count}</div>
+            <div
+                className="absolute inset-x-6 top-3 h-1 rounded-full opacity-30 transition-opacity"
+                style={{ backgroundColor: statusColor }}
+            />
+            <h3 className="text-sm font-medium text-muted-foreground mb-2 mt-2">{title}</h3>
+            <div className="text-4xl font-bold mb-2 tracking-tight">{count}</div>
 
             <div className="flex items-center gap-2 text-xs mb-1">
                 {diffDays !== undefined && (
