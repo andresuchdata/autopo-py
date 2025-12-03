@@ -61,7 +61,14 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
         return chartHeight * ratio;
     };
 
-    const heights = data.map(item => getHeight(item.total_value));
+    const rawHeights = data.map(item => getHeight(item.total_value));
+    const heights = rawHeights.map((height, index) => {
+        const prev = rawHeights[index - 1] ?? height;
+        const next = rawHeights[index + 1] ?? height;
+        const neighborAvg = (prev + next) / 2;
+        const blendFactor = 0.35;
+        return height * (1 - blendFactor) + neighborAvg * blendFactor;
+    });
     const boundaryHeights: number[] = [];
     if (heights.length === 1) {
         boundaryHeights.push(heights[0], heights[0]);
@@ -98,13 +105,19 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
         const bottomRight = centerY + rightHeight / 2;
 
         const transitionWidth = segmentWidth * curveStrength;
-        const controlOffset = segmentWidth * 0.25;
+        const baseControl = segmentWidth * 0.18;
+        const leftDelta = Math.abs(currentHeight - leftHeight) / chartHeight;
+        const rightDelta = Math.abs(currentHeight - rightHeight) / chartHeight;
+        const leftControlOffset = baseControl + segmentWidth * 0.25 * Math.min(leftDelta, 1);
+        const rightControlOffset = baseControl + segmentWidth * 0.25 * Math.min(rightDelta, 1);
 
         const path = `
             M ${startX} ${topLeft}
-            C ${startX + controlOffset} ${topLeft} ${endX - controlOffset} ${topRight} ${endX} ${topRight}
+            C ${startX + leftControlOffset} ${topLeft} ${midX - leftControlOffset} ${topCenter} ${midX} ${topCenter}
+            C ${midX + rightControlOffset} ${topCenter} ${endX - rightControlOffset} ${topRight} ${endX} ${topRight}
             L ${endX} ${bottomRight}
-            C ${endX - controlOffset} ${bottomRight} ${startX + controlOffset} ${bottomLeft} ${startX} ${bottomLeft}
+            C ${endX - rightControlOffset} ${bottomRight} ${midX + rightControlOffset} ${bottomCenter} ${midX} ${bottomCenter}
+            C ${midX - leftControlOffset} ${bottomCenter} ${startX + leftControlOffset} ${bottomLeft} ${startX} ${bottomLeft}
             Z
         `;
 
