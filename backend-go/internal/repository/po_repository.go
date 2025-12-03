@@ -19,5 +19,5 @@ type PORepository interface {
 	GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error)
 	GetPOAging(ctx context.Context) ([]domain.POAging, error)
 	GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error)
-	GetPOSnapshotItems(ctx context.Context, status string, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error)
+	GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error)
 }

@@ -7,6 +7,7 @@ import { POTrendChart } from '@/components/dashboard/POTrendChart';
 import { POAgingTable } from '@/components/dashboard/POAgingTable';
 import { SupplierPerformanceChart } from '@/components/dashboard/SupplierPerformanceChart';
 import { getDashboardSummary } from '@/services/api';
+import { POSnapshotDialog } from '@/components/dashboard/POSnapshotDialog';
 
 interface DashboardData {
     status_summaries: any[];
@@ -20,6 +21,8 @@ export default function PODashboardPage() {
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+    const [statusModalOpen, setStatusModalOpen] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -68,7 +71,7 @@ export default function PODashboardPage() {
             </div>
 
             {/* 1. Status Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 {statusSummaries.map((summary: any) => (
                     <POStatusCard
                         key={summary.status}
@@ -77,7 +80,11 @@ export default function PODashboardPage() {
                         value={summary.total_value}
                         avgDays={summary.avg_days}
                         diffDays={summary.diff_days}
-                        isActive={summary.status === 'Sent'} // Example active state
+                        isActive={statusModalOpen && summary.status === selectedStatus}
+                        onClick={() => {
+                            setSelectedStatus(summary.status);
+                            setStatusModalOpen(true);
+                        }}
                     />
                 ))}
             </div>
@@ -93,6 +100,16 @@ export default function PODashboardPage() {
                 <POAgingTable data={agingData} />
                 <SupplierPerformanceChart data={supplierPerformanceData} />
             </div>
+            <POSnapshotDialog
+                status={selectedStatus}
+                open={statusModalOpen}
+                onOpenChange={(open: boolean) => {
+                    setStatusModalOpen(open);
+                    if (!open) {
+                        setSelectedStatus(null);
+                    }
+                }}
+            />
         </div>
     );
 }

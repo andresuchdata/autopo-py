@@ -11,12 +11,12 @@
  */
 
 export const PO_STATUS_COLORS: Record<string, string> = {
-    'Released': '#FF8C61',    // Orange
-    'Approved': '#5DBABD',    // Teal
-    'Declined': '#EF4444',    // Red
-    'Received': '#8B5CF6',    // Purple
-    'Sent': '#FF9F66',        // Light Orange
-    'Arrived': '#4FA8A8',     // Dark Teal
+    'Released': '#F97316',    // Orange
+    'Approved': '#16A34A',    // Green
+    'Declined': '#DC2626',    // Red
+    'Received': '#6366F1',    // Indigo
+    'Sent': '#FACC15',        // Amber
+    'Arrived': '#0EA5E9',     // Cyan
 };
 
 export const PO_STATUS_NAMES: Record<number, string> = {

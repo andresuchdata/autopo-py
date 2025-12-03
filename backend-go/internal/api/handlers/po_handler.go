@@ -187,10 +187,17 @@ func (h *POHandler) GetSupplierPerformance(c *gin.Context) {
 }
 
 // GetPOSnapshotItems returns PO snapshot items filtered by status with pagination and sorting
+
 func (h *POHandler) GetPOSnapshotItems(c *gin.Context) {
 	status := c.Query("status")
 	if status == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "status parameter is required"})
+		return
+	}
+
+	statusCode, ok := domain.ParsePOStatus(status)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status value"})
 		return
 	}
 
@@ -199,7 +206,7 @@ func (h *POHandler) GetPOSnapshotItems(c *gin.Context) {
 	sortField := c.DefaultQuery("sort_field", "po_number")
 	sortDirection := c.DefaultQuery("sort_direction", "asc")
 
-	response, err := h.poService.GetPOSnapshotItems(c.Request.Context(), status, page, pageSize, sortField, sortDirection)
+	response, err := h.poService.GetPOSnapshotItems(c.Request.Context(), statusCode, page, pageSize, sortField, sortDirection)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch PO snapshot items"})
 		return

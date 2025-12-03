@@ -43,7 +43,7 @@ export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
                 {/* Add interval selector here if needed */}
             </div>
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
+                <BarChart data={chartData} barGap={0} barCategoryGap="28%">
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                     <XAxis
                         dataKey="date"

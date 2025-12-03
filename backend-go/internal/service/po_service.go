@@ -214,6 +214,6 @@ func (s *POService) GetSupplierPerformance(ctx context.Context) ([]domain.Suppli
 }
 
 // GetPOSnapshotItems returns PO snapshot items filtered by status with pagination and sorting
-func (s *POService) GetPOSnapshotItems(ctx context.Context, status string, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error) {
-	return s.repo.GetPOSnapshotItems(ctx, status, page, pageSize, sortField, sortDirection)
+func (s *POService) GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error) {
+	return s.repo.GetPOSnapshotItems(ctx, statusCode, page, pageSize, sortField, sortDirection)
 }
