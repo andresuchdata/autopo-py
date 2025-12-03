@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -13,8 +13,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the server and seeder
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/seed ./cmd/seed
 
 # Final stage
 FROM alpine:3.18
@@ -22,19 +23,33 @@ FROM alpine:3.18
 WORKDIR /app
 
 # Install dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    postgresql-client \
+    bash \
+    grep \
+    coreutils
 
-# Copy the binary from builder
+# Copy the binaries from builder
 COPY --from=builder /app/bin/server /app/server
+COPY --from=builder /app/bin/seed /app/bin/seed
 
-# Copy configuration files
-COPY .env.example /app/.env
+# Copy configuration files and scripts
+COPY entrypoint.sh /app/entrypoint.sh
 
-# Create necessary directories
-RUN mkdir -p /app/data/uploads /app/data/output
+# Create necessary directories and copy seed data
+RUN mkdir -p /app/data/uploads /app/data/output /app/data/seeds && \
+    chmod +x /app/entrypoint.sh
+
+# Include static seed CSVs for container seeding
+COPY data/seeds /app/data/seeds
+
+# Copy scripts
+COPY scripts /app/scripts
 
 # Expose port
 EXPOSE 8080
 
-# Run the application
-CMD ["/app/server"]
+# Set entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]

@@ -2,14 +2,15 @@
 package handlers
 
 import (
-	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"strings"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/autopo/backend-go/internal/domain"
-	"github.com/yourusername/autopo/backend-go/internal/service"
 )
 
 type POHandler struct {
@@ -79,6 +80,49 @@ func (h *POHandler) GetStores(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, stores)
+}
+
+// GetBrands returns a list of all brands
+func (h *POHandler) GetBrands(c *gin.Context) {
+	brands, err := h.poService.GetBrands(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch brands"})
+		return
+	}
+
+	c.JSON(http.StatusOK, brands)
+}
+
+// GetSkus returns a list of SKUs with optional search
+func (h *POHandler) GetSkus(c *gin.Context) {
+	search := c.Query("search")
+	limit := parsePositiveIntWithDefault(c.Query("limit"), 50)
+	offset := parseNonNegativeInt(c.Query("offset"))
+
+	skus, err := h.poService.GetSkus(c.Request.Context(), search, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch skus"})
+		return
+	}
+
+	c.JSON(http.StatusOK, skus)
+}
+
+func parsePositiveIntWithDefault(value string, fallback int) int {
+	if fallback <= 0 {
+		fallback = 50
+	}
+	if v, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && v > 0 {
+		return v
+	}
+	return fallback
+}
+
+func parseNonNegativeInt(value string) int {
+	if v, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && v >= 0 {
+		return v
+	}
+	return 0
 }
 
 // GetStoreResults returns the processing results for a specific store

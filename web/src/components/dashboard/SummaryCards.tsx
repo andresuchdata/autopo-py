@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConditionKey } from "@/services/dashboardService";
 import { Skeleton } from "@/components/ui/skeleton";
+import { type SummaryGrouping } from "@/types/stockHealth";
 
 const COLORS = {
     'overstock': '#3b82f6',      // Blue
@@ -19,10 +20,10 @@ const CONDITION_LABELS = {
 };
 
 const HEADER_LABELS = {
-    'overstock': 'Daily Stock Cover > 31 days',
-    'healthy': 'Daily Stock Cover 21 - 31 days',
-    'low': 'Daily Stock Cover 7 - 20 days',
-    'nearly_out': 'Daily Stock Cover 1 - 6 days',
+    'overstock': 'Daily Stock Cover > 30 days',
+    'healthy': 'Daily Stock Cover 21,xx - 30 days',
+    'low': 'Daily Stock Cover 7,xx - 21 days',
+    'nearly_out': 'Daily Stock Cover 0,xx - 7 days',
     'out_of_stock': 'Daily Stock Cover 0 day'
 };
 
@@ -35,7 +36,7 @@ interface SummaryCardsProps {
         stockByCondition: Record<ConditionKey, number>;
         valueByCondition: Record<ConditionKey, number>;
     };
-    onCardClick: (condition: ConditionKey) => void;
+    onCardClick: (condition: ConditionKey, grouping: SummaryGrouping) => void;
     isLoading?: boolean;
 }
 
@@ -63,10 +64,11 @@ interface RowProps {
     data: Record<ConditionKey, number>;
     total: number;
     type: 'count' | 'number' | 'currency';
-    onCardClick: (condition: ConditionKey) => void;
+    grouping: SummaryGrouping;
+    onCardClick: (condition: ConditionKey, grouping: SummaryGrouping) => void;
 }
 
-function SummaryRow({ title, data, total, type, onCardClick }: RowProps) {
+function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProps) {
     const formatValue = (val: number) => {
         if (type === 'currency') {
             return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
@@ -76,8 +78,13 @@ function SummaryRow({ title, data, total, type, onCardClick }: RowProps) {
 
     return (
         <div className="contents">
-            <div className="flex items-center md:justify-end md:pr-4 font-medium text-muted-foreground text-sm uppercase tracking-wide">
-                {title}
+            <div className="flex flex-col items-center md:items-center md:justify-center md:pr-4 gap-0.5 text-center md:text-right">
+                <div className="font-medium text-muted-foreground text-sm uppercase tracking-wide">
+                    {title}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                    Total: <span className="font-semibold text-foreground">{formatValue(total)}</span>
+                </div>
             </div>
             {CONDITIONS.map((condition) => {
                 const value = data[condition] || 0;
@@ -91,7 +98,7 @@ function SummaryRow({ title, data, total, type, onCardClick }: RowProps) {
                         key={condition}
                         className="cursor-pointer hover:shadow-md transition-all border-t-4"
                         style={{ borderTopColor: COLORS[condition] }}
-                        onClick={() => onCardClick(condition)}
+                        onClick={() => onCardClick(condition, grouping)}
                     >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
                             <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -155,6 +162,7 @@ export function SummaryCards({ summary, onCardClick, isLoading }: SummaryCardsPr
                 data={summary.byCondition}
                 total={summary.totalItems}
                 type="count"
+                grouping="sku"
                 onCardClick={onCardClick}
             />
 
@@ -163,6 +171,7 @@ export function SummaryCards({ summary, onCardClick, isLoading }: SummaryCardsPr
                 data={summary.stockByCondition}
                 total={summary.totalStock}
                 type="number"
+                grouping="stock"
                 onCardClick={onCardClick}
             />
 
@@ -171,6 +180,7 @@ export function SummaryCards({ summary, onCardClick, isLoading }: SummaryCardsPr
                 data={summary.valueByCondition}
                 total={summary.totalValue}
                 type="currency"
+                grouping="value"
                 onCardClick={onCardClick}
             />
         </div>

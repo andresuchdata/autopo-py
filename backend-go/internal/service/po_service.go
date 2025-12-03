@@ -8,10 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/autopo/backend-go/internal/domain"
-	"github.com/yourusername/autopo/backend-go/internal/repository"
 )
 
 type POService struct {
@@ -180,4 +181,14 @@ func (s *POService) GetStoreResults(ctx context.Context, storeName string) ([]*d
 // GetStores returns a list of all stores
 func (s *POService) GetStores(ctx context.Context) ([]*domain.Store, error) {
 	return s.repo.GetStores(ctx)
+}
+
+// GetBrands returns a list of all brands
+func (s *POService) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
+	return s.repo.GetBrands(ctx)
+}
+
+// GetSkus returns a list of SKUs matching the optional search term with pagination
+func (s *POService) GetSkus(ctx context.Context, search string, limit, offset int) ([]*domain.Product, error) {
+	return s.repo.GetSkus(ctx, search, limit, offset)
 }

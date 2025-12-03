@@ -1,4 +1,3 @@
-// backend-go/internal/repository/postgres/db.go
 package postgres
 
 import (
@@ -8,13 +7,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/semaphore"
 )
 
 type DB struct {
-	*sql.DB
+	*sqlx.DB
 	sem *semaphore.Weighted
 }
 
@@ -30,17 +31,9 @@ func NewDB(cfg *config.DatabaseConfig) (*DB, error) {
 		connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
 
-		var db *sql.DB
-		db, err = sql.Open("postgres", connStr)
+		var db *sqlx.DB
+		db, err = sqlx.Connect("postgres", connStr)
 		if err != nil {
-			return
-		}
-
-		// Test the connection
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err = db.PingContext(ctx); err != nil {
 			return
 		}
 
@@ -67,12 +60,12 @@ func (db *DB) WithTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	}
 	defer db.sem.Release(1)
 
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("could not begin transaction: %w", err)
 	}
 
-	if err := fn(tx); err != nil {
+	if err := fn(tx.Tx); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error().Err(rbErr).Msg("could not rollback transaction")
 		}

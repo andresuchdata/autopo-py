@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
     Dialog,
     DialogContent,
@@ -15,9 +15,11 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowUpDown, Download } from "lucide-react";
 import { COLORS, CONDITION_LABELS } from "./SummaryCards";
 import { ConditionKey } from "@/services/dashboardService";
+import { type StockHealthItemsResponse, type StockHealthApiItem } from "@/services/stockHealthService";
+import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from "@/types/stockHealth";
 
 interface StockItem {
     id: number;
@@ -26,86 +28,304 @@ interface StockItem {
     sku_name: string;
     brand_name: string;
     current_stock: number;
-    days_of_cover: number;
+    daily_sales: number;
+    daily_stock_cover: number;
     condition: ConditionKey;
+    hpp: number;
+    inventory_value: number;
 }
 
 interface StockItemsDialogProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    items: StockItem[];
     condition: ConditionKey | null;
-    isLoading: boolean;
+    grouping: SummaryGrouping | null;
+    fetchItems: (params: {
+        page: number;
+        pageSize: number;
+        grouping?: SummaryGrouping;
+        sortField?: StockItemsSortField;
+        sortDirection?: SortDirection;
+    }) => Promise<StockHealthItemsResponse>;
 }
 
-type SortField = keyof StockItem;
-type SortDirection = 'asc' | 'desc';
+type SortField = StockItemsSortField;
 
 export function StockItemsDialog({
     isOpen,
     onOpenChange,
-    items,
     condition,
-    isLoading,
+    grouping,
+    fetchItems,
 }: StockItemsDialogProps) {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
     const [sortField, setSortField] = useState<SortField>('store_name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    const [items, setItems] = useState<StockItem[]>([]);
+    const [totalItems, setTotalItems] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [isDownloading, setIsDownloading] = useState(false);
 
-    // Handle sorting
-    const handleSort = (field: SortField) => {
-        if (sortField === field) {
-            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    const activeGrouping: SummaryGrouping = grouping ?? 'sku';
+
+    const normalizeApiItem = useCallback((item: StockHealthApiItem): StockItem => ({
+        id: item.id,
+        store_name: item.store_name,
+        sku_code: item.sku_code,
+        sku_name: item.product_name,
+        brand_name: item.brand_name,
+        current_stock: item.current_stock,
+        daily_sales: item.daily_sales,
+        daily_stock_cover: item.daily_stock_cover,
+        condition: (item.stock_condition as ConditionKey) ?? 'out_of_stock',
+        hpp: item.hpp ?? 0,
+        inventory_value: (item.current_stock ?? 0) * (item.hpp ?? 0),
+    }), []);
+
+    useEffect(() => {
+        if (activeGrouping === 'value') {
+            setSortField('inventory_value');
+            setSortDirection('desc');
+        } else if (activeGrouping === 'stock') {
+            setSortField('current_stock');
+            setSortDirection('desc');
         } else {
-            setSortField(field);
+            setSortField('store_name');
             setSortDirection('asc');
         }
+    }, [activeGrouping]);
+
+    const loadItems = useCallback(async (
+        pageParam: number,
+        pageSizeParam: number,
+        customSortField?: SortField,
+        customSortDirection?: SortDirection,
+    ) => {
+        if (!condition) {
+            setItems([]);
+            setTotalItems(0);
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+        try {
+            const response = await fetchItems({
+                page: pageParam,
+                pageSize: pageSizeParam,
+                grouping: activeGrouping,
+                sortField: customSortField ?? sortField,
+                sortDirection: customSortDirection ?? sortDirection,
+            });
+            const normalizedItems: StockItem[] = response.items.map(normalizeApiItem);
+
+            setItems(normalizedItems);
+            setTotalItems(response.total);
+        } catch (err) {
+            console.error('Failed to fetch stock items', err);
+            setItems([]);
+            setTotalItems(0);
+            setError('Failed to load items');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [condition, fetchItems, activeGrouping, sortField, sortDirection, normalizeApiItem]);
+
+    useEffect(() => {
+        if (isOpen && condition) {
+            setCurrentPage(1);
+            loadItems(1, itemsPerPage);
+        }
+
+        if (!isOpen) {
+            setItems([]);
+            setTotalItems(0);
+        }
+    }, [isOpen, condition, itemsPerPage, loadItems]);
+
+    const handleSort = (field: SortField) => {
+        const isSameField = sortField === field;
+        const nextDirection: SortDirection = isSameField && sortDirection === 'asc' ? 'desc' : 'asc';
+        const nextField = isSameField ? field : field;
+        setSortField(nextField);
+        setSortDirection(nextDirection);
+        setCurrentPage(1);
+        loadItems(1, itemsPerPage, nextField, nextDirection);
     };
 
-    // Process items (sort and paginate)
-    const processedItems = useMemo(() => {
-        let sorted = [...items];
+    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
-        sorted.sort((a, b) => {
-            const aValue = a[sortField];
-            const bValue = b[sortField];
+    const handlePageChange = useCallback((nextPage: number) => {
+        const clamped = Math.max(1, Math.min(totalPages, nextPage));
+        setCurrentPage(clamped);
+        loadItems(clamped, itemsPerPage);
+    }, [itemsPerPage, loadItems, totalPages]);
 
-            if (typeof aValue === 'string' && typeof bValue === 'string') {
-                return sortDirection === 'asc'
-                    ? aValue.localeCompare(bValue)
-                    : bValue.localeCompare(aValue);
+    const handlePageSizeChange = (value: number) => {
+        setItemsPerPage(value);
+        setCurrentPage(1);
+        loadItems(1, value);
+    };
+
+    const fetchAllItemsForDownload = useCallback(async () => {
+        if (!condition) {
+            return [] as StockItem[];
+        }
+
+        const aggregated: StockItem[] = [];
+        const pageSize = 500;
+        let page = 1;
+        let total = Infinity;
+
+        while (aggregated.length < total) {
+            const response = await fetchItems({
+                page,
+                pageSize,
+                grouping: activeGrouping,
+                sortField,
+                sortDirection,
+            });
+
+            if (!response.items.length) {
+                break;
             }
 
-            if (typeof aValue === 'number' && typeof bValue === 'number') {
-                return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+            aggregated.push(...response.items.map(normalizeApiItem));
+            total = response.total ?? aggregated.length;
+
+            if (response.items.length < pageSize) {
+                break;
             }
 
-            return 0;
-        });
+            page += 1;
+        }
 
-        return sorted;
-    }, [items, sortField, sortDirection]);
+        return aggregated;
+    }, [condition, fetchItems, activeGrouping, sortField, sortDirection, normalizeApiItem]);
 
-    // Pagination logic
-    const totalPages = Math.ceil(processedItems.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedItems = processedItems.slice(startIndex, startIndex + itemsPerPage);
+    const handleDownload = useCallback(async () => {
+        if (!condition || isDownloading) {
+            return;
+        }
+
+        setIsDownloading(true);
+        try {
+            const allItems = await fetchAllItemsForDownload();
+            if (allItems.length === 0) {
+                setError('No items available to download');
+                return;
+            }
+
+            const headers = [
+                'Store',
+                'SKU Code',
+                'SKU Name',
+                'Brand',
+                'Current Stock',
+                'Daily Sales',
+                'Daily Stock Cover',
+                'HPP',
+                'Inventory Value',
+                'Condition',
+            ];
+
+            const escapeCsvValue = (value: string | number) => {
+                const stringValue = `${value ?? ''}`;
+                if (/[",\n]/.test(stringValue)) {
+                    return `"${stringValue.replace(/"/g, '""')}"`;
+                }
+                return stringValue;
+            };
+
+            const rows = allItems.map((item) => [
+                item.store_name,
+                item.sku_code,
+                item.sku_name,
+                item.brand_name,
+                item.current_stock,
+                item.daily_sales,
+                item.daily_stock_cover.toFixed(2),
+                item.hpp,
+                item.inventory_value,
+                CONDITION_LABELS[item.condition] ?? item.condition,
+            ]);
+
+            const csvContent = [headers, ...rows]
+                .map((row) => row.map(escapeCsvValue).join(','))
+                .join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const datePart = new Date().toISOString().split('T')[0];
+            link.download = `stock-items-${condition}-${activeGrouping}-${datePart}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (downloadError) {
+            console.error('Failed to download stock items CSV', downloadError);
+            setError('Failed to download CSV');
+        } finally {
+            setIsDownloading(false);
+        }
+    }, [condition, activeGrouping, fetchAllItemsForDownload, isDownloading, setError]);
+
+    const formatDecimal = (value: number) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+    const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+
+    const groupingDescriptions: Record<SummaryGrouping, string> = {
+        sku: 'individual SKU details',
+        stock: 'total quantity details',
+        value: 'inventory value details',
+    };
+
+    const metricConfig = activeGrouping === 'value'
+        ? { label: 'Inventory Value', field: 'inventory_value' as SortField, render: (item: StockItem) => formatCurrency(item.inventory_value) }
+        : {
+            label: activeGrouping === 'stock' ? 'Total Qty' : 'Stock',
+            field: 'current_stock' as SortField,
+            render: (item: StockItem) => formatDecimal(item.current_stock),
+        };
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="w-[95vw] max-w-[95vw] sm:w-[80vw] sm:max-w-[80vw] h-[90vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <div
-                            className="h-4 w-4 rounded-full"
-                            style={{ backgroundColor: condition ? COLORS[condition] : 'gray' }}
-                        />
-                        {condition && CONDITION_LABELS[condition]}
-                    </DialogTitle>
-                    <DialogDescription>
-                        Showing {items.length} items
-                    </DialogDescription>
+                    <div className="flex flex-col gap-3">
+                        <DialogTitle className="flex items-center gap-2">
+                            <div
+                                className="h-4 w-4 rounded-full"
+                                style={{ backgroundColor: condition ? COLORS[condition] : 'gray' }}
+                            />
+                            {condition && CONDITION_LABELS[condition]}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {condition
+                                ? `Showing ${totalItems.toLocaleString()} items (${groupingDescriptions[activeGrouping]})`
+                                : 'Select a condition to view items'}
+                        </DialogDescription>
+                        {condition && (
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <span className="text-sm text-muted-foreground">
+                                    Download CSV for the current filters ({activeGrouping}) and sorting.
+                                </span>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="gap-1"
+                                    onClick={handleDownload}
+                                    disabled={isLoading || isDownloading}
+                                >
+                                    <Download className="h-4 w-4" />
+                                    {isDownloading ? 'Preparing…' : 'Download CSV'}
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                 </DialogHeader>
 
                 <div className="flex-1 overflow-auto border rounded-md">
@@ -116,8 +336,12 @@ export function StockItemsDialog({
                                 <SortableHeader label="SKU Code" field="sku_code" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="SKU Name" field="sku_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="Brand" field="brand_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
-                                <SortableHeader label="Stock" field="current_stock" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
-                                <SortableHeader label="Days of Cover" field="days_of_cover" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                <SortableHeader label={metricConfig.label} field={metricConfig.field} currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                <SortableHeader label="Daily Sales" field="daily_sales" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+                                <SortableHeader label="Daily Stock Cover" field="daily_stock_cover" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                {activeGrouping === 'value' && (
+                                    <SortableHeader label="HPP" field="hpp" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                )}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -127,15 +351,25 @@ export function StockItemsDialog({
                                         Loading items...
                                     </TableCell>
                                 </TableRow>
-                            ) : paginatedItems.length > 0 ? (
-                                paginatedItems.map((item) => (
-                                    <TableRow key={item.id} className="hover:bg-muted/50">
+                            ) : error ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center py-8 text-red-500">
+                                        {error}
+                                    </TableCell>
+                                </TableRow>
+                            ) : items.length > 0 ? (
+                                items.map((item) => (
+                                    <TableRow key={`${item.id}-${item.store_name}`} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{item.store_name}</TableCell>
                                         <TableCell className="font-mono text-xs">{item.sku_code}</TableCell>
                                         <TableCell className="max-w-[300px] truncate" title={item.sku_name}>{item.sku_name}</TableCell>
                                         <TableCell>{item.brand_name}</TableCell>
-                                        <TableCell className="text-right font-mono">{item.current_stock}</TableCell>
-                                        <TableCell className="text-right font-mono">{item.days_of_cover.toFixed(1)}</TableCell>
+                                        <TableCell className="text-right font-mono">{metricConfig.render(item)}</TableCell>
+                                        <TableCell className="text-right font-mono">{item.daily_sales}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatDecimal(item.daily_stock_cover)}</TableCell>
+                                        {activeGrouping === 'value' && (
+                                            <TableCell className="text-right font-mono">{formatCurrency(item.hpp)}</TableCell>
+                                        )}
                                     </TableRow>
                                 ))
                             ) : (
@@ -152,15 +386,14 @@ export function StockItemsDialog({
                 {/* Pagination Controls */}
                 <div className="flex items-center justify-between pt-4 border-t">
                     <div className="text-sm text-muted-foreground">
-                        Page {currentPage} of {totalPages} ({items.length} items)
+                        Page {currentPage} of {totalPages} ({totalItems.toLocaleString()} items)
                     </div>
                     <div className="flex items-center gap-2">
                         <select
                             className="border rounded px-2 py-1 text-sm"
                             value={itemsPerPage}
                             onChange={(e) => {
-                                setItemsPerPage(Number(e.target.value));
-                                setCurrentPage(1);
+                                handlePageSizeChange(Number(e.target.value));
                             }}
                         >
                             <option value={10}>10 per page</option>
@@ -172,16 +405,16 @@ export function StockItemsDialog({
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1 || isLoading}
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages}
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages || isLoading}
                             >
                                 <ChevronRight className="h-4 w-4" />
                             </Button>
