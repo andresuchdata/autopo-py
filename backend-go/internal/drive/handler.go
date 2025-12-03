@@ -2,22 +2,28 @@ package drive
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
 )
 
 type Handler struct {
-	service *Service
+	service       *Service
+	ingestService *IngestService
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, ingestService *IngestService) *Handler {
+	return &Handler{
+		service:       service,
+		ingestService: ingestService,
+	}
 }
 
 func (h *Handler) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/api/drive/files", h.ListFiles).Methods("GET")
 	router.HandleFunc("/api/drive/files/download", h.DownloadFile).Methods("GET")
+	router.HandleFunc("/api/drive/ingest", h.IngestFile).Methods("POST")
 }
 
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
@@ -61,4 +67,20 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (h *Handler) IngestFile(w http.ResponseWriter, r *http.Request) {
+	fileID := r.URL.Query().Get("fileId")
+	if fileID == "" {
+		http.Error(w, "fileId parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.ingestService.IngestFile(r.Context(), fileID); err != nil {
+		http.Error(w, fmt.Sprintf("ingestion failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "File ingested successfully"})
 }

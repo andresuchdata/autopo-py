@@ -1,16 +1,20 @@
-version: '3.8'
 
 services:
   db:
-    image: postgres:15-alpine
+    image: timescale/timescaledb:latest-pg15
     container_name: autopo-db
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-autopo}
+      TIMESCALEDB_TELEMETRY: 'off'
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/migrations:/docker-entrypoint-initdb.d
+      - ./data/seeds:/docker-entrypoint-seed-data
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     ports:
       - "5432:5432"
     healthcheck:
@@ -38,14 +42,42 @@ services:
       - DB_SSLMODE=disable
       - APP_UPLOAD_DIR=/app/data/uploads
       - APP_DATA_DIR=/app/data/output
+      - SEED_DATA_DIR=/app/data/seeds
+    entrypoint: ["/app/entrypoint.sh"]
+    command: ["/app/server"]
     ports:
       - "8080:8080"
     volumes:
       - ./data/uploads:/app/data/uploads
       - ./data/output:/app/data/output
+      - ./data/seeds:/app/data/seeds
+      - ./scripts:/app/scripts
     networks:
       - autopo-network
     restart: unless-stopped
+
+  seeder:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: autopo-seeder
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=autopo
+      - DB_SSLMODE=disable
+      - SEED_DATA_DIR=/app/data/seeds
+      - DATABASE_URL=${DATABASE_URL}
+    volumes:
+      - ./data/seeds:/app/data/seeds
+    command: /app/bin/seed --db-url "${DATABASE_URL}"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - autopo-network
 
 networks:
   autopo-network:

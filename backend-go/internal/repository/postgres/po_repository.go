@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog/log"
-	"github.com/yourusername/autopo/backend-go/internal/domain"
 )
 
 type poRepository struct {
@@ -126,4 +125,46 @@ func (r *poRepository) GetStores(ctx context.Context) ([]*domain.Store, error) {
 	}
 
 	return stores, nil
+}
+
+func (r *poRepository) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
+	query := `
+		SELECT id, name, created_at, updated_at
+		FROM brands
+		ORDER BY name
+	`
+
+	var brands []*domain.Brand
+	if err := sqlx.SelectContext(ctx, r.db, &brands, query); err != nil {
+		return nil, fmt.Errorf("failed to list brands: %w", err)
+	}
+
+	return brands, nil
+}
+
+func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset int) ([]*domain.Product, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := `
+		SELECT id, sku, name, COALESCE(hpp, 0) AS hpp, COALESCE(price, 0) AS price, created_at, updated_at
+		FROM products
+		WHERE ($1 = '' OR sku ILIKE '%' || $1 || '%' OR name ILIKE '%' || $1 || '%')
+		ORDER BY sku ASC
+		LIMIT $2 OFFSET $3
+	`
+
+	var products []*domain.Product
+	if err := sqlx.SelectContext(ctx, r.db, &products, query, search, limit, offset); err != nil {
+		return nil, fmt.Errorf("failed to list skus: %w", err)
+	}
+
+	return products, nil
 }

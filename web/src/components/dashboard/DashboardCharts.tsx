@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { COLORS, CONDITION_LABELS } from "./SummaryCards";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConditionKey } from "@/services/dashboardService";
+import { type ConditionBreakdownResponse } from "@/services/stockHealthService";
 
 interface DashboardChartsProps {
     charts: {
@@ -9,12 +11,34 @@ interface DashboardChartsProps {
         pieDataByStock: any[];
         pieDataByValue: any[];
     };
-    byBrand?: Map<string, any[]>;
-    byStore?: Map<string, any[]>;
+    brandBreakdown: ConditionBreakdownResponse[];
+    storeBreakdown: ConditionBreakdownResponse[];
     isLoading?: boolean;
 }
 
-export function DashboardCharts({ charts, byBrand, byStore, isLoading }: DashboardChartsProps) {
+const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock'];
+
+export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoading }: DashboardChartsProps) {
+    const buildStackedData = (breakdown: ConditionBreakdownResponse[], dimension: 'brand' | 'store') => {
+        const map = new Map<string, Record<ConditionKey, number>>();
+
+        breakdown.forEach((entry) => {
+            const label = (dimension === 'brand' ? entry.brand : entry.store) ?? 'Unknown';
+            const condition = (entry.condition as ConditionKey) ?? 'out_of_stock';
+            const existing = map.get(label) ?? Object.fromEntries(CONDITION_KEYS.map((key) => [key, 0])) as Record<ConditionKey, number>;
+            existing[condition] = (existing[condition] || 0) + entry.count;
+            map.set(label, existing);
+        });
+
+        return Array.from(map.entries()).map(([label, counts]) => ({
+            [dimension]: label,
+            ...counts,
+        }));
+    };
+
+    const brandData = buildStackedData(brandBreakdown, 'brand');
+    const storeData = buildStackedData(storeBreakdown, 'store');
+
     // Helper to format currency
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('id-ID', {
@@ -140,7 +164,7 @@ export function DashboardCharts({ charts, byBrand, byStore, isLoading }: Dashboa
 
             {/* Detailed Breakdowns */}
             <div className="grid gap-6 md:grid-cols-2">
-                {byBrand && byBrand.size > 0 && (
+                {brandData.length > 0 && (
                     <Card>
                         <CardHeader>
                             <CardTitle>Breakdown by Brand</CardTitle>
@@ -149,13 +173,7 @@ export function DashboardCharts({ charts, byBrand, byStore, isLoading }: Dashboa
                             <div className="h-[400px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart
-                                        data={Array.from(byBrand.entries()).map(([brand, items]) => {
-                                            const counts = items.reduce((acc, item) => {
-                                                acc[item.condition] = (acc[item.condition] || 0) + 1;
-                                                return acc;
-                                            }, {} as Record<string, number>);
-                                            return { brand, ...counts };
-                                        })}
+                                        data={brandData}
                                         layout="vertical"
                                         margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
                                     >
@@ -180,7 +198,7 @@ export function DashboardCharts({ charts, byBrand, byStore, isLoading }: Dashboa
                     </Card>
                 )}
 
-                {byStore && byStore.size > 0 && (
+                {storeData.length > 0 && (
                     <Card>
                         <CardHeader>
                             <CardTitle>Breakdown by Store</CardTitle>
@@ -189,13 +207,7 @@ export function DashboardCharts({ charts, byBrand, byStore, isLoading }: Dashboa
                             <div className="h-[400px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart
-                                        data={Array.from(byStore.entries()).map(([store, items]) => {
-                                            const counts = items.reduce((acc, item) => {
-                                                acc[item.condition] = (acc[item.condition] || 0) + 1;
-                                                return acc;
-                                            }, {} as Record<string, number>);
-                                            return { store, ...counts };
-                                        })}
+                                        data={storeData}
                                         layout="vertical"
                                         margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
                                     >

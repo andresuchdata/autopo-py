@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/drive"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/repository/postgres"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
-	"github.com/yourusername/autopo-backend-go/internal/config"
-	"github.com/yourusername/autopo-backend-go/internal/drive"
 )
 
 func main() {
@@ -29,7 +31,20 @@ func main() {
 	r := mux.NewRouter()
 
 	// Register routes
-	driveHandler := drive.NewHandler(driveService)
+	// Initialize Database
+	db, err := postgres.NewDB(&cfg.Database)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// Initialize Repositories
+	ingestRepo := repository.NewIngestRepository(db.DB.DB)
+
+	// Initialize Services
+	ingestService := drive.NewIngestService(driveService, ingestRepo)
+
+	// Register routes
+	driveHandler := drive.NewHandler(driveService, ingestService)
 	driveHandler.RegisterRoutes(r)
 
 	// Health check endpoint
