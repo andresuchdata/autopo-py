@@ -41,7 +41,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
     const chartHeight = svgHeight - padding.top - padding.bottom;
     const chartWidth = svgWidth - padding.left - padding.right;
     const centerY = padding.top + chartHeight / 2;
-    const curveStrength = 0.28;
+    const curveStrength = 0.18;
 
     // Calculate the width of each segment
     const segmentWidth = chartWidth / data.length;
@@ -98,7 +98,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
         const bottomRight = centerY + rightHeight / 2;
 
         const transitionWidth = segmentWidth * curveStrength;
-        const centerFlatHalf = Math.max(segmentWidth * 0.08, transitionWidth * 0.5);
+        const centerFlatHalf = Math.max(segmentWidth * 0.12, transitionWidth * 0.6);
         const leftCurveEnd = midX - centerFlatHalf;
         const rightCurveStart = midX + centerFlatHalf;
 
