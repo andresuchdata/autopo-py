@@ -163,6 +163,11 @@ func analyticsFlags() []cli.Flag {
 			EnvVars: []string{"STOCK_HEALTH_DIR"},
 		},
 		&cli.StringFlag{
+			Name:    "stock-health-file",
+			Usage:   "Optional CSV filename or path to process (defaults to all files in stock-health-dir)",
+			EnvVars: []string{"STOCK_HEALTH_FILE"},
+		},
+		&cli.StringFlag{
 			Name:    "po-snapshots-dir",
 			Usage:   "Directory containing PO snapshot CSV files",
 			Value:   "./data/seeds/po_snapshots",
@@ -494,6 +499,11 @@ func main() {
 						Usage:   "Directory containing stock health CSV files",
 						Value:   "./data/seeds/stock_health",
 						EnvVars: []string{"STOCK_HEALTH_DIR"},
+					},
+					&cli.StringFlag{
+						Name:    "stock-health-file",
+						Usage:   "Optional CSV filename or path to process (defaults to all files in stock-health-dir)",
+						EnvVars: []string{"STOCK_HEALTH_FILE"},
 					},
 					&cli.StringFlag{
 						Name:    "po-snapshots-dir",

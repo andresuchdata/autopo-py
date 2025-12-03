@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/analytics"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/types"
@@ -22,6 +23,7 @@ func SeedAnalyticsData(c *cli.Context) error {
 	}
 
 	stockHealthDir := c.String("stock-health-dir")
+	stockHealthFile := strings.TrimSpace(c.String("stock-health-file"))
 	poSnapshotsDir := c.String("po-snapshots-dir")
 	stockHealthOnly := c.Bool("stock-health-only")
 	poSnapshotsOnly := c.Bool("po-snapshots-only")
@@ -55,22 +57,43 @@ func SeedAnalyticsData(c *cli.Context) error {
 	// Process stock health files if enabled
 	if processStockHealth {
 		log.Println("Processing stock health files...")
-		if err := filepath.Walk(stockHealthDir, func(path string, info os.FileInfo, err error) error {
+		if stockHealthFile != "" {
+			targetPath := stockHealthFile
+			if !filepath.IsAbs(targetPath) {
+				targetPath = filepath.Join(stockHealthDir, targetPath)
+			}
+			info, err := os.Stat(targetPath)
 			if err != nil {
-				return err
+				return fmt.Errorf("stock health file not accessible: %w", err)
 			}
 			if info.IsDir() {
-				return nil
+				return fmt.Errorf("stock health file points to a directory: %s", targetPath)
 			}
-			if filepath.Ext(path) == ".csv" {
-				log.Printf("Processing stock health file: %s\n", path)
-				if err := processor.ProcessFile(c.Context, path); err != nil {
-					return fmt.Errorf("error processing %s: %w", path, err)
+			if filepath.Ext(targetPath) != ".csv" {
+				return fmt.Errorf("stock health file must be a .csv: %s", targetPath)
+			}
+			log.Printf("Processing stock health file: %s\n", targetPath)
+			if err := processor.ProcessFile(c.Context, targetPath); err != nil {
+				return fmt.Errorf("error processing %s: %w", targetPath, err)
+			}
+		} else {
+			if err := filepath.Walk(stockHealthDir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
 				}
+				if info.IsDir() {
+					return nil
+				}
+				if filepath.Ext(path) == ".csv" {
+					log.Printf("Processing stock health file: %s\n", path)
+					if err := processor.ProcessFile(c.Context, path); err != nil {
+						return fmt.Errorf("error processing %s: %w", path, err)
+					}
+				}
+				return nil
+			}); err != nil {
+				return fmt.Errorf("error walking stock health directory: %w", err)
 			}
-			return nil
-		}); err != nil {
-			return fmt.Errorf("error walking stock health directory: %w", err)
 		}
 	}
 
