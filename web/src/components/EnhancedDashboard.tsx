@@ -119,10 +119,10 @@ export function EnhancedDashboard() {
     <div className="space-y-8 max-w-[1600px] mx-auto p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Stock Health Dashboard</h2>
-          <p className="text-muted-foreground mt-1">Overview of inventory health across brands and stores.</p>
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Stock Health Dashboard</h2>
+          <p className="text-muted-foreground dark:text-gray-400 mt-1">Overview of inventory health across brands and stores.</p>
         </div>
-        <div className="text-sm text-muted-foreground bg-gray-100 px-3 py-1 rounded-full">
+        <div className="text-sm text-muted-foreground bg-gray-100 dark:bg-gray-800 dark:text-gray-300 px-3 py-1 rounded-full border dark:border-gray-700">
           {lastUpdated && `Last updated: ${lastUpdated.toLocaleString()}`}
         </div>
       </div>

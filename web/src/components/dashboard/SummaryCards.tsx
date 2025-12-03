@@ -49,7 +49,7 @@ function HeaderRow() {
             {CONDITIONS.map((condition) => (
                 <div
                     key={condition}
-                    className="flex items-center justify-center p-3 rounded-lg border-2 bg-white font-medium text-sm text-center shadow-sm"
+                    className="flex items-center justify-center p-3 rounded-lg border-2 bg-white dark:bg-gray-900/40 font-medium text-sm text-center shadow-sm text-gray-800 dark:text-gray-100"
                     style={{ borderColor: COLORS[condition] }}
                 >
                     {HEADER_LABELS[condition]}
@@ -96,20 +96,20 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
                 return (
                     <Card
                         key={condition}
-                        className="cursor-pointer hover:shadow-md transition-all border-t-4"
+                        className="cursor-pointer hover:shadow-md transition-all border-t-4 bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800"
                         style={{ borderTopColor: COLORS[condition] }}
                         onClick={() => onCardClick(condition, grouping)}
                     >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                            <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                            <CardTitle className="text-[10px] font-bold text-muted-foreground dark:text-gray-300 uppercase tracking-wider">
                                 {CONDITION_LABELS[condition]}
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4 pt-0">
-                            <div className={`font-bold ${type === 'currency' ? 'text-lg' : 'text-2xl'}`}>
+                            <div className={`font-bold ${type === 'currency' ? 'text-lg' : 'text-2xl'} text-gray-900 dark:text-gray-100`}>
                                 {formatValue(value)}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">
+                            <p className="text-xs text-muted-foreground dark:text-gray-400 mt-1">
                                 {displayPercentage}% of total
                             </p>
                         </CardContent>

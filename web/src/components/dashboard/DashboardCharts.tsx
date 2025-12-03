@@ -96,9 +96,9 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
         const total = data.reduce((sum, item) => sum + item.value, 0);
 
         return (
-            <Card className="flex flex-col">
+            <Card className="flex flex-col bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
                 <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-semibold text-center">{title}</CardTitle>
+                    <CardTitle className="text-lg font-semibold text-center text-gray-900 dark:text-gray-100">{title}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 min-h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -165,9 +165,9 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
             {/* Detailed Breakdowns */}
             <div className="grid gap-6 md:grid-cols-2">
                 {brandData.length > 0 && (
-                    <Card>
+                    <Card className="bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
                         <CardHeader>
-                            <CardTitle>Breakdown by Brand</CardTitle>
+                            <CardTitle className="text-gray-900 dark:text-gray-100">Breakdown by Brand</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="h-[400px]">
@@ -199,9 +199,9 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                 )}
 
                 {storeData.length > 0 && (
-                    <Card>
+                    <Card className="bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
                         <CardHeader>
-                            <CardTitle>Breakdown by Store</CardTitle>
+                            <CardTitle className="text-gray-900 dark:text-gray-100">Breakdown by Store</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="h-[400px]">

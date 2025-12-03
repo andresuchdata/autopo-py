@@ -192,3 +192,23 @@ func (s *POService) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
 func (s *POService) GetSkus(ctx context.Context, search string, limit, offset int) ([]*domain.Product, error) {
 	return s.repo.GetSkus(ctx, search, limit, offset)
 }
+
+// GetDashboardSummary returns the aggregated dashboard data
+func (s *POService) GetDashboardSummary(ctx context.Context) (*domain.DashboardSummary, error) {
+	return s.repo.GetDashboardSummary(ctx)
+}
+
+// GetPOTrend returns the trend data
+func (s *POService) GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error) {
+	return s.repo.GetPOTrend(ctx, interval)
+}
+
+// GetPOAging returns the aging data
+func (s *POService) GetPOAging(ctx context.Context) ([]domain.POAging, error) {
+	return s.repo.GetPOAging(ctx)
+}
+
+// GetSupplierPerformance returns the supplier performance data
+func (s *POService) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
+	return s.repo.GetSupplierPerformance(ctx)
+}
