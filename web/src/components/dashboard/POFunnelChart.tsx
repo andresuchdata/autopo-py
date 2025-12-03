@@ -41,8 +41,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
     const chartHeight = svgHeight - padding.top - padding.bottom;
     const chartWidth = svgWidth - padding.left - padding.right;
     const centerY = padding.top + chartHeight / 2;
-    const edgeBlend = 0.45;
-    const curveStrength = 0.12;
+    const curveStrength = 0.28;
 
     // Calculate the width of each segment
     const segmentWidth = chartWidth / data.length;
@@ -87,15 +86,15 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
         const topRight = centerY - rightHeight / 2;
         const bottomRight = centerY + rightHeight / 2;
 
-        const curveInset = segmentWidth * curveStrength;
+        const transitionWidth = segmentWidth * curveStrength;
 
         const path = `
             M ${startX} ${topLeft}
-            C ${startX + curveInset} ${topLeft} ${midX - curveInset} ${topCenter} ${midX} ${topCenter}
-            C ${midX + curveInset} ${topCenter} ${endX - curveInset} ${topRight} ${endX} ${topRight}
+            C ${startX + transitionWidth} ${topLeft} ${midX - transitionWidth} ${topCenter} ${midX} ${topCenter}
+            C ${midX + transitionWidth} ${topCenter} ${endX - transitionWidth} ${topRight} ${endX} ${topRight}
             L ${endX} ${bottomRight}
-            C ${endX - curveInset} ${bottomRight} ${midX + curveInset} ${bottomCenter} ${midX} ${bottomCenter}
-            C ${midX - curveInset} ${bottomCenter} ${startX + curveInset} ${bottomLeft} ${startX} ${bottomLeft}
+            C ${endX - transitionWidth} ${bottomRight} ${midX + transitionWidth} ${bottomCenter} ${midX} ${bottomCenter}
+            C ${midX - transitionWidth} ${bottomCenter} ${startX + transitionWidth} ${bottomLeft} ${startX} ${bottomLeft}
             Z
         `;
 
