@@ -35,6 +35,19 @@ const formatCount = (count: number) => {
 };
 
 export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
+    // Define the desired order for PO status stages (same as PO Status cards)
+    const stageOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived'];
+    
+    // Sort data according to the defined order
+    const sortedData = [...data].sort((a, b) => {
+        const indexA = stageOrder.indexOf(a.stage);
+        const indexB = stageOrder.indexOf(b.stage);
+        // If stage not found in order array, put it at the end
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+    });
+
     const svgHeight = 300;
     const svgWidth = 980;
     const padding = { top: 30, right: 20, bottom: 30, left: 20 };
@@ -44,10 +57,10 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
     const curveStrength = 0.35;
 
     // Calculate the width of each segment
-    const segmentWidth = chartWidth / data.length;
+    const segmentWidth = chartWidth / sortedData.length;
 
     // Find max value for scaling heights
-    const maxValue = Math.max(...data.map(d => d.total_value));
+    const maxValue = Math.max(...sortedData.map(d => d.total_value));
 
     const minRatio = 0.18;
     const getHeight = (value: number) => {
@@ -61,7 +74,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
         return chartHeight * ratio;
     };
 
-    const rawHeights = data.map(item => getHeight(item.total_value));
+    const rawHeights = sortedData.map(item => getHeight(item.total_value));
     const heights = rawHeights.map((height, index) => {
         const prev = rawHeights[index - 1] ?? height;
         const next = rawHeights[index + 1] ?? height;
@@ -129,7 +142,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
             <h3 className="text-lg font-semibold mb-4">PO Lifecycle Funnel</h3>
             <div className="w-full overflow-x-auto">
                 <svg width={svgWidth} height={svgHeight} className="w-full" viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="xMidYMid meet">
-                    {data.map((item, index) => {
+                    {sortedData.map((item, index) => {
                         const { path, midX, currentHeight, topCenter, bottomCenter } = generateSegment(index, item);
                         const textInside = currentHeight > 70;
                         const labelY = textInside ? centerY - 18 : topCenter - 10;
