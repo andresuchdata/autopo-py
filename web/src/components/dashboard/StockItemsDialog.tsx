@@ -332,7 +332,7 @@ export function StockItemsDialog({
 
                 <div className="flex-1 overflow-auto border rounded-md">
                     <Table>
-                        <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
+                        <TableHeader className="sticky top-0 bg-white dark:bg-gray-800 z-10 shadow-sm">
                             <TableRow>
                                 <SortableHeader label="Store" field="store_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="SKU Code" field="sku_code" currentSort={sortField} direction={sortDirection} onSort={handleSort} />

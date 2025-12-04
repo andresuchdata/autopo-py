@@ -86,6 +86,12 @@ export function EnhancedDashboard() {
     setIsDialogOpen(true);
   }, []);
 
+  const handleOverstockCardClick = useCallback((category: string, grouping: SummaryGrouping) => {
+    setSelectedCondition('overstock');
+    setSelectedGrouping(grouping);
+    setIsDialogOpen(true);
+  }, []);
+
   const handleDialogOpenChange = useCallback((open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
@@ -166,7 +172,7 @@ export function EnhancedDashboard() {
 
       <div className="space-y-4">
         <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Overstock Subgroups</h3>
-        <OverstockSubgroupCards breakdown={overstockBreakdown} />
+        <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} />
       </div>
 
       <DashboardCharts

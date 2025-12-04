@@ -1,18 +1,25 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DashboardOverstockSummary, OverstockCategory } from "@/services/dashboardService";
+import type { SummaryGrouping } from "@/types/stockHealth";
 
-const CATEGORY_CONFIG: Record<OverstockCategory, { label: string; description: string }> = {
+const CATEGORY_CONFIG: Record<OverstockCategory, { label: string; description: string; color: string; borderColor: string }> = {
   ringan: {
     label: "Ringan",
     description: "30 < Days Stock Cover ≤ 45",
+    color: "#93C5FD",
+    borderColor: "#60A5FA",
   },
   sedang: {
     label: "Sedang",
     description: "45 < Days Stock Cover ≤ 60",
+    color: "#3B82F6",
+    borderColor: "#2563EB",
   },
   berat: {
     label: "Berat",
     description: "Days Stock Cover > 60",
+    color: "#1E40AF",
+    borderColor: "#1E3A8A",
   },
 };
 
@@ -20,6 +27,7 @@ const CATEGORY_ORDER: OverstockCategory[] = ["ringan", "sedang", "berat"];
 
 interface OverstockSubgroupCardsProps {
   breakdown: DashboardOverstockSummary;
+  onCardClick?: (category: OverstockCategory, grouping: SummaryGrouping) => void;
 }
 
 interface RowConfig {
@@ -54,7 +62,7 @@ const formatPercentage = (value: number, total: number) => {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 };
 
-export function OverstockSubgroupCards({ breakdown }: OverstockSubgroupCardsProps) {
+export function OverstockSubgroupCards({ breakdown, onCardClick }: OverstockSubgroupCardsProps) {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-[150px_repeat(3,1fr)] items-stretch">
@@ -63,7 +71,7 @@ export function OverstockSubgroupCards({ breakdown }: OverstockSubgroupCardsProp
         {CATEGORY_ORDER.map((category) => (
           <div
             key={category}
-            className="flex flex-col items-center justify-center p-3 rounded-lg border bg-white dark:bg-gray-900/40 text-center shadow-sm text-gray-800 dark:text-gray-100"
+            className="flex flex-col items-center justify-center p-3 rounded-lg bg-white dark:bg-gray-900/40 text-center shadow-sm text-gray-800 dark:text-gray-100"
           >
             <div className="font-semibold text-sm uppercase tracking-wide">
               {CATEGORY_CONFIG[category].label}
@@ -94,7 +102,15 @@ export function OverstockSubgroupCards({ breakdown }: OverstockSubgroupCardsProp
                 const percentage = formatPercentage(value, total);
 
                 return (
-                  <Card key={`${row.title}-${category}`} className="bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 shadow-sm">
+                  <Card
+                    key={`${row.title}-${category}`}
+                    className="bg-white dark:bg-gray-900/50 border-2 shadow-sm cursor-pointer hover:shadow-md transition-all"
+                    style={{
+                      borderTopColor: CATEGORY_CONFIG[category].borderColor,
+                      borderTopWidth: '4px',
+                    }}
+                    onClick={() => onCardClick?.(category, row.type === "count" ? "sku" : row.type === "number" ? "stock" : "value")}
+                  >
                     <CardHeader className="pb-2">
                       <CardTitle className="text-xs font-semibold text-muted-foreground dark:text-gray-300 uppercase tracking-wide">
                         {CATEGORY_CONFIG[category].label}
