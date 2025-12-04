@@ -144,3 +144,73 @@ func (h *POHandler) GetStoreResults(c *gin.Context) {
 
 	c.JSON(http.StatusOK, results)
 }
+
+// GetDashboardSummary returns the aggregated dashboard data
+func (h *POHandler) GetDashboardSummary(c *gin.Context) {
+	summary, err := h.poService.GetDashboardSummary(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch dashboard summary"})
+		return
+	}
+	c.JSON(http.StatusOK, summary)
+}
+
+// GetPOTrend returns the trend data
+func (h *POHandler) GetPOTrend(c *gin.Context) {
+	interval := c.DefaultQuery("interval", "day")
+	trends, err := h.poService.GetPOTrend(c.Request.Context(), interval)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch trends"})
+		return
+	}
+	c.JSON(http.StatusOK, trends)
+}
+
+// GetPOAging returns the aging data
+func (h *POHandler) GetPOAging(c *gin.Context) {
+	aging, err := h.poService.GetPOAging(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch aging data"})
+		return
+	}
+	c.JSON(http.StatusOK, aging)
+}
+
+// GetSupplierPerformance returns the supplier performance data
+func (h *POHandler) GetSupplierPerformance(c *gin.Context) {
+	perf, err := h.poService.GetSupplierPerformance(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier performance"})
+		return
+	}
+	c.JSON(http.StatusOK, perf)
+}
+
+// GetPOSnapshotItems returns PO snapshot items filtered by status with pagination and sorting
+
+func (h *POHandler) GetPOSnapshotItems(c *gin.Context) {
+	status := c.Query("status")
+	if status == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "status parameter is required"})
+		return
+	}
+
+	statusCode, ok := domain.ParsePOStatus(status)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status value"})
+		return
+	}
+
+	page := parsePositiveIntWithDefault(c.Query("page"), 1)
+	pageSize := parsePositiveIntWithDefault(c.Query("page_size"), 20)
+	sortField := c.DefaultQuery("sort_field", "po_number")
+	sortDirection := c.DefaultQuery("sort_direction", "asc")
+
+	response, err := h.poService.GetPOSnapshotItems(c.Request.Context(), statusCode, page, pageSize, sortField, sortDirection)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch PO snapshot items"})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}

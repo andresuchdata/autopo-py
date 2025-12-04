@@ -42,20 +42,20 @@ export function Sidebar({
     return (
         <div
             className={clsx(
-                "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col h-screen fixed left-0 top-0 bottom-0 z-10",
+                "bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transition-all duration-300 flex flex-col h-[calc(100vh-4rem)] fixed left-0 top-16 bottom-0 z-10",
                 collapsed ? "w-12" : "w-64"
             )}
         >
             {/* Header with Toggle */}
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0 bg-white">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between flex-shrink-0 bg-white dark:bg-gray-900">
                 {!collapsed && (
-                    <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+                    <h2 className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wide">
                         Stores
                     </h2>
                 )}
                 <button
                     onClick={onToggleCollapse}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"
                     title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                 >
                     {collapsed ? (
@@ -70,7 +70,7 @@ export function Sidebar({
             {!collapsed && (
                 <div className="flex-1 overflow-y-auto py-2">
                     {stores.length === 0 ? (
-                        <div className="p-4 text-center text-sm text-gray-500">
+                        <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
                             No stores processed yet
                         </div>
                     ) : (
@@ -81,10 +81,10 @@ export function Sidebar({
                                     onClick={() => onSelectStore(store.name)}
                                     className={clsx(
                                         "w-full text-left p-3 rounded-lg transition-all duration-200",
-                                        "hover:bg-gray-50 border",
+                                        "hover:bg-gray-50 dark:hover:bg-gray-800 border",
                                         selectedStore === store.name
-                                            ? "bg-blue-50 border-blue-200 shadow-sm"
-                                            : "bg-white border-gray-100 hover:border-gray-200"
+                                            ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 shadow-sm"
+                                            : "bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700"
                                     )}
                                 >
                                     <div className="flex items-start justify-between gap-2">
@@ -92,12 +92,12 @@ export function Sidebar({
                                             <div className={clsx(
                                                 "font-semibold text-sm truncate",
                                                 selectedStore === store.name
-                                                    ? "text-blue-700"
-                                                    : "text-gray-800"
+                                                    ? "text-blue-700 dark:text-blue-400"
+                                                    : "text-gray-800 dark:text-gray-200"
                                             )}>
                                                 {store.name}
                                             </div>
-                                            <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                                            <div className="flex items-center gap-1 mt-1 text-xs text-gray-500 dark:text-gray-400">
                                                 <FileText className="w-3 h-3" />
                                                 <span className="truncate">{store.filename}</span>
                                             </div>
@@ -105,13 +105,13 @@ export function Sidebar({
                                         <div className={clsx(
                                             "text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0",
                                             selectedStore === store.name
-                                                ? "bg-blue-100 text-blue-700"
-                                                : "bg-gray-100 text-gray-600"
+                                                ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
+                                                : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
                                         )}>
                                             {store.row_count}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
+                                    <div className="flex items-center gap-1 mt-2 text-xs text-gray-400 dark:text-gray-500">
                                         <Clock className="w-3 h-3" />
                                         <span>{formatTimestamp(store.timestamp)}</span>
                                     </div>
@@ -132,8 +132,8 @@ export function Sidebar({
                             className={clsx(
                                 "w-full p-2 rounded-lg transition-all",
                                 selectedStore === store.name
-                                    ? "bg-blue-50 text-blue-700"
-                                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400"
+                                    : "bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
                             )}
                             title={store.name}
                         >

@@ -370,7 +370,7 @@ export function Dashboard() {
 
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 flex transition-colors">
             <Sidebar
                 stores={stores}
                 selectedStore={selectedStore}
@@ -380,25 +380,25 @@ export function Dashboard() {
             />
             <div className={`flex-1 flex flex-col min-h-screen overflow-auto transition-all duration-300 ${sidebarCollapsed ? 'ml-12' : 'ml-64'}`}>
                 {/* Header */}
-                <div className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
+                <div className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-800 flex-shrink-0 transition-colors">
                     <div className="max-w-full mx-auto px-6 py-4">
                         <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                             AutoPO Dashboard
                         </h1>
-                        <p className="text-sm text-gray-600 mt-1">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                             Automated Purchase Order Processing System
                         </p>
                     </div>
                 </div>
 
                 {/* File Upload Section */}
-                <div className="bg-white border-b border-gray-200 flex-shrink-0">
+                <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex-shrink-0 transition-colors">
                     {/* Collapse/Expand Header */}
-                    <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                        <h3 className="text-sm font-semibold text-gray-700">Upload & Process Files</h3>
+                    <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50 dark:bg-gray-900/50">
+                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Upload & Process Files</h3>
                         <button
                             onClick={() => setUploadSectionCollapsed(!uploadSectionCollapsed)}
-                            className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors text-gray-600"
+                            className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"
                             title={uploadSectionCollapsed ? "Expand upload section" : "Collapse upload section"}
                         >
                             {uploadSectionCollapsed ? (
@@ -517,23 +517,23 @@ export function Dashboard() {
                             {/* Summary */}
                             {summary && (
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 flex-shrink-0">
-                                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                                        <p className="text-xs text-blue-600 font-medium uppercase tracking-wide">Total SKUs</p>
-                                        <p className="text-2xl font-bold text-blue-900 mt-1">{summary.total_skus}</p>
+                                    <div className="bg-card dark:bg-gray-800 p-5 rounded-xl border border-border dark:border-gray-700 shadow-sm transition-colors">
+                                        <p className="text-[11px] font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-2">Total SKUs</p>
+                                        <p className="text-3xl font-bold text-foreground dark:text-white tracking-tight">{summary.total_skus}</p>
                                     </div>
-                                    <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-                                        <p className="text-xs text-green-600 font-medium uppercase tracking-wide">Items to Order</p>
-                                        <p className="text-2xl font-bold text-green-900 mt-1">{summary.items_to_order}</p>
+                                    <div className="bg-card dark:bg-gray-800 p-5 rounded-xl border border-border dark:border-gray-700 shadow-sm transition-colors">
+                                        <p className="text-[11px] font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-2">Items to Order</p>
+                                        <p className="text-3xl font-bold text-green-600 dark:text-green-400 tracking-tight">{summary.items_to_order}</p>
                                     </div>
-                                    <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-                                        <p className="text-xs text-purple-600 font-medium uppercase tracking-wide">Regular PO Cost</p>
-                                        <p className="text-lg font-bold text-purple-900 mt-1 truncate" title={summary.total_regular_po_cost}>
+                                    <div className="bg-card dark:bg-gray-800 p-5 rounded-xl border border-border dark:border-gray-700 shadow-sm transition-colors">
+                                        <p className="text-[11px] font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-2">Regular PO Cost</p>
+                                        <p className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1 truncate tracking-tight" title={summary.total_regular_po_cost}>
                                             {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(summary.total_regular_po_cost)}
                                         </p>
                                     </div>
-                                    <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-                                        <p className="text-xs text-red-600 font-medium uppercase tracking-wide">Emergency PO Cost</p>
-                                        <p className="text-lg font-bold text-red-900 mt-1 truncate" title={summary.total_emergency_po_cost}>
+                                    <div className="bg-card dark:bg-gray-800 p-5 rounded-xl border border-border dark:border-gray-700 shadow-sm transition-colors">
+                                        <p className="text-[11px] font-semibold text-muted-foreground dark:text-gray-400 uppercase tracking-wider mb-2">Emergency PO Cost</p>
+                                        <p className="text-xl font-bold text-red-600 dark:text-red-400 mt-1 truncate tracking-tight" title={summary.total_emergency_po_cost}>
                                             {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(summary.total_emergency_po_cost)}
                                         </p>
                                     </div>
@@ -553,7 +553,7 @@ export function Dashboard() {
                         </div>
                     ) : (
                         <div className="h-full flex items-center justify-center">
-                            <div className="text-center text-gray-500">
+                            <div className="text-center text-gray-500 dark:text-gray-400">
                                 <p className="text-lg font-medium">No store selected</p>
                                 <p className="text-sm mt-2">Process some PO files or select a store from the sidebar</p>
                             </div>
