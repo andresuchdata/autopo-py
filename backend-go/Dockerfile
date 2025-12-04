@@ -10,19 +10,19 @@ RUN apk add --no-cache git
 
 # Download dependencies
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,target=/go/pkg/mod,id=gomod-cache \
+    --mount=type=cache,target=/root/.cache/go-build,id=gobuild-cache \
     go mod download
 
 # Copy source code
 COPY . .
 
 # Build the server and seeder
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,target=/go/pkg/mod,id=gomod-cache \
+    --mount=type=cache,target=/root/.cache/go-build,id=gobuild-cache \
     CGO_ENABLED=0 GOOS=linux go build -o /app/bin/server ./cmd/server
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,target=/go/pkg/mod,id=gomod-cache \
+    --mount=type=cache,target=/root/.cache/go-build,id=gobuild-cache \
     CGO_ENABLED=0 GOOS=linux go build -o /app/bin/seed ./cmd/seed
 
 # Final stage
