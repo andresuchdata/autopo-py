@@ -118,6 +118,7 @@ export function useStockData() {
       grouping?: SummaryGrouping;
       sortField?: StockItemsSortField;
       sortDirection?: SortDirection;
+      overstockGroup?: string;
     }): Promise<StockHealthItemsResponse> => {
       const stockDate = params.date ?? lastDate ?? getTodayDate();
       if (!stockDate) {
@@ -135,6 +136,7 @@ export function useStockData() {
         grouping: params.grouping,
         sortField: params.sortField,
         sortDirection: params.sortDirection,
+        overstockGroup: params.overstockGroup,
       });
     },
     [getTodayDate, lastDate, lastFilters]

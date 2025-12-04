@@ -77,6 +77,24 @@ func (h *StockHealthHandler) parseFilter(c *gin.Context) domain.StockHealthFilte
 	}
 	filter.SortDir = sortDir
 
+	parseFloat64 := func(param string) *float64 {
+		value := strings.TrimSpace(c.Query(param))
+		if value == "" {
+			return nil
+		}
+		if f, err := strconv.ParseFloat(value, 64); err == nil {
+			return &f
+		}
+		return nil
+	}
+
+	filter.DailyCoverMin = parseFloat64("daily_cover_min")
+	filter.DailyCoverMax = parseFloat64("daily_cover_max")
+
+	if overstockGroup := strings.TrimSpace(c.Query("overstock_group")); overstockGroup != "" {
+		filter.OverstockGroup = overstockGroup
+	}
+
 	return filter
 }
 

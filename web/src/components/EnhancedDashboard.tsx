@@ -78,6 +78,7 @@ export function EnhancedDashboard() {
 
   const [selectedCondition, setSelectedCondition] = useState<ConditionKey | null>(null);
   const [selectedGrouping, setSelectedGrouping] = useState<SummaryGrouping | null>(null);
+  const [selectedOverstockGroup, setSelectedOverstockGroup] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const handleCardClick = useCallback((condition: ConditionKey, grouping: SummaryGrouping) => {
@@ -89,6 +90,7 @@ export function EnhancedDashboard() {
   const handleOverstockCardClick = useCallback((category: string, grouping: SummaryGrouping) => {
     setSelectedCondition('overstock');
     setSelectedGrouping(grouping);
+    setSelectedOverstockGroup(category);
     setIsDialogOpen(true);
   }, []);
 
@@ -97,6 +99,7 @@ export function EnhancedDashboard() {
     if (!open) {
       setSelectedCondition(null);
       setSelectedGrouping(null);
+      setSelectedOverstockGroup(null);
     }
   }, []);
 
@@ -119,9 +122,10 @@ export function EnhancedDashboard() {
         grouping: params.grouping ?? selectedGrouping ?? undefined,
         sortField: params.sortField,
         sortDirection: params.sortDirection,
+        overstockGroup: selectedOverstockGroup ?? undefined,
       });
     },
-    [fetchItems, selectedCondition, selectedGrouping]
+    [fetchItems, selectedCondition, selectedGrouping, selectedOverstockGroup]
   );
 
   const summary = data?.summary ?? EMPTY_SUMMARY;
