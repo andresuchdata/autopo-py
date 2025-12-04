@@ -105,6 +105,102 @@ export const poService = {
     }
 };
 
+export const getDashboardSummary = async () => {
+    try {
+        const response = await api.get('/po/analytics/summary');
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching dashboard summary:', error);
+        throw error;
+    }
+};
+
+export const getPOTrend = async (interval: string = 'day') => {
+    try {
+        const response = await api.get('/po/analytics/trend', { params: { interval } });
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching PO trend:', error);
+        throw error;
+    }
+};
+
+export const getPOAging = async () => {
+    try {
+        const response = await api.get('/po/analytics/aging');
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching PO aging:', error);
+        throw error;
+    }
+};
+
+export const getSupplierPerformance = async () => {
+    try {
+        const response = await api.get('/po/analytics/performance');
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching supplier performance:', error);
+        throw error;
+    }
+};
+
+export interface POSnapshotItem {
+    po_number: string;
+    brand_name: string;
+    sku: string;
+    product_name: string;
+    store_name: string;
+    unit_price: number;
+    total_amount: number;
+    po_qty: number;
+    received_qty: number | null;
+    po_released_at: string | null;
+    po_sent_at: string | null;
+    po_approved_at: string | null;
+    po_arrived_at: string | null;
+}
+
+export interface POSnapshotItemsResponse {
+    items: POSnapshotItem[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+}
+
+interface POSnapshotItemsParams {
+    status: string;
+    page?: number;
+    pageSize?: number;
+    sortField?: string;
+    sortDirection?: 'asc' | 'desc';
+}
+
+export const getPOSnapshotItems = async ({
+    status,
+    page = 1,
+    pageSize = 20,
+    sortField = 'po_number',
+    sortDirection = 'asc',
+}: POSnapshotItemsParams): Promise<POSnapshotItemsResponse> => {
+    try {
+        const response = await api.get('/po/analytics/items', {
+            params: {
+                status: status.toLowerCase(),
+                page,
+                page_size: pageSize,
+                sort_field: sortField,
+                sort_direction: sortDirection,
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching PO snapshot items:', error);
+        throw error;
+    }
+};
+
 export const getResults = async () => {
     const response = await api.get('/po/results');
     return response.data;

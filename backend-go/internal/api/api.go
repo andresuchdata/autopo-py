@@ -67,6 +67,16 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 				poGroup.GET("/brands", poHandler.GetBrands)
 				poGroup.GET("/skus", poHandler.GetSkus)
 				poGroup.GET("/stores/:store/results", poHandler.GetStoreResults)
+
+				// Dashboard routes
+				dashboardGroup := poGroup.Group("/analytics")
+				{
+					dashboardGroup.GET("/summary", poHandler.GetDashboardSummary)
+					dashboardGroup.GET("/trend", poHandler.GetPOTrend)
+					dashboardGroup.GET("/aging", poHandler.GetPOAging)
+					dashboardGroup.GET("/performance", poHandler.GetSupplierPerformance)
+					dashboardGroup.GET("/items", poHandler.GetPOSnapshotItems)
+				}
 			}
 		}
 	}

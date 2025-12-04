@@ -108,7 +108,7 @@ export function StockHealthFilters({ onFilterChange, loading }: StockHealthFilte
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 p-4 bg-gray-50 rounded-lg">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700 transition-colors">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Store Select */}
         <div className="space-y-2">

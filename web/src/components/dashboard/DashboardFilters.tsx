@@ -270,9 +270,9 @@ export function DashboardFilters({
     const selectedStoreId = filters.storeIds[0] ?? null;
 
     return (
-        <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white p-4 rounded-lg shadow-sm border">
+        <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white dark:bg-gray-800/50 p-4 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
             <div className="flex-1 min-w-[200px]">
-                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">
+                <Label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
                     Store
                 </Label>
                 <Select
@@ -297,7 +297,7 @@ export function DashboardFilters({
             </div>
 
             <div className="flex-1 max-w-[200px]">
-                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">
+                <Label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
                     Date
                 </Label>
                 <Select value={selectedDate || ""} onValueChange={onDateChange}>
@@ -319,7 +319,7 @@ export function DashboardFilters({
             </div>
 
             <div className="flex-1 min-w-[200px]">
-                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">
+                <Label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
                     Brand
                 </Label>
                 <OptionsMultiSelect
@@ -332,7 +332,7 @@ export function DashboardFilters({
             </div>
 
             <div className="flex-1 min-w-[320px]">
-                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 block">
+                <Label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
                     SKU
                 </Label>
                 <SkuMultiSelect
