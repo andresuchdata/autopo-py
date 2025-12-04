@@ -291,6 +291,8 @@ export function StockItemsDialog({
             render: (item: StockItem) => formatDecimal(item.current_stock),
         };
 
+    const columnCount = 7 + (activeGrouping === 'value' ? 2 : 0);
+
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="w-[95vw] max-w-[95vw] sm:w-[80vw] sm:max-w-[80vw] h-[90vh] flex flex-col">
@@ -330,30 +332,29 @@ export function StockItemsDialog({
 
                 <div className="flex-1 overflow-auto border rounded-md">
                     <Table>
-                        <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
+                        <TableHeader className="sticky top-0 bg-white dark:bg-gray-800 z-10 shadow-sm">
                             <TableRow>
                                 <SortableHeader label="Store" field="store_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="SKU Code" field="sku_code" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="SKU Name" field="sku_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="Brand" field="brand_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
-                                <SortableHeader label={metricConfig.label} field={metricConfig.field} currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                <SortableHeader label="Qty" field="current_stock" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
                                 <SortableHeader label="Daily Sales" field="daily_sales" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="Daily Stock Cover" field="daily_stock_cover" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
-                                {activeGrouping === 'value' && (
-                                    <SortableHeader label="HPP" field="hpp" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
-                                )}
+                                <SortableHeader label="HPP" field="hpp" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+                                <SortableHeader label="Inventory Value" field="inventory_value" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                    <TableCell colSpan={columnCount} className="text-center py-8 text-muted-foreground">
                                         Loading items...
                                     </TableCell>
                                 </TableRow>
                             ) : error ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-8 text-red-500">
+                                    <TableCell colSpan={columnCount} className="text-center py-8 text-red-500">
                                         {error}
                                     </TableCell>
                                 </TableRow>
@@ -363,19 +364,18 @@ export function StockItemsDialog({
                                         <TableCell className="font-medium">{item.store_name}</TableCell>
                                         <TableCell className="font-mono text-xs">{item.sku_code}</TableCell>
                                         <TableCell className="max-w-[300px] truncate" title={item.sku_name}>{item.sku_name}</TableCell>
-                                        <TableCell>{item.brand_name}</TableCell>
-                                        <TableCell className="text-right font-mono">{metricConfig.render(item)}</TableCell>
+                                        <TableCell className="max-w-[300px] truncate" title={item.brand_name}>{item.brand_name}</TableCell>
+                                        <TableCell className="text-right font-mono">{item.current_stock}</TableCell>
                                         <TableCell className="text-right font-mono">{item.daily_sales}</TableCell>
                                         <TableCell className="text-right font-mono">{formatDecimal(item.daily_stock_cover)}</TableCell>
-                                        {activeGrouping === 'value' && (
-                                            <TableCell className="text-right font-mono">{formatCurrency(item.hpp)}</TableCell>
-                                        )}
+                                        <TableCell className="text-right font-mono">{formatCurrency(item.hpp)}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(item.inventory_value)}</TableCell>
                                     </TableRow>
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                        No items found matching this criteria
+                                    <TableCell colSpan={columnCount} className="text-center py-8 text-muted-foreground">
+                                        No items found.
                                     </TableCell>
                                 </TableRow>
                             )}

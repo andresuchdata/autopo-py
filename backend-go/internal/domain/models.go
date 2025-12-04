@@ -96,24 +96,36 @@ type TimeSeriesData struct {
 
 // StockHealthFilter represents filters for stock health queries
 type StockHealthFilter struct {
-	StoreIDs  []int64  `json:"store_ids"`
-	SKUIds    []string `json:"sku_ids"`
-	BrandIDs  []int64  `json:"brand_ids"`
-	Condition string   `json:"condition"`
-	StockDate string   `json:"stock_date"`
-	Page      int      `json:"page"`
-	PageSize  int      `json:"page_size"`
-	Grouping  string   `json:"grouping"`
-	SortField string   `json:"sort_field"`
-	SortDir   string   `json:"sort_direction"`
+	StoreIDs       []int64  `json:"store_ids"`
+	SKUIds         []string `json:"sku_ids"`
+	BrandIDs       []int64  `json:"brand_ids"`
+	Condition      string   `json:"condition"`
+	StockDate      string   `json:"stock_date"`
+	Page           int      `json:"page"`
+	PageSize       int      `json:"page_size"`
+	Grouping       string   `json:"grouping"`
+	SortField      string   `json:"sort_field"`
+	SortDir        string   `json:"sort_direction"`
+	DailyCoverMin  *float64 `json:"daily_cover_min"`
+	DailyCoverMax  *float64 `json:"daily_cover_max"`
+	OverstockGroup string   `json:"overstock_group"` // 'ringan', 'sedang', or 'berat'
 }
 
 // StockHealthDashboard represents the dashboard data
 type StockHealthDashboard struct {
-	Summary        []StockHealthSummary        `json:"summary"`
-	TimeSeries     map[string][]TimeSeriesData `json:"time_series"`
-	BrandBreakdown []ConditionBreakdown        `json:"brand_breakdown"`
-	StoreBreakdown []ConditionBreakdown        `json:"store_breakdown"`
+	Summary            []StockHealthSummary        `json:"summary"`
+	TimeSeries         map[string][]TimeSeriesData `json:"time_series"`
+	BrandBreakdown     []ConditionBreakdown        `json:"brand_breakdown"`
+	StoreBreakdown     []ConditionBreakdown        `json:"store_breakdown"`
+	OverstockBreakdown []OverstockBreakdown        `json:"overstock_breakdown"`
+}
+
+// OverstockBreakdown represents severity buckets within overstock items
+type OverstockBreakdown struct {
+	Category   string  `json:"category" db:"category"`
+	Count      int     `json:"count" db:"count"`
+	TotalStock int64   `json:"total_stock" db:"total_stock"`
+	TotalValue float64 `json:"total_value" db:"total_value"`
 }
 
 // Brand represents a brand entity

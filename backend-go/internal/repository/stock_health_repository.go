@@ -19,6 +19,7 @@ type StockHealthRepository interface {
 	GetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error)
 	GetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error)
 	GetAvailableDates(ctx context.Context, limit int) ([]time.Time, error)
+	GetOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.OverstockBreakdown, error)
 }
 
 func (r *stockHealthRepository) GetAvailableDates(ctx context.Context, limit int) ([]time.Time, error) {
@@ -81,7 +82,7 @@ func (r *stockHealthRepository) GetStockHealthSummary(ctx context.Context, filte
 			%s AS stock_condition,
 			COUNT(*) AS count,
 			COALESCE(SUM(dsd.stock), 0) AS total_stock,
-			COALESCE(SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0)), 0) AS total_value
+			COALESCE(SUM(GREATEST(COALESCE(dsd.stock, 0), 0) * COALESCE(dsd.hpp, 0)), 0) AS total_value
 		FROM daily_stock_data dsd
 		LEFT JOIN products pr ON pr.id = dsd.product_id
 		WHERE 1=1%s
@@ -116,7 +117,7 @@ func (r *stockHealthRepository) GetBrandBreakdown(ctx context.Context, filter do
 			%s AS stock_condition,
 			COUNT(*) AS count,
 			COALESCE(SUM(dsd.stock), 0) AS total_stock,
-			COALESCE(SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0)), 0) AS total_value
+			COALESCE(SUM(GREATEST(COALESCE(dsd.stock, 0), 0) * GREATEST(COALESCE(dsd.hpp, 0), 0)), 0) AS total_value
 		FROM daily_stock_data dsd
 		LEFT JOIN brands br ON br.id = dsd.brand_id
 		LEFT JOIN products pr ON pr.id = dsd.product_id
@@ -146,7 +147,7 @@ func (r *stockHealthRepository) GetStoreBreakdown(ctx context.Context, filter do
 			%s AS stock_condition,
 			COUNT(*) AS count,
 			COALESCE(SUM(dsd.stock), 0) AS total_stock,
-			COALESCE(SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0)), 0) AS total_value
+			COALESCE(SUM(GREATEST(COALESCE(dsd.stock, 0), 0) * COALESCE(dsd.hpp, 0)), 0) AS total_value
 		FROM daily_stock_data dsd
 		LEFT JOIN stores st ON st.id = dsd.store_id
 		LEFT JOIN products pr ON pr.id = dsd.product_id
@@ -158,6 +159,30 @@ func (r *stockHealthRepository) GetStoreBreakdown(ctx context.Context, filter do
 	var results []domain.ConditionBreakdown
 	if err := r.db.SelectContext(ctx, &results, query, args...); err != nil {
 		return nil, fmt.Errorf("error getting store breakdown: %w", err)
+	}
+
+	return results, nil
+}
+
+func (r *stockHealthRepository) GetOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.OverstockBreakdown, error) {
+	filterClause, args, _ := buildFilterClause(filter, "dsd", 1, false)
+	severityExpr := overstockSeverityExpression("dsd")
+
+	query := fmt.Sprintf(`
+		SELECT 
+			%s AS category,
+			COUNT(*) AS count,
+			COALESCE(SUM(dsd.stock), 0) AS total_stock,
+			COALESCE(SUM(GREATEST(COALESCE(dsd.stock, 0), 0) * COALESCE(dsd.hpp, 0)), 0) AS total_value
+		FROM daily_stock_data dsd
+		WHERE (%s) IS NOT NULL%s
+		GROUP BY category
+		ORDER BY category
+	`, severityExpr, severityExpr, filterClause)
+
+	var results []domain.OverstockBreakdown
+	if err := r.db.SelectContext(ctx, &results, query, args...); err != nil {
+		return nil, fmt.Errorf("error getting overstock breakdown: %w", err)
 	}
 
 	return results, nil
@@ -244,7 +269,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 			ELSE 0::double precision
 		END
 	`, sumSalesExpr, sumStockExpr, sumSalesExpr)
-	conditionExpr := stockConditionCaseExpression(dailyCoverExpr)
+	conditionExpr := stockConditionCaseExpression(dailyCoverExpr, sumSalesExpr)
 
 	cte := fmt.Sprintf(`
 		WITH aggregated AS (
@@ -259,7 +284,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				COALESCE(st.name, '') AS store_name,
 				%s AS total_stock,
 				%s AS total_daily_sales,
-				SUM(COALESCE(dsd.stock, 0) * COALESCE(dsd.hpp, 0)) AS total_value,
+				SUM(GREATEST(COALESCE(dsd.stock, 0), 0) * COALESCE(dsd.hpp, 0)) AS total_value,
 				%s AS daily_stock_cover,
 				%s AS stock_condition
 			FROM daily_stock_data dsd
@@ -438,6 +463,24 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 		idx++
 	}
 
+	if filter.DailyCoverMin != nil {
+		conditions = append(conditions, fmt.Sprintf("%s >= $%d", sanitizedDailyStockCoverExpr(alias), idx))
+		args = append(args, *filter.DailyCoverMin)
+		idx++
+	}
+
+	if filter.DailyCoverMax != nil {
+		conditions = append(conditions, fmt.Sprintf("%s <= $%d", sanitizedDailyStockCoverExpr(alias), idx))
+		args = append(args, *filter.DailyCoverMax)
+		idx++
+	}
+
+	if filter.OverstockGroup != "" {
+		conditions = append(conditions, fmt.Sprintf("(%s) = $%d", overstockSeverityExpression(alias), idx))
+		args = append(args, filter.OverstockGroup)
+		idx++
+	}
+
 	clause := ""
 	if len(conditions) > 0 {
 		clause = " AND " + strings.Join(conditions, " AND ")
@@ -450,16 +493,24 @@ func sanitizedDailyStockCoverExpr(alias string) string {
 	return fmt.Sprintf("COALESCE(%s.daily_stock_cover, 0::double precision)", alias)
 }
 
+func sanitizedDailySalesExpr(alias string) string {
+	return fmt.Sprintf("COALESCE(%s.daily_sales, 0::double precision)", alias)
+}
+
 func validStockDataCondition(alias string) string {
-	return fmt.Sprintf("(COALESCE(%s.daily_stock_cover, 0::double precision) >= 0 AND COALESCE(%s.daily_sales, 0::double precision) > 0)", alias, alias)
+	// Allow items with 0 sales (no_sales) and negative cover (negative_stock)
+	// But ensure we don't get garbage data
+	return fmt.Sprintf("COALESCE(%s.daily_sales, 0::double precision) >= 0", alias)
 }
 
 func stockConditionExpression(alias string) string {
-	return stockConditionCaseExpression(sanitizedDailyStockCoverExpr(alias))
+	return stockConditionCaseExpression(sanitizedDailyStockCoverExpr(alias), sanitizedDailySalesExpr(alias))
 }
 
-func stockConditionCaseExpression(coverExpr string) string {
+func stockConditionCaseExpression(coverExpr string, salesExpr string) string {
 	return fmt.Sprintf(`CASE
+		WHEN %s = 0 THEN 'no_sales'
+		WHEN %s < 0 THEN 'negative_stock'
 		WHEN %s = 0 THEN 'out_of_stock'
 		WHEN %s > 0 AND %s <= 7 THEN 'nearly_out'
 		WHEN %s > 7 AND %s <= 21 THEN 'low'
@@ -467,7 +518,21 @@ func stockConditionCaseExpression(coverExpr string) string {
 		WHEN %s > 30 THEN 'overstock'
 		ELSE 'out_of_stock'
 	END`,
-		coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr)
+		salesExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr, coverExpr)
+}
+
+func overstockSeverityExpression(alias string) string {
+	return overstockSeverityCaseExpression(sanitizedDailyStockCoverExpr(alias))
+}
+
+func overstockSeverityCaseExpression(coverExpr string) string {
+	return fmt.Sprintf(`CASE
+		WHEN %s > 30 AND %s <= 45 THEN 'ringan'
+		WHEN %s > 45 AND %s <= 60 THEN 'sedang'
+		WHEN %s > 60 THEN 'berat'
+		ELSE NULL
+	END`,
+		coverExpr, coverExpr, coverExpr, coverExpr, coverExpr)
 }
 
 func buildOrderClause(fieldMap map[string]string, filter domain.StockHealthFilter, fallbackOrder string, secondaryOrder string) string {

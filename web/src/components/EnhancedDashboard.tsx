@@ -8,9 +8,12 @@ import { DashboardFilters } from './dashboard/DashboardFilters';
 import { SummaryCards } from './dashboard/SummaryCards';
 import { DashboardCharts } from './dashboard/DashboardCharts';
 import { StockItemsDialog } from './dashboard/StockItemsDialog';
+import { OverstockSubgroupCards } from './dashboard/OverstockSubgroupCards';
 import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from '@/types/stockHealth';
 
-const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock'];
+const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
+const OVERSTOCK_CATEGORIES = ['ringan', 'sedang', 'berat'] as const;
+type OverstockCategory = (typeof OVERSTOCK_CATEGORIES)[number];
 
 const makeEmptyConditionRecord = (): Record<ConditionKey, number> => ({
   overstock: 0,
@@ -18,6 +21,14 @@ const makeEmptyConditionRecord = (): Record<ConditionKey, number> => ({
   low: 0,
   nearly_out: 0,
   out_of_stock: 0,
+  no_sales: 0,
+  negative_stock: 0,
+});
+
+const makeEmptyOverstockRecord = (): Record<OverstockCategory, number> => ({
+  ringan: 0,
+  sedang: 0,
+  berat: 0,
 });
 
 const EMPTY_SUMMARY = {
@@ -34,6 +45,12 @@ const EMPTY_CHARTS: ChartData = {
   pieDataBySkuCount: [],
   pieDataByStock: [],
   pieDataByValue: [],
+};
+
+const EMPTY_OVERSTOCK_BREAKDOWN = {
+  byCategory: makeEmptyOverstockRecord(),
+  stockByCategory: makeEmptyOverstockRecord(),
+  valueByCategory: makeEmptyOverstockRecord(),
 };
 
 export function EnhancedDashboard() {
@@ -61,6 +78,7 @@ export function EnhancedDashboard() {
 
   const [selectedCondition, setSelectedCondition] = useState<ConditionKey | null>(null);
   const [selectedGrouping, setSelectedGrouping] = useState<SummaryGrouping | null>(null);
+  const [selectedOverstockGroup, setSelectedOverstockGroup] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const handleCardClick = useCallback((condition: ConditionKey, grouping: SummaryGrouping) => {
@@ -69,11 +87,19 @@ export function EnhancedDashboard() {
     setIsDialogOpen(true);
   }, []);
 
+  const handleOverstockCardClick = useCallback((category: string, grouping: SummaryGrouping) => {
+    setSelectedCondition('overstock');
+    setSelectedGrouping(grouping);
+    setSelectedOverstockGroup(category);
+    setIsDialogOpen(true);
+  }, []);
+
   const handleDialogOpenChange = useCallback((open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
       setSelectedCondition(null);
       setSelectedGrouping(null);
+      setSelectedOverstockGroup(null);
     }
   }, []);
 
@@ -96,15 +122,17 @@ export function EnhancedDashboard() {
         grouping: params.grouping ?? selectedGrouping ?? undefined,
         sortField: params.sortField,
         sortDirection: params.sortDirection,
+        overstockGroup: selectedOverstockGroup ?? undefined,
       });
     },
-    [fetchItems, selectedCondition, selectedGrouping]
+    [fetchItems, selectedCondition, selectedGrouping, selectedOverstockGroup]
   );
 
   const summary = data?.summary ?? EMPTY_SUMMARY;
   const charts = data?.charts ?? EMPTY_CHARTS;
   const brandBreakdown = data?.brandBreakdown ?? [];
   const storeBreakdown = data?.storeBreakdown ?? [];
+  const overstockBreakdown = data?.overstockBreakdown ?? EMPTY_OVERSTOCK_BREAKDOWN;
 
   // Show loading state if initial load and no data
   if (loading && !data) {
@@ -145,6 +173,11 @@ export function EnhancedDashboard() {
       />
 
       <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={loading} />
+
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Overstock Subgroups</h3>
+        <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} />
+      </div>
 
       <DashboardCharts
         charts={charts}
