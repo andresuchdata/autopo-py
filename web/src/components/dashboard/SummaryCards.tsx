@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConditionKey } from "@/services/dashboardService";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,7 +9,9 @@ const COLORS = {
     'healthy': '#10b981',        // Green
     'low': '#f59e0b',            // Yellow
     'nearly_out': '#ef4444',     // Red
-    'out_of_stock': '#1f2937'    // Black
+    'out_of_stock': '#1f2937',   // Black
+    'no_sales': '#8b5cf6',       // Violet
+    'negative_stock': '#991b1b'  // Dark Red
 };
 
 const CONDITION_LABELS = {
@@ -16,15 +19,19 @@ const CONDITION_LABELS = {
     'healthy': 'Sehat',
     'low': 'Kurang',
     'nearly_out': 'Menuju habis',
-    'out_of_stock': 'Habis'
+    'out_of_stock': 'Habis',
+    'no_sales': 'Not Sales',
+    'negative_stock': 'Stock Minus'
 };
 
 const HEADER_LABELS = {
-    'overstock': 'Daily Stock Cover > 30 days',
-    'healthy': 'Daily Stock Cover 21,xx - 30 days',
-    'low': 'Daily Stock Cover 7,xx - 21 days',
-    'nearly_out': 'Daily Stock Cover 0,xx - 7 days',
-    'out_of_stock': 'Daily Stock Cover 0 day'
+    'overstock': 'Days Stock Cover > 30 days',
+    'healthy': '21 < Days Stock Cover <= 30 days',
+    'low': '7 < Days Stock Cover <= 21 days',
+    'nearly_out': '0 < Days Stock Cover <= 7 days',
+    'out_of_stock': 'Days Stock Cover = 0 day',
+    'no_sales': 'Daily Sales = 0',
+    'negative_stock': 'Days Stock Cover < 0'
 };
 
 interface SummaryCardsProps {
@@ -40,11 +47,11 @@ interface SummaryCardsProps {
     isLoading?: boolean;
 }
 
-const CONDITIONS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock'];
+const CONDITIONS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
 
 function HeaderRow() {
     return (
-        <div className="contents">
+        <>
             <div className="hidden md:block"></div> {/* Spacer for left column */}
             {CONDITIONS.map((condition) => (
                 <div
@@ -55,7 +62,7 @@ function HeaderRow() {
                     {HEADER_LABELS[condition]}
                 </div>
             ))}
-        </div>
+        </>
     );
 }
 
@@ -77,7 +84,7 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
     };
 
     return (
-        <div className="contents">
+        <>
             <div className="flex flex-col items-center md:items-center md:justify-center md:pr-4 gap-0.5 text-center md:text-right">
                 <div className="font-medium text-muted-foreground text-sm uppercase tracking-wide">
                     {title}
@@ -88,15 +95,17 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
             </div>
             {CONDITIONS.map((condition) => {
                 const value = data[condition] || 0;
-                // Calculate percentage with 1 decimal place
-                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-                // Remove .0 if it's a whole number for cleaner look, unless it's < 1 and > 0
-                const displayPercentage = percentage.endsWith('.0') ? percentage.slice(0, -2) : percentage;
+                const rawPercentage = total > 0 ? (value / total) * 100 : 0;
+                const roundedPercentage = Number(rawPercentage.toFixed(1));
+                const normalizedPercentage = Object.is(roundedPercentage, -0) ? 0 : roundedPercentage;
+                const displayPercentage = Number.isInteger(normalizedPercentage)
+                    ? normalizedPercentage.toString()
+                    : normalizedPercentage.toFixed(1);
 
                 return (
                     <Card
                         key={condition}
-                        className="cursor-pointer hover:shadow-md transition-all border-t-4 bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800"
+                        className="cursor-pointer hover:shadow-md transition-all border-t-4 bg-white dark:bg-gray-900/50 border-2 border-gray-100 dark:border-gray-800"
                         style={{ borderTopColor: COLORS[condition] }}
                         onClick={() => onCardClick(condition, grouping)}
                     >
@@ -116,27 +125,27 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
                     </Card>
                 );
             })}
-        </div>
+        </>
     );
 }
 
 export function SummaryCards({ summary, onCardClick, isLoading }: SummaryCardsProps) {
     if (isLoading) {
         return (
-            <div className="grid gap-4 md:grid-cols-[150px_repeat(5,1fr)]">
+            <div className="grid gap-4 grid-cols-1 md:[grid-template-columns:150px_repeat(7,_minmax(0,_1fr))]">
                 {/* Header Skeletons */}
                 <div className="hidden md:block"></div>
-                {[1, 2, 3, 4, 5].map((i) => (
+                {Array.from({ length: 7 }).map((_, i) => (
                     <Skeleton key={`head-${i}`} className="h-12 w-full rounded-lg" />
                 ))}
 
                 {/* Row Skeletons */}
                 {[1, 2, 3].map((row) => (
-                    <div key={`row-${row}`} className="contents">
+                    <Fragment key={`row-${row}`}>
                         <div className="flex items-center justify-end pr-4">
                             <Skeleton className="h-4 w-24" />
                         </div>
-                        {[1, 2, 3, 4, 5].map((i) => (
+                        {Array.from({ length: 7 }).map((_, i) => (
                             <Card key={`cell-${row}-${i}`} className="border-t-4 border-gray-200">
                                 <CardHeader className="p-4 pb-2">
                                     <Skeleton className="h-3 w-20" />
@@ -147,14 +156,14 @@ export function SummaryCards({ summary, onCardClick, isLoading }: SummaryCardsPr
                                 </CardContent>
                             </Card>
                         ))}
-                    </div>
+                    </Fragment>
                 ))}
             </div>
         );
     }
 
     return (
-        <div className="grid gap-4 md:grid-cols-[150px_repeat(5,1fr)] items-stretch">
+        <div className="grid gap-4 grid-cols-1 md:[grid-template-columns:150px_repeat(7,_minmax(0,_1fr))] items-stretch">
             <HeaderRow />
 
             <SummaryRow

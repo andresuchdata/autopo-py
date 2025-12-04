@@ -61,6 +61,12 @@ export interface StockHealthDashboardResponse {
   time_series: TimeSeriesResponse;
   brand_breakdown: ConditionBreakdownResponse[];
   store_breakdown: ConditionBreakdownResponse[];
+  overstock_breakdown: {
+    category: string;
+    count: number;
+    total_stock: number;
+    total_value: number;
+  }[];
 }
 
 export interface StockHealthFilterParams {
@@ -74,6 +80,7 @@ export interface StockHealthFilterParams {
   grouping?: SummaryGrouping;
   sortField?: StockItemsSortField;
   sortDirection?: SortDirection;
+  overstockGroup?: string; // 'ringan', 'sedang', or 'berat'
 }
 
 const serializeIds = (ids?: number[]) => (ids && ids.length > 0 ? ids.join(',') : undefined);
@@ -93,6 +100,7 @@ export const stockHealthService = {
         grouping: params.grouping,
         sort_field: params.sortField,
         sort_direction: params.sortDirection,
+        overstock_group: params.overstockGroup,
       },
     });
 
