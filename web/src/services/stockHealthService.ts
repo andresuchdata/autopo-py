@@ -61,6 +61,12 @@ export interface StockHealthDashboardResponse {
   time_series: TimeSeriesResponse;
   brand_breakdown: ConditionBreakdownResponse[];
   store_breakdown: ConditionBreakdownResponse[];
+  overstock_breakdown: {
+    category: string;
+    count: number;
+    total_stock: number;
+    total_value: number;
+  }[];
 }
 
 export interface StockHealthFilterParams {

@@ -11,11 +11,20 @@ const CONDITION_KEYS = [
   'negative_stock',
 ] as const;
 
+const OVERSTOCK_CATEGORIES = ['ringan', 'sedang', 'berat'] as const;
+
 export type ConditionKey = (typeof CONDITION_KEYS)[number];
+export type OverstockCategory = (typeof OVERSTOCK_CATEGORIES)[number];
 
 interface CacheEntry {
   data: DashboardData;
   timestamp: number;
+}
+
+export interface DashboardOverstockSummary {
+  byCategory: Record<OverstockCategory, number>;
+  stockByCategory: Record<OverstockCategory, number>;
+  valueByCategory: Record<OverstockCategory, number>;
 }
 
 export interface DashboardFilters {
@@ -29,6 +38,7 @@ export interface DashboardData {
   charts: ChartData;
   brandBreakdown: ConditionBreakdownResponse[];
   storeBreakdown: ConditionBreakdownResponse[];
+  overstockBreakdown: DashboardOverstockSummary;
 }
 
 export interface DashboardSummary {
@@ -113,15 +123,20 @@ export class DashboardService {
       time_series: response.time_series ?? {},
       brand_breakdown: Array.isArray(response.brand_breakdown) ? response.brand_breakdown : [],
       store_breakdown: Array.isArray(response.store_breakdown) ? response.store_breakdown : [],
+      overstock_breakdown: Array.isArray(response.overstock_breakdown) ? response.overstock_breakdown : [],
     };
 
     const summary = this.calculateSummary(normalizedResponse.summary);
     const charts = this.prepareChartData(summary);
+    const overstockBreakdown = this.calculateOverstockSummary(
+      normalizedResponse.overstock_breakdown
+    );
     return {
       summary,
       charts,
       brandBreakdown: normalizedResponse.brand_breakdown,
       storeBreakdown: normalizedResponse.store_breakdown,
+      overstockBreakdown,
     };
   }
 
@@ -175,6 +190,36 @@ export class DashboardService {
         condition,
         value: summary.valueByCondition[condition],
       })),
+    };
+  }
+
+  private calculateOverstockSummary(
+    breakdown: StockHealthDashboardResponse['overstock_breakdown'] | any[]
+  ): DashboardOverstockSummary {
+    const initRecord = () =>
+      OVERSTOCK_CATEGORIES.reduce((acc, category) => {
+        acc[category] = 0;
+        return acc;
+      }, {} as Record<OverstockCategory, number>);
+
+    const byCategory = initRecord();
+    const stockByCategory = initRecord();
+    const valueByCategory = initRecord();
+
+    breakdown.forEach((entry: any) => {
+      const category = (entry?.category ?? '').toLowerCase();
+      if (!OVERSTOCK_CATEGORIES.includes(category as OverstockCategory)) {
+        return;
+      }
+      byCategory[category as OverstockCategory] = entry.count ?? 0;
+      stockByCategory[category as OverstockCategory] = Number(entry.total_stock ?? 0);
+      valueByCategory[category as OverstockCategory] = Number(entry.total_value ?? 0);
+    });
+
+    return {
+      byCategory,
+      stockByCategory,
+      valueByCategory,
     };
   }
 }
