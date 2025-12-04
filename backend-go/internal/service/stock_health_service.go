@@ -72,11 +72,20 @@ func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter 
 		storeBreakdown = make([]domain.ConditionBreakdown, 0)
 	}
 
+	overstockBreakdown, err := s.repo.GetOverstockBreakdown(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if overstockBreakdown == nil {
+		overstockBreakdown = make([]domain.OverstockBreakdown, 0)
+	}
+
 	return &domain.StockHealthDashboard{
-		Summary:        summary,
-		TimeSeries:     timeSeries,
-		BrandBreakdown: brandBreakdown,
-		StoreBreakdown: storeBreakdown,
+		Summary:            summary,
+		TimeSeries:         timeSeries,
+		BrandBreakdown:     brandBreakdown,
+		StoreBreakdown:     storeBreakdown,
+		OverstockBreakdown: overstockBreakdown,
 	}, nil
 }
 
