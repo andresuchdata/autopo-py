@@ -7,6 +7,8 @@ const CONDITION_KEYS = [
   'low',
   'nearly_out',
   'out_of_stock',
+  'no_sales',
+  'negative_stock',
 ] as const;
 
 export type ConditionKey = (typeof CONDITION_KEYS)[number];
