@@ -3,6 +3,8 @@
 # Build stage
 FROM golang:1.25-alpine AS builder
 
+ARG RAILWAY_SERVICE_ID=78d3b529-61a9-450e-a455-d93788f583d5
+
 WORKDIR /app
 
 # Install dependencies
@@ -10,19 +12,19 @@ RUN apk add --no-cache git
 
 # Download dependencies
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod,id=gomod-cache \
-    --mount=type=cache,target=/root/.cache/go-build,id=gobuild-cache \
+RUN --mount=type=cache,target=/go/pkg/mod,id=s/${RAILWAY_SERVICE_ID}-gomod \
+    --mount=type=cache,target=/root/.cache/go-build,id=s/${RAILWAY_SERVICE_ID}-gobuild \
     go mod download
 
 # Copy source code
 COPY . .
 
 # Build the server and seeder
-RUN --mount=type=cache,target=/go/pkg/mod,id=gomod-cache \
-    --mount=type=cache,target=/root/.cache/go-build,id=gobuild-cache \
+RUN --mount=type=cache,target=/go/pkg/mod,id=s/${RAILWAY_SERVICE_ID}-gomod \
+    --mount=type=cache,target=/root/.cache/go-build,id=s/${RAILWAY_SERVICE_ID}-gobuild \
     CGO_ENABLED=0 GOOS=linux go build -o /app/bin/server ./cmd/server
-RUN --mount=type=cache,target=/go/pkg/mod,id=gomod-cache \
-    --mount=type=cache,target=/root/.cache/go-build,id=gobuild-cache \
+RUN --mount=type=cache,target=/go/pkg/mod,id=s/${RAILWAY_SERVICE_ID}-gomod \
+    --mount=type=cache,target=/root/.cache/go-build,id=s/${RAILWAY_SERVICE_ID}-gobuild \
     CGO_ENABLED=0 GOOS=linux go build -o /app/bin/seed ./cmd/seed
 
 # Final stage
