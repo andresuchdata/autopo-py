@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 # Build stage
 FROM golang:1.25-alpine AS builder
 
@@ -10,20 +8,14 @@ RUN apk add --no-cache git
 
 # Download dependencies
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    go mod download
+RUN go mod download
 
 # Copy source code
 COPY . .
 
 # Build the server and seeder
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build -o /app/bin/server ./cmd/server
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build -o /app/bin/seed ./cmd/seed
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/seed ./cmd/seed
 
 # Final stage
 FROM alpine:3.18
