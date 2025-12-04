@@ -160,6 +160,7 @@ type poSnapshotKey struct {
 	sku           string
 	brandID       int
 	storeID       int
+	productID     int
 	supplierID    int64
 	supplierValid bool
 }
