@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DashboardOverstockSummary, OverstockCategory } from "@/services/dashboardService";
 import type { SummaryGrouping } from "@/types/stockHealth";
+import { formatCurrencyIDR } from "@/utils/formatters";
 
 const CATEGORY_CONFIG: Record<OverstockCategory, { label: string; description: string; color: string; borderColor: string }> = {
   ringan: {
@@ -44,11 +45,11 @@ const ROWS: RowConfig[] = [
 
 const formatValue = (value: number, type: RowConfig["type"]) => {
   if (type === "currency") {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
+    return formatCurrencyIDR(value, {
+      compactThreshold: 1_000_000_000,
+      compactMaximumFractionDigits: 1,
       maximumFractionDigits: 0,
-    }).format(value);
+    });
   }
 
   return value.toLocaleString();
