@@ -463,6 +463,24 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 		idx++
 	}
 
+	if filter.DailyCoverMin != nil {
+		conditions = append(conditions, fmt.Sprintf("%s >= $%d", sanitizedDailyStockCoverExpr(alias), idx))
+		args = append(args, *filter.DailyCoverMin)
+		idx++
+	}
+
+	if filter.DailyCoverMax != nil {
+		conditions = append(conditions, fmt.Sprintf("%s <= $%d", sanitizedDailyStockCoverExpr(alias), idx))
+		args = append(args, *filter.DailyCoverMax)
+		idx++
+	}
+
+	if filter.OverstockGroup != "" {
+		conditions = append(conditions, fmt.Sprintf("(%s) = $%d", overstockSeverityExpression(alias), idx))
+		args = append(args, filter.OverstockGroup)
+		idx++
+	}
+
 	clause := ""
 	if len(conditions) > 0 {
 		clause = " AND " + strings.Join(conditions, " AND ")

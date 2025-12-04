@@ -96,18 +96,19 @@ type TimeSeriesData struct {
 
 // StockHealthFilter represents filters for stock health queries
 type StockHealthFilter struct {
-	StoreIDs      []int64  `json:"store_ids"`
-	SKUIds        []string `json:"sku_ids"`
-	BrandIDs      []int64  `json:"brand_ids"`
-	Condition     string   `json:"condition"`
-	StockDate     string   `json:"stock_date"`
-	Page          int      `json:"page"`
-	PageSize      int      `json:"page_size"`
-	Grouping      string   `json:"grouping"`
-	SortField     string   `json:"sort_field"`
-	SortDir       string   `json:"sort_direction"`
-	DailyCoverMin *float64 `json:"daily_cover_min"`
-	DailyCoverMax *float64 `json:"daily_cover_max"`
+	StoreIDs       []int64  `json:"store_ids"`
+	SKUIds         []string `json:"sku_ids"`
+	BrandIDs       []int64  `json:"brand_ids"`
+	Condition      string   `json:"condition"`
+	StockDate      string   `json:"stock_date"`
+	Page           int      `json:"page"`
+	PageSize       int      `json:"page_size"`
+	Grouping       string   `json:"grouping"`
+	SortField      string   `json:"sort_field"`
+	SortDir        string   `json:"sort_direction"`
+	DailyCoverMin  *float64 `json:"daily_cover_min"`
+	DailyCoverMax  *float64 `json:"daily_cover_max"`
+	OverstockGroup string   `json:"overstock_group"` // 'ringan', 'sedang', or 'berat'
 }
 
 // StockHealthDashboard represents the dashboard data
