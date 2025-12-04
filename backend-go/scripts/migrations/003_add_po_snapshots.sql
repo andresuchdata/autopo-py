@@ -28,17 +28,6 @@ CREATE TABLE po_snapshots (
     
     -- Status Information
     status INTEGER NOT NULL,
-    status_label VARCHAR(50) GENERATED ALWAYS AS (
-        CASE status
-            WHEN 1 THEN 'draft'
-            WHEN 2 THEN 'released'
-            WHEN 3 THEN 'sent'
-            WHEN 4 THEN 'approved'
-            WHEN 5 THEN 'arrived'
-            WHEN 6 THEN 'received'
-            ELSE 'unknown'
-        END
-    ) STORED,
     
     -- Status Timestamps
     po_released_at TIMESTAMPTZ,
