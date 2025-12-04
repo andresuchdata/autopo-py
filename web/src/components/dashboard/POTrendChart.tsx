@@ -14,27 +14,61 @@ interface POTrendChartProps {
     data: TrendData[];
 }
 
-// Transform data for Recharts (group by date)
-const transformData = (data: TrendData[]) => {
-    const grouped: Record<string, any> = {};
-    const statuses = new Set<string>();
+// Generate color palette for time periods (gradient from light to dark)
+const generateTimeColors = (count: number): string[] => {
+    const baseColors = [
+        '#3B82F6', // Blue
+        '#8B5CF6', // Purple
+        '#EC4899', // Pink
+        '#F59E0B', // Amber
+        '#10B981', // Green
+    ];
+    
+    if (count <= baseColors.length) {
+        return baseColors.slice(0, count);
+    }
+    
+    // If more than 5 periods, generate gradient
+    const colors: string[] = [];
+    for (let i = 0; i < count; i++) {
+        const hue = (i * 360) / count;
+        colors.push(`hsl(${hue}, 70%, 60%)`);
+    }
+    return colors;
+};
 
+// Transform data: group by status (x-axis), with dates as separate bars
+const transformData = (data: TrendData[]) => {
+    const statusOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived'];
+    const grouped: Record<string, any> = {};
+    const dates = new Set<string>();
+
+    // Group by status
     data.forEach(item => {
-        if (!grouped[item.date]) {
-            grouped[item.date] = { date: item.date };
+        if (!grouped[item.status]) {
+            grouped[item.status] = { status: item.status };
         }
-        grouped[item.date][item.status] = item.count;
-        statuses.add(item.status);
+        grouped[item.status][item.date] = item.count;
+        dates.add(item.date);
     });
 
+    // Sort dates chronologically
+    const sortedDates = Array.from(dates).sort();
+    
+    // Sort statuses by defined order
+    const chartData = statusOrder
+        .filter(status => grouped[status])
+        .map(status => grouped[status]);
+
     return {
-        chartData: Object.values(grouped),
-        statusKeys: Array.from(statuses)
+        chartData,
+        dateKeys: sortedDates
     };
 };
 
 export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
-    const { chartData, statusKeys } = transformData(data);
+    const { chartData, dateKeys } = transformData(data);
+    const timeColors = generateTimeColors(dateKeys.length);
 
     return (
         <div className="w-full h-[300px] bg-card rounded-lg p-4 border border-border">
@@ -46,7 +80,7 @@ export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
                 <BarChart data={chartData} barGap={0} barCategoryGap="28%">
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                     <XAxis
-                        dataKey="date"
+                        dataKey="status"
                         stroke="#9ca3af"
                         fontSize={11}
                         tickLine={false}
@@ -69,13 +103,14 @@ export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
                         iconType="circle"
                         iconSize={8}
                     />
-                    {statusKeys.map((status) => (
+                    {dateKeys.map((date: string, index: number) => (
                         <Bar
-                            key={status}
-                            dataKey={status}
-                            fill={getStatusColor(status)}
+                            key={date}
+                            dataKey={date}
+                            fill={timeColors[index]}
                             radius={[4, 4, 0, 0]}
-                            maxBarSize={50}
+                            maxBarSize={40}
+                            name={new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         />
                     ))}
                 </BarChart>
