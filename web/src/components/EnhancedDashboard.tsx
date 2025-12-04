@@ -10,7 +10,7 @@ import { DashboardCharts } from './dashboard/DashboardCharts';
 import { StockItemsDialog } from './dashboard/StockItemsDialog';
 import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from '@/types/stockHealth';
 
-const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock'];
+const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
 
 const makeEmptyConditionRecord = (): Record<ConditionKey, number> => ({
   overstock: 0,
@@ -18,6 +18,8 @@ const makeEmptyConditionRecord = (): Record<ConditionKey, number> => ({
   low: 0,
   nearly_out: 0,
   out_of_stock: 0,
+  no_sales: 0,
+  negative_stock: 0,
 });
 
 const EMPTY_SUMMARY = {

@@ -16,7 +16,7 @@ interface DashboardChartsProps {
     isLoading?: boolean;
 }
 
-const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock'];
+const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
 
 export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoading }: DashboardChartsProps) {
     const buildStackedData = (breakdown: ConditionBreakdownResponse[], dimension: 'brand' | 'store') => {
