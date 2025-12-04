@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Download, ChevronLeft, ChevronRight, ArrowUpDown, Search, Filter } from 'lucide-react';
 import { clsx } from 'clsx';
-import { exportToCsv, m2ExportConfig, emergencyExportConfig } from '../utils/exportUtils';
+import { exportToCsv, m2ExportConfig, emergencyExportConfig } from '@/utils/exportUtils';
+import { formatCurrencyIDR } from '@/utils/formatters';
 
 export interface ColumnDef<T> {
     key: keyof T | string;
@@ -41,9 +42,7 @@ export function DataTable<T extends Record<string, any>>({
 
     if (!data) return null;
 
-    const formatCurrency = (val: number) => {
-        return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
-    };
+    const formatCurrency = (val: number) => formatCurrencyIDR(val);
 
     const formatNumber = (val: number) => {
         return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(val);

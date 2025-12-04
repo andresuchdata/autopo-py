@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConditionKey } from "@/services/dashboardService";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type SummaryGrouping } from "@/types/stockHealth";
+import { formatCurrencyIDR } from "@/utils/formatters";
 
 const COLORS = {
     'overstock': '#3b82f6',      // Blue
@@ -78,7 +79,11 @@ interface RowProps {
 function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProps) {
     const formatValue = (val: number) => {
         if (type === 'currency') {
-            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+            return formatCurrencyIDR(val, {
+                compactThreshold: 1_000_000_000,
+                compactMaximumFractionDigits: 1,
+                maximumFractionDigits: 0,
+            });
         }
         return val.toLocaleString();
     };
