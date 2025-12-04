@@ -59,76 +59,58 @@ func SeedAnalyticsData(c *cli.Context) error {
 	// Initialize the analytics processor
 	processor := analytics.NewAnalyticsProcessor(db)
 
-	// Process stock health files if enabled
+	tasks := make([]analyticsTask, 0, 2)
+
 	if processStockHealth {
 		stockFiles, err := collectCSVFiles(stockHealthDir)
 		if err != nil {
 			return fmt.Errorf("error walking stock health directory: %w", err)
 		}
-		if len(stockFiles) == 0 {
-			log.Printf("No stock health CSV files found in %s", stockHealthDir)
-		} else {
-			log.Printf("Processing %d stock health file(s) with %d worker(s)...", len(stockFiles), workerCount)
-			if err := processFilesWithWorkers(c.Context, stockFiles, workerCount, func(path string) error {
+		tasks = append(tasks, analyticsTask{
+			name:  "stock health",
+			dir:   stockHealthDir,
+			files: stockFiles,
+			handler: func(ctx context.Context, path string) error {
 				log.Printf("Processing stock health file: %s", path)
-				if err := processor.ProcessFile(c.Context, path); err != nil {
+				if err := processor.ProcessFile(ctx, path); err != nil {
 					return fmt.Errorf("error processing %s: %w", path, err)
 				}
 				return nil
-			}); err != nil {
-				return err
-			}
-		}
+			},
+		})
 	}
 
-	// Process PO snapshot files if enabled
 	if processPOSnapshots {
 		poFiles, err := collectCSVFiles(poSnapshotsDir)
 		if err != nil {
 			return fmt.Errorf("error walking PO snapshots directory: %w", err)
 		}
-		if len(poFiles) == 0 {
-			log.Printf("No PO snapshot CSV files found in %s", poSnapshotsDir)
-		} else {
-			log.Printf("Processing %d PO snapshot file(s) with %d worker(s)...", len(poFiles), workerCount)
-			if err := processFilesWithWorkers(c.Context, poFiles, workerCount, func(path string) error {
+		tasks = append(tasks, analyticsTask{
+			name:  "PO snapshot",
+			dir:   poSnapshotsDir,
+			files: poFiles,
+			handler: func(ctx context.Context, path string) error {
 				log.Printf("Processing PO snapshot file: %s", path)
-				if err := processor.ProcessFile(c.Context, path); err != nil {
+				if err := processor.ProcessFile(ctx, path); err != nil {
 					return fmt.Errorf("error processing %s: %w", path, err)
 				}
 				return nil
-			}); err != nil {
-				return err
-			}
-		}
+			},
+		})
 	}
 
-	return nil
+	return runAnalyticsTasks(c.Context, tasks, workerCount)
 }
 
-func collectCSVFiles(root string) ([]string, error) {
-	files := make([]string, 0)
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if filepath.Ext(path) == ".csv" {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(files)
-	return files, nil
+type analyticsTask struct {
+	name    string
+	dir     string
+	files   []string
+	handler func(context.Context, string) error
 }
 
-func processFilesWithWorkers(ctx context.Context, files []string, workers int, fn func(string) error) error {
-	if len(files) == 0 {
+func runAnalyticsTasks(ctx context.Context, tasks []analyticsTask, workers int) error {
+	if len(tasks) == 0 {
 		return nil
 	}
 	if workers < 1 {
@@ -151,7 +133,7 @@ func processFilesWithWorkers(ctx context.Context, files []string, workers int, f
 					if !ok {
 						return
 					}
-					if err := fn(path); err != nil {
+					if err := processFile(ctx, path, tasks); err != nil {
 						select {
 						case errCh <- err:
 						default:
@@ -163,12 +145,17 @@ func processFilesWithWorkers(ctx context.Context, files []string, workers int, f
 			}
 		}()
 	}
-loop:
-	for _, path := range files {
-		select {
-		case <-ctx.Done():
-			break loop
-		case jobs <- path:
+	var enqueueErr error
+outer:
+	for _, task := range tasks {
+		log.Printf("Processing %d %s file(s) with %d worker(s)...", len(task.files), task.name, workers)
+		for _, file := range task.files {
+			select {
+			case <-ctx.Done():
+				enqueueErr = ctx.Err()
+				break outer
+			case jobs <- file:
+			}
 		}
 	}
 	close(jobs)
@@ -177,9 +164,44 @@ loop:
 	case err := <-errCh:
 		return err
 	default:
+		if enqueueErr != nil && enqueueErr != context.Canceled {
+			return enqueueErr
+		}
 		if ctx.Err() != nil && ctx.Err() != context.Canceled {
 			return ctx.Err()
 		}
 	}
 	return nil
+}
+
+func processFile(ctx context.Context, path string, tasks []analyticsTask) error {
+	for _, task := range tasks {
+		for _, file := range task.files {
+			if file == path {
+				return task.handler(ctx, path)
+			}
+		}
+	}
+	return fmt.Errorf("unknown file: %s", path)
+}
+
+func collectCSVFiles(root string) ([]string, error) {
+	files := make([]string, 0)
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) == ".csv" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+	return files, nil
 }

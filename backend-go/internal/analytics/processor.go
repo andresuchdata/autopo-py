@@ -158,8 +158,8 @@ type poSnapshotKey struct {
 	snapshotTime  time.Time
 	poNumber      string
 	sku           string
-	productID     int
 	brandID       int
+	storeID       int
 	supplierID    int64
 	supplierValid bool
 }
@@ -518,6 +518,7 @@ func (p *AnalyticsProcessor) flushPOSnapshotBatch(ctx context.Context, tx *sql.T
 	for _, rec := range batch {
 		key := makePOSnapshotKey(rec)
 		if idx, exists := seen[key]; exists {
+			log.Printf("duplicate PO snapshot detected for upload %s (po=%s sku=%s brand_id=%d store_id=%d supplier_id=%s); keeping latest row", rec.snapshotTime.Format(time.RFC3339), rec.poNumber, rec.sku, rec.brandID, rec.storeID, formatSupplierID(rec.supplierID))
 			unique[idx] = rec
 			continue
 		}
@@ -634,9 +635,18 @@ func parseNullableTime(value string) *time.Time {
 	if value == "" || value == "0000-00-00 00:00:00" {
 		return nil
 	}
+
+	value = normalizeTimestampSeparators(value)
+
 	formats := []string{
 		"2/1/06 15:04",
 		"2/1/2006 15:04",
+		"02/01/06 15:04",
+		"02/01/2006 15:04",
+		"2/1/06",
+		"2/1/2006",
+		"02/01/06",
+		"02/01/2006",
 		"2006-01-02 15:04:05",
 		time.RFC3339,
 	}
@@ -646,6 +656,20 @@ func parseNullableTime(value string) *time.Time {
 		}
 	}
 	return nil
+}
+
+func normalizeTimestampSeparators(value string) string {
+	parts := strings.Fields(value)
+	if len(parts) < 2 {
+		return value
+	}
+	timePart := parts[len(parts)-1]
+	if strings.Contains(timePart, ".") && !strings.Contains(timePart, ":") {
+		timePart = strings.ReplaceAll(timePart, ".", ":")
+		parts[len(parts)-1] = timePart
+		return strings.Join(parts, " ")
+	}
+	return value
 }
 
 func toNullTime(t *time.Time) interface{} {
@@ -660,6 +684,14 @@ func toNullableInt64(v sql.NullInt64) interface{} {
 		return v.Int64
 	}
 	return nil
+}
+
+func formatSupplierID(v sql.NullInt64) string {
+	if v.Valid {
+		return strconv.FormatInt(v.Int64, 10)
+	}
+
+	return "NULL"
 }
 
 func makeStockHealthKey(rec stockHealthRecord) stockHealthKey {
@@ -690,8 +722,8 @@ func makePOSnapshotKey(rec poSnapshotRecord) poSnapshotKey {
 		snapshotTime:  rec.snapshotTime,
 		poNumber:      rec.poNumber,
 		sku:           rec.sku,
-		productID:     rec.productID,
 		brandID:       rec.brandID,
+		storeID:       rec.storeID,
 		supplierID:    supplierID,
 		supplierValid: supplierValid,
 	}
@@ -829,7 +861,7 @@ func ensureStoresBulk(ctx context.Context, tx *sql.Tx, names map[string]string) 
 	insertStmt := `
 		INSERT INTO stores (name, created_at, updated_at)
 		VALUES ($1, NOW(), NOW())
-		ON CONFLICT (name) DO UPDATE SET updated_at = NOW()
+		ON CONFLICT (LOWER(name)) WHERE original_id IS NULL DO UPDATE SET updated_at = NOW()
 		RETURNING id
 	`
 	for key, displayName := range names {
@@ -877,7 +909,7 @@ func ensureBrandsBulk(ctx context.Context, tx *sql.Tx, names map[string]string) 
 	insertStmt := `
 		INSERT INTO brands (name, created_at, updated_at)
 		VALUES ($1, NOW(), NOW())
-		ON CONFLICT (name) DO UPDATE SET updated_at = NOW()
+		ON CONFLICT (LOWER(name)) WHERE original_id IS NULL DO UPDATE SET updated_at = NOW()
 		RETURNING id
 	`
 	for key, displayName := range names {
@@ -937,7 +969,7 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 			orig_daily_sales, orig_max_daily_sales,
 			daily_stock_cover, hpp
 		FROM %s
-		ON CONFLICT (time, store_id, sku, brand_id)
+		ON CONFLICT (time, store_id, sku, COALESCE(brand_id, -1))
 		DO UPDATE SET
 			product_id = EXCLUDED.product_id,
 			stock = EXCLUDED.stock,
@@ -958,46 +990,65 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 }
 
 func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string, records []stockHealthRecord) error {
-	stmt, err := tx.PrepareContext(ctx, pq.CopyIn(tableName,
-		"time",
-		"store_id",
-		"product_id",
-		"brand_id",
-		"sku",
-		"stock",
-		"daily_sales",
-		"max_daily_sales",
-		"orig_daily_sales",
-		"orig_max_daily_sales",
-		"daily_stock_cover",
-		"hpp",
-	))
-	if err != nil {
-		return fmt.Errorf("failed to prepare stock health COPY: %w", err)
-	}
-	defer stmt.Close()
+	quotedTable := pq.QuoteIdentifier(tableName)
 
-	for _, rec := range records {
-		if _, err := stmt.Exec(
-			rec.snapshotTime,
-			rec.storeID,
-			rec.productID,
-			toNullableInt64(rec.brandID),
-			rec.sku,
-			rec.stock,
-			rec.dailySales,
-			rec.maxDailySales,
-			rec.origDailySales,
-			rec.origMaxDailySales,
-			rec.dailyStockCover,
-			rec.hpp,
-		); err != nil {
-			return fmt.Errorf("failed to stream stock health row: %w", err)
+	// Postgres has a limit of 65535 parameters. With 12 columns, we can insert ~5400 rows at once.
+	// Use a conservative batch size of 5000 rows.
+	const batchSize = 5000
+
+	for i := 0; i < len(records); i += batchSize {
+		end := i + batchSize
+		if end > len(records) {
+			end = len(records)
 		}
-	}
+		batch := records[i:end]
 
-	if _, err := stmt.Exec(); err != nil {
-		return fmt.Errorf("failed to finalize stock health COPY: %w", err)
+		// Build batch INSERT statement
+		var valueStrings []string
+		var valueArgs []interface{}
+		argPos := 1
+
+		for _, rec := range batch {
+			valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+				argPos, argPos+1, argPos+2, argPos+3, argPos+4, argPos+5,
+				argPos+6, argPos+7, argPos+8, argPos+9, argPos+10, argPos+11))
+
+			var brandIDVal interface{}
+			if rec.brandID.Valid {
+				brandIDVal = rec.brandID.Int64
+			} else {
+				brandIDVal = nil
+			}
+
+			valueArgs = append(valueArgs,
+				rec.snapshotTime,
+				rec.storeID,
+				rec.productID,
+				brandIDVal,
+				rec.sku,
+				rec.stock,
+				rec.dailySales,
+				rec.maxDailySales,
+				rec.origDailySales,
+				rec.origMaxDailySales,
+				rec.dailyStockCover,
+				rec.hpp,
+			)
+			argPos += 12
+		}
+
+		insertStmt := fmt.Sprintf(`
+			INSERT INTO %s (
+				time, store_id, product_id, brand_id, sku,
+				stock, daily_sales, max_daily_sales,
+				orig_daily_sales, orig_max_daily_sales,
+				daily_stock_cover, hpp
+			) VALUES %s
+		`, quotedTable, strings.Join(valueStrings, ", "))
+
+		if _, err := tx.ExecContext(ctx, insertStmt, valueArgs...); err != nil {
+			return fmt.Errorf("failed to insert batch into staging table: %w", err)
+		}
 	}
 
 	return nil
