@@ -56,7 +56,19 @@ export default function PODashboardPage() {
         );
     }
 
-    const statusSummaries = data.status_summaries ?? [];
+    // Define the desired order for PO status cards
+    const statusOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived'];
+    
+    // Sort status summaries according to the defined order
+    const statusSummaries = (data.status_summaries ?? []).sort((a: any, b: any) => {
+        const indexA = statusOrder.indexOf(a.status);
+        const indexB = statusOrder.indexOf(b.status);
+        // If status not found in order array, put it at the end
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+    });
+    
     const funnelData = data.lifecycle_funnel ?? [];
     const trendData = data.trends ?? [];
     const agingData = data.aging ?? [];
