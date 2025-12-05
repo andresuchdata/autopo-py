@@ -105,6 +105,60 @@ export const poService = {
     }
 };
 
+export interface SupplierPOItem {
+    po_number: string;
+    sku: string;
+    product_name: string;
+    brand_name: string;
+    supplier_id: number;
+    supplier_name: string;
+    po_released_at: string | null;
+    po_sent_at: string | null;
+    po_approved_at: string | null;
+    po_arrived_at: string | null;
+    po_received_at: string | null;
+}
+
+export interface SupplierPOItemsResponse {
+    items: SupplierPOItem[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+}
+
+interface SupplierPOItemsParams {
+    supplierId: number;
+    page?: number;
+    pageSize?: number;
+    sortField?: string;
+    sortDirection?: 'asc' | 'desc';
+}
+
+export const getSupplierPOItems = async ({
+    supplierId,
+    page = 1,
+    pageSize = 20,
+    sortField = 'po_number',
+    sortDirection = 'asc',
+}: SupplierPOItemsParams): Promise<SupplierPOItemsResponse> => {
+    try {
+        const response = await api.get('/po/analytics/supplier_items', {
+            params: {
+                supplier_id: supplierId,
+                page,
+                page_size: pageSize,
+                sort_field: sortField,
+                sort_direction: sortDirection,
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching supplier PO items:', error);
+        throw error;
+    }
+};
+
 export const getDashboardSummary = async () => {
     try {
         const response = await api.get('/po/analytics/summary');

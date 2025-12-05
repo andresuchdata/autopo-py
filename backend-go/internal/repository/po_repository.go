@@ -20,4 +20,5 @@ type PORepository interface {
 	GetPOAging(ctx context.Context) ([]domain.POAging, error)
 	GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error)
 	GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error)
+	GetSupplierPOItems(ctx context.Context, supplierID int64, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPOItemsResponse, error)
 }

@@ -217,3 +217,8 @@ func (s *POService) GetSupplierPerformance(ctx context.Context) ([]domain.Suppli
 func (s *POService) GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error) {
 	return s.repo.GetPOSnapshotItems(ctx, statusCode, page, pageSize, sortField, sortDirection)
 }
+
+// GetSupplierPOItems returns PO entries filtered by supplier
+func (s *POService) GetSupplierPOItems(ctx context.Context, supplierID int64, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPOItemsResponse, error) {
+	return s.repo.GetSupplierPOItems(ctx, supplierID, page, pageSize, sortField, sortDirection)
+}

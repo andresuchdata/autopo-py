@@ -214,3 +214,31 @@ func (h *POHandler) GetPOSnapshotItems(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+// GetSupplierPOItems returns PO entries filtered by supplier
+func (h *POHandler) GetSupplierPOItems(c *gin.Context) {
+	supplierIDStr := c.Query("supplier_id")
+	if supplierIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "supplier_id parameter is required"})
+		return
+	}
+
+	supplierID, err := strconv.ParseInt(supplierIDStr, 10, 64)
+	if err != nil || supplierID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid supplier_id value"})
+		return
+	}
+
+	page := parsePositiveIntWithDefault(c.Query("page"), 1)
+	pageSize := parsePositiveIntWithDefault(c.Query("page_size"), 20)
+	sortField := c.DefaultQuery("sort_field", "po_number")
+	sortDirection := c.DefaultQuery("sort_direction", "asc")
+
+	response, err := h.poService.GetSupplierPOItems(c.Request.Context(), supplierID, page, pageSize, sortField, sortDirection)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier purchase orders"})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
