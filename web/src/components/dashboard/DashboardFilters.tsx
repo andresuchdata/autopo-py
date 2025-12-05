@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Check, ChevronsUpDown, X } from "lucide-react";
+import { Check, ChevronsUpDown, X, Store as StoreIcon, Calendar, Tag, Barcode, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -139,18 +139,18 @@ function SkuMultiSelect({
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-auto min-h-10 py-2">
+                <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-auto min-h-12 py-2 px-3 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
                     <div className="flex flex-wrap gap-1 items-center flex-1 min-w-0 text-left">
-                        {selectedCodes.length === 0 && placeholder}
+                        {selectedCodes.length === 0 && <span className="text-muted-foreground">{placeholder}</span>}
                         {selectedCodes.length > 0 && selectedCodes.length <= 2 && (
                             selectedLabels.map((label, idx) => (
                                 <span
                                     key={`${label}-${idx}`}
-                                    className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 mr-1 mb-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
+                                    className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1 mb-0.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
                                 >
                                     {label}
                                     <span
-                                        className="ml-1 cursor-pointer"
+                                        className="ml-1 cursor-pointer opacity-70 hover:opacity-100"
                                         onMouseDown={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
@@ -162,13 +162,13 @@ function SkuMultiSelect({
                                             toggleOption(code);
                                         }}
                                     >
-                                        <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                        <X className="h-3 w-3" />
                                     </span>
                                 </span>
                             ))
                         )}
                         {selectedCodes.length > 2 && (
-                            <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 mr-1">
+                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1">
                                 {selectedCodes.length} selected
                             </span>
                         )}
@@ -176,33 +176,33 @@ function SkuMultiSelect({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[260px] md:w-[420px] p-0" align="start">
-                <Command>
+            <PopoverContent className="w-[300px] md:w-[480px] p-0 shadow-xl border-border/60" align="start">
+                <Command className="rounded-lg border-none">
                     <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={handleSearchChange} />
-                    <CommandList ref={listRef} onScroll={handleListScroll} className="max-h-64 overflow-y-auto">
+                    <CommandList ref={listRef} onScroll={handleListScroll} className="max-h-[300px] overflow-y-auto custom-scrollbar">
                         <CommandEmpty>No SKU found.</CommandEmpty>
                         <CommandGroup>
-                            <CommandItem onSelect={() => onChange([])} className="justify-center text-center font-medium text-sm">
+                            <CommandItem onSelect={() => onChange([])} className="justify-center text-center font-medium text-sm text-muted-foreground hover:text-foreground">
                                 Clear selection
                             </CommandItem>
                         </CommandGroup>
                         {pinnedOptions.length > 0 && (
-                            <CommandGroup heading="Selected SKUs">
+                            <CommandGroup heading="Selected SKUs" className="text-primary font-medium">
                                 {pinnedOptions.map((option) => (
-                                    <CommandItem key={`pinned-${option.code}`} value={option.label} onSelect={() => toggleOption(option.code)}>
+                                    <CommandItem key={`pinned-${option.code}`} value={option.label} onSelect={() => toggleOption(option.code)} className="aria-selected:bg-primary/10">
                                         <div
                                             className={cn(
-                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all",
                                                 selectedCodes.includes(option.code)
                                                     ? "bg-primary text-primary-foreground"
                                                     : "opacity-50 [&_svg]:invisible"
                                             )}
                                         >
-                                            <Check className={cn("h-4 w-4")} />
+                                            <Check className={cn("h-3 w-3")} />
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="font-medium text-sm leading-none mb-2">{option.code}</span>
-                                            {option.name && <span className="text-xs text-muted-foreground">{option.name}</span>}
+                                            <span className="font-medium text-sm leading-none mb-1">{option.code}</span>
+                                            {option.name && <span className="text-xs text-muted-foreground line-clamp-1">{option.name}</span>}
                                         </div>
                                     </CommandItem>
                                 ))}
@@ -210,25 +210,26 @@ function SkuMultiSelect({
                         )}
                         {isLoading && (
                             <CommandGroup>
-                                <CommandItem disabled className="justify-center text-muted-foreground text-sm">
+                                <CommandItem disabled className="justify-center text-muted-foreground text-sm py-4">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent mr-2" />
                                     Searching...
                                 </CommandItem>
                             </CommandGroup>
                         )}
-                        <CommandGroup>
+                        <CommandGroup className="text-muted-foreground">
                             {availableOptions.map((option) => {
                                 const isSelected = selectedCodes.includes(option.code);
                                 return (
                                     <CommandItem key={option.code} value={option.label} onSelect={() => toggleOption(option.code)}>
                                         <div
                                             className={cn(
-                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all",
                                                 isSelected
                                                     ? "bg-primary text-primary-foreground"
                                                     : "opacity-50 [&_svg]:invisible"
                                             )}
                                         >
-                                            <Check className={cn("h-4 w-4")} />
+                                            <Check className={cn("h-3 w-3")} />
                                         </div>
                                         {option.label}
                                     </CommandItem>
@@ -236,9 +237,11 @@ function SkuMultiSelect({
                             })}
                         </CommandGroup>
                         {hasMore && !isLoading && (
-                            <CommandGroup>
-                                <CommandItem disabled={isLoadingMore} onSelect={onLoadMore} className="justify-center text-sm text-primary">
-                                    {isLoadingMore ? "Loading more..." : "Load more"}
+                            <CommandGroup className="border-t border-border/50">
+                                <CommandItem disabled={isLoadingMore} onSelect={onLoadMore} className="justify-center text-sm text-primary font-medium cursor-pointer hover:bg-primary/5 py-3">
+                                    {isLoadingMore ? (
+                                        <span className="flex items-center gap-2"><div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />Loading more...</span>
+                                    ) : "Load more results"}
                                 </CommandItem>
                             </CommandGroup>
                         )}
@@ -270,93 +273,104 @@ export function DashboardFilters({
     const selectedStoreId = filters.storeIds[0] ?? null;
 
     return (
-        <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white dark:bg-gray-800/50 p-4 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-            <div className="flex-1 min-w-[200px]">
-                <Label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
-                    Store
-                </Label>
-                <Select
-                    value={selectedStoreId !== null ? String(selectedStoreId) : ""}
-                    onValueChange={(value) => onFilterChange({ ...filters, storeIds: value ? [Number(value)] : [] })}
-                >
-                    <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select store" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {selectableStoreOptions.length > 0 ? (
-                            selectableStoreOptions.map((option) => (
-                                <SelectItem key={option.id} value={String(option.id)}>
-                                    {option.name}
-                                </SelectItem>
-                            ))
-                        ) : (
-                            <div className="py-2 px-3 text-sm text-muted-foreground">No stores available</div>
-                        )}
-                    </SelectContent>
-                </Select>
+        <div className="flex flex-col xl:flex-row gap-5 mb-8 bg-card/50 backdrop-blur-sm p-6 rounded-2xl shadow-sm border border-border/50 transition-colors">
+            <div className="flex items-start gap-3 text-muted-foreground border-r border-border/50 pr-5 hidden xl:flex">
+                <div className="p-2 bg-muted rounded-lg">
+                    <Filter size={20} />
+                </div>
+                <div className="text-sm font-medium mt-1.5">
+                    Filters
+                </div>
             </div>
 
-            <div className="flex-1 max-w-[200px]">
-                <Label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
-                    Date
-                </Label>
-                <Select value={selectedDate || ""} onValueChange={onDateChange}>
-                    <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select Date" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {availableDates.length > 0 ? (
-                            availableDates.map((date) => (
-                                <SelectItem key={date} value={date}>
-                                    {date}
-                                </SelectItem>
-                            ))
-                        ) : (
-                            <div className="py-2 px-3 text-sm text-muted-foreground">Loading dates...</div>
-                        )}
-                    </SelectContent>
-                </Select>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1">
+                <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <StoreIcon size={14} className="text-primary/70" /> Store
+                    </Label>
+                    <Select
+                        value={selectedStoreId !== null ? String(selectedStoreId) : ""}
+                        onValueChange={(value) => onFilterChange({ ...filters, storeIds: value ? [Number(value)] : [] })}
+                    >
+                        <SelectTrigger className="w-full h-12 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
+                            <SelectValue placeholder="All Stores" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                            {selectableStoreOptions.length > 0 ? (
+                                selectableStoreOptions.map((option) => (
+                                    <SelectItem key={option.id} value={String(option.id)} className="cursor-pointer">
+                                        {option.name}
+                                    </SelectItem>
+                                ))
+                            ) : (
+                                <div className="py-2 px-3 text-sm text-muted-foreground">No stores available</div>
+                            )}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Calendar size={14} className="text-primary/70" /> Date (Snapshot)
+                    </Label>
+                    <Select value={selectedDate || ""} onValueChange={onDateChange}>
+                        <SelectTrigger className="w-full h-12 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
+                            <SelectValue placeholder="Latest Snapshot" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                            {availableDates.length > 0 ? (
+                                availableDates.map((date) => (
+                                    <SelectItem key={date} value={date} className="cursor-pointer font-mono">
+                                        {date}
+                                    </SelectItem>
+                                ))
+                            ) : (
+                                <div className="py-2 px-3 text-sm text-muted-foreground">Loading dates...</div>
+                            )}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Tag size={14} className="text-primary/70" /> Brand
+                    </Label>
+                    <OptionsMultiSelect
+                        options={brandOptions}
+                        selectedIds={filters.brandIds}
+                        onChange={(ids) => onFilterChange({ ...filters, brandIds: ids })}
+                        placeholder="All Brands"
+                        searchPlaceholder="Search brand..."
+                    />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Barcode size={14} className="text-primary/70" /> SKU
+                    </Label>
+                    <SkuMultiSelect
+                        options={skuOptions}
+                        selectedCodes={filters.skuCodes}
+                        onChange={(codes: string[]) => onFilterChange({ ...filters, skuCodes: codes })}
+                        onSearch={onSkuSearch}
+                        onLoadMore={onSkuLoadMore}
+                        hasMore={skuHasMoreOptions}
+                        isLoadingMore={skuLoadMoreLoading}
+                        resolveOption={resolveSkuOption}
+                        placeholder="All SKUs"
+                        searchPlaceholder="Search SKU..."
+                        isLoading={skuSearchLoading}
+                    />
+                </div>
             </div>
 
-            <div className="flex-1 min-w-[200px]">
-                <Label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
-                    Brand
-                </Label>
-                <OptionsMultiSelect
-                    options={brandOptions}
-                    selectedIds={filters.brandIds}
-                    onChange={(ids) => onFilterChange({ ...filters, brandIds: ids })}
-                    placeholder="All Brands"
-                    searchPlaceholder="Search brand..."
-                />
-            </div>
-
-            <div className="flex-1 min-w-[320px]">
-                <Label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
-                    SKU
-                </Label>
-                <SkuMultiSelect
-                    options={skuOptions}
-                    selectedCodes={filters.skuCodes}
-                    onChange={(codes: string[]) => onFilterChange({ ...filters, skuCodes: codes })}
-                    onSearch={onSkuSearch}
-                    onLoadMore={onSkuLoadMore}
-                    hasMore={skuHasMoreOptions}
-                    isLoadingMore={skuLoadMoreLoading}
-                    resolveOption={resolveSkuOption}
-                    placeholder="All SKUs"
-                    searchPlaceholder="Search SKU..."
-                    isLoading={skuSearchLoading}
-                />
-            </div>
-
-            <div className="flex items-end">
+            <div className="flex items-end pt-1 xl:pt-0">
                 <Button
-                    variant="outline"
+                    variant="ghost"
                     onClick={() => onFilterChange({ brandIds: [], storeIds: [], skuCodes: [] })}
-                    className="w-full md:w-auto whitespace-nowrap"
+                    className="w-full xl:w-auto whitespace-nowrap text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-12"
                 >
-                    Clear Filters
+                    <X size={16} className="mr-2" /> Clear All
                 </Button>
             </div>
         </div>
@@ -403,15 +417,15 @@ function OptionsMultiSelect({
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-auto min-h-10 py-2">
+                <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-auto min-h-12 py-2 px-3 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
                     <div className="flex flex-wrap gap-1 items-center">
-                        {selectedIds.length === 0 && placeholder}
+                        {selectedIds.length === 0 && <span className="text-muted-foreground">{placeholder}</span>}
                         {selectedIds.length > 0 && selectedIds.length <= 2 && (
                             selectedLabels.map((label, idx) => (
-                                <span key={`${label}-${idx}`} className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 mr-1 mb-1">
+                                <span key={`${label}-${idx}`} className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1 mb-0.5">
                                     {label}
                                     <span
-                                        className="ml-1 cursor-pointer"
+                                        className="ml-1 cursor-pointer opacity-70 hover:opacity-100"
                                         onMouseDown={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
@@ -423,13 +437,13 @@ function OptionsMultiSelect({
                                             toggleOption(id);
                                         }}
                                     >
-                                        <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                        <X className="h-3 w-3" />
                                     </span>
                                 </span>
                             ))
                         )}
                         {selectedIds.length > 2 && (
-                            <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 mr-1">
+                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1">
                                 {selectedIds.length} selected
                             </span>
                         )}
@@ -437,13 +451,13 @@ function OptionsMultiSelect({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[220px] p-0" align="start">
-                <Command>
+            <PopoverContent className="w-[280px] p-0 shadow-lg border-border/60" align="start">
+                <Command className="rounded-lg border-none">
                     <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={setSearch} />
-                    <CommandList>
+                    <CommandList className="max-h-[300px] overflow-y-auto custom-scrollbar">
                         <CommandEmpty>No item found.</CommandEmpty>
                         <CommandGroup>
-                            <CommandItem onSelect={() => onChange([])} className="justify-center text-center font-medium text-sm">
+                            <CommandItem onSelect={() => onChange([])} className="justify-center text-center font-medium text-sm text-muted-foreground hover:text-foreground">
                                 Clear selection
                             </CommandItem>
                         </CommandGroup>
@@ -458,13 +472,13 @@ function OptionsMultiSelect({
                                     >
                                         <div
                                             className={cn(
-                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all",
                                                 isSelected
                                                     ? "bg-primary text-primary-foreground"
                                                     : "opacity-50 [&_svg]:invisible"
                                             )}
                                         >
-                                            <Check className={cn("h-4 w-4")} />
+                                            <Check className={cn("h-3 w-3")} />
                                         </div>
                                         {option.name}
                                     </CommandItem>

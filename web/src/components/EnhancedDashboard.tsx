@@ -10,6 +10,7 @@ import { DashboardCharts } from './dashboard/DashboardCharts';
 import { StockItemsDialog } from './dashboard/StockItemsDialog';
 import { OverstockSubgroupCards } from './dashboard/OverstockSubgroupCards';
 import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from '@/types/stockHealth';
+import { Package, RefreshCw, LayoutDashboard } from "lucide-react";
 
 const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
 const OVERSTOCK_CATEGORIES = ['ringan', 'sedang', 'berat'] as const;
@@ -136,23 +137,48 @@ export function EnhancedDashboard() {
 
   // Show loading state if initial load and no data
   if (loading && !data) {
-    return <div className="flex justify-center items-center h-96">Loading dashboard data...</div>;
+    return (
+      <div className="flex flex-col justify-center items-center h-[80vh] gap-4">
+        <div className="relative">
+          <div className="h-16 w-16 rounded-full border-4 border-muted border-t-primary animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Package className="h-6 w-6 text-primary/40" />
+          </div>
+        </div>
+        <p className="text-muted-foreground animate-pulse font-medium">Loading inventory data...</p>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-red-500 p-4 border border-red-200 rounded bg-red-50">Error: {error}</div>;
+    return <div className="text-destructive p-6 border border-destructive/20 rounded-xl bg-destructive/10 max-w-2xl mx-auto mt-20 text-center font-medium">Error: {error}</div>;
   }
 
   return (
-    <div className="space-y-8 max-w-[1600px] mx-auto p-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Stock Health Dashboard</h2>
-          <p className="text-muted-foreground dark:text-gray-400 mt-1">Overview of inventory health across brands and stores.</p>
+    <div className="min-h-screen bg-background text-foreground space-y-8 p-6 lg:p-10 max-w-[1800px] mx-auto transition-colors duration-300">
+
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/40 pb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-primary/10 rounded-xl text-primary shadow-sm border border-primary/20">
+            <LayoutDashboard size={28} strokeWidth={1.5} />
+          </div>
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+              Stock Health
+            </h2>
+            <p className="text-muted-foreground mt-1 flex items-center gap-2 text-sm">
+              Inventory analytics and stock level monitoring
+            </p>
+          </div>
         </div>
-        <div className="text-sm text-muted-foreground bg-gray-100 dark:bg-gray-800 dark:text-gray-300 px-3 py-1 rounded-full border dark:border-gray-700">
-          {lastUpdated && `Last updated: ${lastUpdated.toLocaleString()}`}
-        </div>
+
+        {lastUpdated && (
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/50 px-4 py-2 rounded-full border border-border/50 shadow-sm backdrop-blur-sm">
+            <RefreshCw size={12} className="text-primary animate-[spin_8s_linear_infinite]" />
+            <span>Updated: {lastUpdated.toLocaleString()}</span>
+          </div>
+        )}
       </div>
 
       <DashboardFilters
@@ -172,19 +198,32 @@ export function EnhancedDashboard() {
         resolveSkuOption={resolveSkuOption}
       />
 
-      <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={loading} />
+      <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <section>
+          <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={loading} />
+        </section>
 
-      <div className="space-y-4">
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Overstock Subgroups</h3>
-        <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} />
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-6 w-1 bg-primary rounded-full" />
+            <h3 className="text-xl font-semibold tracking-tight text-foreground">Overstock Deep Dive</h3>
+          </div>
+          <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} />
+        </section>
+
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-6 w-1 bg-secondary rounded-full" />
+            <h3 className="text-xl font-semibold tracking-tight text-foreground">Category Analytics</h3>
+          </div>
+          <DashboardCharts
+            charts={charts}
+            brandBreakdown={brandBreakdown}
+            storeBreakdown={storeBreakdown}
+            isLoading={loading}
+          />
+        </section>
       </div>
-
-      <DashboardCharts
-        charts={charts}
-        brandBreakdown={brandBreakdown}
-        storeBreakdown={storeBreakdown}
-        isLoading={loading}
-      />
 
       <StockItemsDialog
         isOpen={isDialogOpen}
