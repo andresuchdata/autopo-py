@@ -159,9 +159,19 @@ export const getSupplierPOItems = async ({
     }
 };
 
-export const getDashboardSummary = async () => {
+export interface DashboardSummaryParams {
+    poType?: 'AU' | 'PO' | 'OTHERS';
+    releasedDate?: string;
+}
+
+export const getDashboardSummary = async (params?: DashboardSummaryParams) => {
     try {
-        const response = await api.get('/po/analytics/summary');
+        const response = await api.get('/po/analytics/summary', {
+            params: {
+                po_type: params?.poType,
+                released_date: params?.releasedDate,
+            },
+        });
         return response.data;
     } catch (error) {
         console.error('Error fetching dashboard summary:', error);
