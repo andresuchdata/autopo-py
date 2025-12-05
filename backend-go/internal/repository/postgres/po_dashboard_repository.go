@@ -517,7 +517,7 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
 }
 
 // GetPOSnapshotItems fetches PO snapshot items filtered by status with pagination and sorting
-func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string) (*domain.POSnapshotItemsResponse, error) {
+func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.POSnapshotItemsResponse, error) {
 	// Validate and set defaults
 	if page < 1 {
 		page = 1
@@ -548,6 +548,9 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 
 	offset := (page - 1) * pageSize
 
+	// Build filter clause for additional filters
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 2)
+
 	// Query to get latest snapshots for the given status
 	query := fmt.Sprintf(`
 		WITH latest_snapshot AS (
@@ -556,7 +559,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				sku,
 				MAX(time) AS latest_time
 			FROM po_snapshots
-			WHERE status = $1
+			WHERE status = $1%s
 			GROUP BY po_number, sku
 		)
 		SELECT
@@ -578,35 +581,44 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 		LEFT JOIN brands b ON s.brand_id = b.id
 		LEFT JOIN stores st ON s.store_id = st.id
 		ORDER BY %s %s
-		LIMIT $2 OFFSET $3
-	`, sortField, sortDirection)
+		LIMIT $%d OFFSET $%d
+	`, filterClause, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
 
 	// Count query
-	countQuery := `
+	countQuery := fmt.Sprintf(`
 		WITH latest_snapshot AS (
 			SELECT 
 				po_number,
 				sku,
 				MAX(time) AS latest_time
 			FROM po_snapshots
-			WHERE status = $1
+			WHERE status = $1%s
 			GROUP BY po_number, sku
 		)
 		SELECT COUNT(*)
 		FROM po_snapshots s
 		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-	`
+	`, filterClause)
+
+	// Build args for count query
+	countArgs := []interface{}{statusCode}
+	countArgs = append(countArgs, filterArgs...)
 
 	// Execute count query
 	var total int
-	if err := r.db.GetContext(ctx, &total, countQuery, statusCode); err != nil {
+	if err := r.db.GetContext(ctx, &total, countQuery, countArgs...); err != nil {
 		log.Error().Err(err).Int("status_code", statusCode).Msg("failed to count PO snapshot items")
 		return nil, fmt.Errorf("failed to count items: %w", err)
 	}
 
+	// Build args for main query
+	queryArgs := []interface{}{statusCode}
+	queryArgs = append(queryArgs, filterArgs...)
+	queryArgs = append(queryArgs, pageSize, offset)
+
 	// Execute main query
 	var items []domain.POSnapshotItem
-	if err := sqlx.SelectContext(ctx, r.db, &items, query, statusCode, pageSize, offset); err != nil {
+	if err := sqlx.SelectContext(ctx, r.db, &items, query, queryArgs...); err != nil {
 		log.Error().Err(err).Int("status_code", statusCode).Msg("failed to fetch PO snapshot items")
 		return nil, fmt.Errorf("failed to fetch items: %w", err)
 	}
