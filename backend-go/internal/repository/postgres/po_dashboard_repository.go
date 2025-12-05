@@ -10,15 +10,52 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// GetDashboardSummary aggregates all dashboard data
-// Note: For simplicity and performance, we might want to run these in parallel or use a single complex query.
-// For now, we'll fetch them sequentially or let the service layer handle aggregation if we want granular endpoints.
-// The interface defined GetDashboardSummary as returning the full struct, so let's implement that.
-func (r *poRepository) GetDashboardSummary(ctx context.Context) (*domain.DashboardSummary, error) {
+// buildDashboardFilterClause constructs SQL filter clauses for dashboard queries
+func buildDashboardFilterClause(filter *domain.DashboardFilter, alias string, startIndex int) (string, []interface{}) {
+	if filter == nil {
+		return "", nil
+	}
+
+	var clauses []string
+	var args []interface{}
+	idx := startIndex
+
+	if filter.POType != "" {
+		switch strings.ToUpper(filter.POType) {
+		case "AU":
+			clauses = append(clauses, fmt.Sprintf("%spo_number ILIKE $%d", alias, idx))
+			args = append(args, "AU%")
+			idx++
+		case "PO":
+			clauses = append(clauses, fmt.Sprintf("%spo_number ILIKE $%d", alias, idx))
+			args = append(args, "PO%")
+			idx++
+		case "OTHERS":
+			clauses = append(clauses, fmt.Sprintf("(%spo_number NOT ILIKE $%d AND %spo_number NOT ILIKE $%d)", alias, idx, alias, idx+1))
+			args = append(args, "AU%", "PO%")
+			idx += 2
+		}
+	}
+
+	if filter.ReleasedDate != "" {
+		clauses = append(clauses, fmt.Sprintf("DATE(%spo_released_at) = $%d", alias, idx))
+		args = append(args, filter.ReleasedDate)
+		idx++
+	}
+
+	if len(clauses) == 0 {
+		return "", nil
+	}
+
+	return " AND " + strings.Join(clauses, " AND "), args
+}
+
+// GetDashboardSummary aggregates all dashboard data applying optional filters
+func (r *poRepository) GetDashboardSummary(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error) {
 	summary := &domain.DashboardSummary{}
 
 	// 1. Status Summaries
-	statusSummaries, err := r.getStatusSummaries(ctx)
+	statusSummaries, err := r.getStatusSummaries(ctx, filter)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch status summaries")
 		return nil, fmt.Errorf("failed to get status summaries: %w", err)
@@ -35,7 +72,7 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context) (*domain.Dashboa
 	}
 
 	// 3. Trends (default interval day)
-	trends, err := r.GetPOTrend(ctx, "day")
+	trends, err := r.getPOTrendWithFilter(ctx, "day", filter)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch trends")
 		return nil, fmt.Errorf("failed to get trends: %w", err)
@@ -43,7 +80,7 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context) (*domain.Dashboa
 	summary.Trends = trends
 
 	// 4. Aging
-	aging, err := r.GetPOAging(ctx)
+	aging, err := r.getPOAgingWithFilter(ctx, filter)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch aging data")
 		return nil, fmt.Errorf("failed to get aging: %w", err)
@@ -51,7 +88,7 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context) (*domain.Dashboa
 	summary.Aging = aging
 
 	// 5. Supplier Performance
-	perf, err := r.GetSupplierPerformance(ctx)
+	perf, err := r.getSupplierPerformanceWithFilter(ctx, filter)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch supplier performance")
 		return nil, fmt.Errorf("failed to get supplier performance: %w", err)
@@ -180,7 +217,7 @@ type statusSummaryRow struct {
 	DiffDays   int     `db:"diff_days"`
 }
 
-func (r *poRepository) getStatusSummaries(ctx context.Context) ([]domain.POStatusSummary, error) {
+func (r *poRepository) getStatusSummaries(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
 	// Status mapping: 1: Draft, 2: Released, 3: Sent, 4: Approved, 5: Arrived, 6: Received
 	// We need to join with purchase_order_items to get value?
 	// purchase_orders table has po_qty, received_qty. It doesn't seem to have total_amount directly?
@@ -188,14 +225,16 @@ func (r *poRepository) getStatusSummaries(ctx context.Context) ([]domain.POStatu
 	// purchase_order_items has amount.
 	// Let's calculate total value from items.
 
-	query := `
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
+
+	query := fmt.Sprintf(`
 		WITH latest_snapshot AS (
 			SELECT 
 				po_number,
 				sku,
 				MAX(time) AS latest_time
 			FROM po_snapshots
-			WHERE po_number <> ''
+			WHERE po_number <> '' %s
 			GROUP BY po_number, sku
 		),
 		po_values AS (
@@ -224,7 +263,7 @@ func (r *poRepository) getStatusSummaries(ctx context.Context) ([]domain.POStatu
 		FROM po_values
 		GROUP BY status_code
 		ORDER BY status_code
-	`
+	`, filterClause)
 	// Note: "Avg Days in Status" is tricky without history.
 	// If we use po_snapshots, we can get exact duration.
 	// For now, let's use a simple "Days since creation" or "Days since status change" if we had that column.
@@ -234,7 +273,7 @@ func (r *poRepository) getStatusSummaries(ctx context.Context) ([]domain.POStatu
 	// The requirement says "Avg. Days in Status".
 
 	var rows []statusSummaryRow
-	if err := sqlx.SelectContext(ctx, r.db, &rows, query); err != nil {
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query, filterArgs...); err != nil {
 		return nil, err
 	}
 
@@ -253,6 +292,10 @@ func (r *poRepository) getStatusSummaries(ctx context.Context) ([]domain.POStatu
 }
 
 func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error) {
+	return r.getPOTrendWithFilter(ctx, interval, nil)
+}
+
+func (r *poRepository) getPOTrendWithFilter(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error) {
 	// Use po_snapshots for historical trend
 	// Group by day and status (avoid TimescaleDB dependency)
 
@@ -263,7 +306,9 @@ func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domai
 		Count      int    `db:"count"`
 	}
 
-	query := `
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 1)
+
+	query := fmt.Sprintf(`
 		WITH bucketed AS (
 			SELECT 
 				date_trunc('day', time) AS bucket,
@@ -271,7 +316,7 @@ func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domai
 				po_number,
 				sku
 			FROM po_snapshots
-			WHERE time > NOW() - INTERVAL '30 days'
+			WHERE time > NOW() - INTERVAL '30 days' %s
 		)
 		SELECT 
 			bucket::date::text as date,
@@ -280,7 +325,7 @@ func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domai
 		FROM bucketed
 		GROUP BY bucket, status_code
 		ORDER BY bucket, status_code
-	`
+	`, filterClause)
 
 	var rows []trendRow
 	if err := sqlx.SelectContext(ctx, r.db, &rows, query); err != nil {
@@ -308,10 +353,16 @@ type poAgingRow struct {
 }
 
 func (r *poRepository) GetPOAging(ctx context.Context) ([]domain.POAging, error) {
+	return r.getPOAgingWithFilter(ctx, nil)
+}
+
+func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POAging, error) {
 	// List POs that are not completed (e.g., not Received/Cancelled?)
 	// Assuming status < 6 are active.
 
-	query := `
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 1)
+
+	query := fmt.Sprintf(`
 	        WITH latest_snapshot AS (
 	            SELECT
 	                po_number,
@@ -336,7 +387,7 @@ func (r *poRepository) GetPOAging(ctx context.Context) ([]domain.POAging, error)
 	                SELECT *,
 	                    ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
 	                FROM po_snapshots
-	                WHERE po_number <> ''
+	                WHERE po_number <> '' %s
 	            ) s
 	            WHERE rn = 1
 	        ),
@@ -390,7 +441,7 @@ func (r *poRepository) GetPOAging(ctx context.Context) ([]domain.POAging, error)
 	        FROM ranked
 	        WHERE rn = 1
 	        ORDER BY status_code
-	    `
+	    `, filterClause)
 
 	var rows []poAgingRow
 	if err := sqlx.SelectContext(ctx, r.db, &rows, query); err != nil {
@@ -412,6 +463,10 @@ func (r *poRepository) GetPOAging(ctx context.Context) ([]domain.POAging, error)
 }
 
 func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
+	return r.getSupplierPerformanceWithFilter(ctx, nil)
+}
+
+func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, filter *domain.DashboardFilter) ([]domain.SupplierPerformance, error) {
 	// Lead time derived from PO snapshots: diff between PO sent and arrived timestamps
 
 	query := `
@@ -424,7 +479,7 @@ func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.Sup
 	                po_arrived_at,
 	                ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
 	            FROM po_snapshots
-	            WHERE po_number <> ''
+	            WHERE po_number <> '' %s
 	        ),
 	        po_level AS (
 	            SELECT
@@ -452,10 +507,10 @@ func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.Sup
 	        JOIN suppliers s ON sa.supplier_id = s.id
 	        ORDER BY sa.avg_lead_time ASC
 	        LIMIT 5
-	    `
+	    `, filterClause)
 
 	var results []domain.SupplierPerformance
-	err := sqlx.SelectContext(ctx, r.db, &results, query)
+	err := sqlx.SelectContext(ctx, r.db, &results, query, filterArgs...)
 	return results, err
 }
 

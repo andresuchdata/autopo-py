@@ -111,6 +111,25 @@ type stockHealthRecord struct {
 	hpp               float64
 }
 
+type rawPOSnapshotRow struct {
+	sku              string
+	productName      string
+	poNumber         string
+	brandName        string
+	storeName        string
+	supplierName     string
+	quantityOrdered  int
+	unitPrice        float64
+	totalAmount      float64
+	status           int
+	releasedAt       *time.Time
+	sentAt           *time.Time
+	approvedAt       *time.Time
+	arrivedAt        *time.Time
+	receivedAt       *time.Time
+	quantityReceived int
+}
+
 type rawStockHealthRow struct {
 	storeName         string
 	sku               string
@@ -380,8 +399,11 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	}
 	defer tx.Rollback()
 
-	processedCount := 0
-	batch := make([]poSnapshotRecord, 0, analyticsBatchSize)
+	rawRows := make([]rawPOSnapshotRow, 0)
+	skuNames := make(map[string]string)
+	brandNames := make(map[string]string)
+	storeNames := make(map[string]string)
+	supplierNames := make(map[string]string)
 
 	for {
 		record, err := reader.Read()
@@ -390,10 +412,6 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 				break
 			}
 			return fmt.Errorf("error reading record: %w", err)
-		}
-
-		if len(record) < len(colMap) {
-			continue
 		}
 
 		sku := strings.TrimSpace(record[colMap["SKU"]])
@@ -407,104 +425,132 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 			productName = "Product " + sku
 		}
 
+		if _, exists := skuNames[sku]; !exists || skuNames[sku] == "" {
+			skuNames[sku] = productName
+		}
+
 		poNumber := strings.TrimSpace(record[colMap["No PO"]])
 		if poNumber == "" {
 			return fmt.Errorf("record missing PO number")
-		}
-
-		var productID int
-		err = tx.QueryRowContext(ctx, "SELECT id FROM products WHERE sku = $1", sku).Scan(&productID)
-		if err != nil && err != sql.ErrNoRows {
-			return fmt.Errorf("failed to resolve product: %w", err)
-		}
-		if err == sql.ErrNoRows || productID == 0 {
-			err = tx.QueryRowContext(ctx,
-				"INSERT INTO products (sku, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id",
-				sku, productName,
-			).Scan(&productID)
-			if err != nil {
-				return fmt.Errorf("failed to create product: %w", err)
-			}
 		}
 
 		brandName := strings.TrimSpace(record[colMap["Brand"]])
 		if brandName == "" {
 			return fmt.Errorf("record missing brand name")
 		}
+		brandNames[strings.ToLower(brandName)] = brandName
 
-		var brandID int
-		err = tx.QueryRowContext(ctx, "SELECT id FROM brands WHERE LOWER(name) = LOWER($1)", brandName).Scan(&brandID)
-		if err != nil && err != sql.ErrNoRows {
-			return fmt.Errorf("failed to resolve brand: %w", err)
+		storeName := strings.TrimSpace(record[colMap["Store"]])
+		if storeName == "" {
+			return fmt.Errorf("record missing store name")
 		}
-		if err == sql.ErrNoRows || brandID == 0 {
-			err = tx.QueryRowContext(ctx,
-				"INSERT INTO brands (name, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id",
-				brandName,
-			).Scan(&brandID)
-			if err != nil {
-				return fmt.Errorf("failed to create brand: %w", err)
-			}
-		}
-
-		storeID, err := resolveStoreID(ctx, tx, strings.TrimSpace(record[colMap["Store"]]))
-		if err != nil {
-			return err
-		}
+		storeNames[strings.ToLower(storeName)] = storeName
 
 		supplierName := strings.TrimSpace(record[colMap["Supplier"]])
-		supplierID, err := resolveSupplierID(ctx, tx, supplierName)
-		if err != nil {
-			return err
+		if supplierName != "" {
+			supplierNames[strings.ToLower(supplierName)] = supplierName
 		}
 
-		quantityOrdered, _ := strconv.Atoi(record[colMap["Qty PO"]])
-		unitPrice, _ := strconv.ParseFloat(record[colMap["Harga"]], 64)
-		totalAmount, _ := strconv.ParseFloat(record[colMap["Amount"]], 64)
-		status, _ := strconv.Atoi(record[colMap["Status"]])
-		quantityReceived, _ := strconv.Atoi(record[colMap["Qty Received"]])
-
-		rec := poSnapshotRecord{
-			snapshotTime:     snapshotTime,
-			poNumber:         poNumber,
-			productID:        productID,
+		rawRows = append(rawRows, rawPOSnapshotRow{
 			sku:              sku,
 			productName:      productName,
-			brandID:          brandID,
-			storeID:          storeID,
-			supplierID:       supplierID,
-			quantityOrdered:  quantityOrdered,
-			unitPrice:        unitPrice,
-			totalAmount:      totalAmount,
-			status:           status,
+			poNumber:         poNumber,
+			brandName:        brandName,
+			storeName:        storeName,
+			supplierName:     supplierName,
+			quantityOrdered:  parseOptionalInt(record[colMap["Qty PO"]]),
+			unitPrice:        parseOptionalFloat(record, colMap, "Harga"),
+			totalAmount:      parseOptionalFloat(record, colMap, "Amount"),
+			status:           parseOptionalInt(record[colMap["Status"]]),
 			releasedAt:       parseNullableTime(record[colMap["PO Released"]]),
 			sentAt:           parseNullableTime(record[colMap["PO Sent"]]),
 			approvedAt:       parseNullableTime(record[colMap["PO Approved"]]),
 			arrivedAt:        parseNullableTime(record[colMap["PO Arrived"]]),
 			receivedAt:       parseNullableTime(record[colMap["PO Received"]]),
-			quantityReceived: quantityReceived,
-		}
-
-		batch = append(batch, rec)
-		processedCount++
-
-		if len(batch) == analyticsBatchSize {
-			if err := p.flushPOSnapshotBatch(ctx, tx, batch); err != nil {
-				return err
-			}
-			batch = batch[:0]
-		}
+			quantityReceived: parseOptionalInt(record[colMap["Qty Received"]]),
+		})
 	}
 
-	if err := p.flushPOSnapshotBatch(ctx, tx, batch); err != nil {
+	productIDs, err := p.ensureProductsWithNamesBulk(ctx, tx, skuNames)
+	if err != nil {
 		return err
+	}
+	storeIDs, err := ensureStoresBulk(ctx, tx, storeNames)
+	if err != nil {
+		return err
+	}
+	brandIDs, err := ensureBrandsBulk(ctx, tx, brandNames)
+	if err != nil {
+		return err
+	}
+	supplierIDs, err := ensureSuppliersBulk(ctx, tx, supplierNames)
+	if err != nil {
+		return err
+	}
+
+	records := make([]poSnapshotRecord, 0, len(rawRows))
+	for _, raw := range rawRows {
+		productID, ok := productIDs[raw.sku]
+		if !ok {
+			return fmt.Errorf("product %s not resolved", raw.sku)
+		}
+
+		storeID, ok := storeIDs[strings.ToLower(raw.storeName)]
+		if !ok {
+			return fmt.Errorf("store %s not resolved", raw.storeName)
+		}
+
+		brandID, ok := brandIDs[strings.ToLower(raw.brandName)]
+		if !ok {
+			return fmt.Errorf("brand %s not resolved", raw.brandName)
+		}
+
+		var supplierID sql.NullInt64
+		if raw.supplierName != "" {
+			if id, ok := supplierIDs[strings.ToLower(raw.supplierName)]; ok {
+				supplierID = sql.NullInt64{Int64: int64(id), Valid: true}
+			} else {
+				return fmt.Errorf("supplier %s not resolved", raw.supplierName)
+			}
+		}
+
+		records = append(records, poSnapshotRecord{
+			snapshotTime:     snapshotTime,
+			poNumber:         raw.poNumber,
+			productID:        productID,
+			sku:              raw.sku,
+			productName:      raw.productName,
+			brandID:          brandID,
+			storeID:          storeID,
+			supplierID:       supplierID,
+			quantityOrdered:  raw.quantityOrdered,
+			unitPrice:        raw.unitPrice,
+			totalAmount:      raw.totalAmount,
+			status:           raw.status,
+			releasedAt:       raw.releasedAt,
+			sentAt:           raw.sentAt,
+			approvedAt:       raw.approvedAt,
+			arrivedAt:        raw.arrivedAt,
+			receivedAt:       raw.receivedAt,
+			quantityReceived: raw.quantityReceived,
+		})
+	}
+
+	for start := 0; start < len(records); start += analyticsBatchSize {
+		end := start + analyticsBatchSize
+		if end > len(records) {
+			end = len(records)
+		}
+		if err := p.flushPOSnapshotBatch(ctx, tx, records[start:end]); err != nil {
+			return err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Printf("Successfully processed %d PO snapshot records from %s", processedCount, filePath)
+	log.Printf("Successfully processed %d PO snapshot records from %s", len(records), filePath)
 	return nil
 }
 
@@ -580,45 +626,6 @@ func (p *AnalyticsProcessor) flushPOSnapshotBatch(ctx context.Context, tx *sql.T
 		return fmt.Errorf("failed to upsert po snapshots batch: %w", err)
 	}
 	return nil
-}
-
-func resolveStoreID(ctx context.Context, tx *sql.Tx, storeName string) (int, error) {
-	if storeName == "" {
-		return 0, fmt.Errorf("record missing store name")
-	}
-	var storeID int
-	if err := tx.QueryRowContext(ctx, "SELECT id FROM stores WHERE LOWER(name) = LOWER($1)", storeName).Scan(&storeID); err != nil {
-		if err != sql.ErrNoRows {
-			return 0, fmt.Errorf("failed to resolve store: %w", err)
-		}
-		if err := tx.QueryRowContext(ctx,
-			"INSERT INTO stores (name, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id",
-			storeName,
-		).Scan(&storeID); err != nil {
-			return 0, fmt.Errorf("failed to create store: %w", err)
-		}
-	}
-	return storeID, nil
-}
-
-func resolveSupplierID(ctx context.Context, tx *sql.Tx, supplierName string) (sql.NullInt64, error) {
-	var supplierID sql.NullInt64
-	if supplierName == "" {
-		return supplierID, nil
-	}
-	if err := tx.QueryRowContext(ctx, "SELECT id FROM suppliers WHERE LOWER(name) = LOWER($1)", supplierName).Scan(&supplierID.Int64); err != nil {
-		if err != sql.ErrNoRows {
-			return supplierID, fmt.Errorf("failed to resolve supplier: %w", err)
-		}
-		if err := tx.QueryRowContext(ctx,
-			"INSERT INTO suppliers (name, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id",
-			supplierName,
-		).Scan(&supplierID.Int64); err != nil {
-			return supplierID, fmt.Errorf("failed to create supplier: %w", err)
-		}
-	}
-	supplierID.Valid = supplierID.Int64 != 0
-	return supplierID, nil
 }
 
 func parseSnapshotTimeFromFilename(path string) (time.Time, error) {
@@ -807,6 +814,91 @@ func (p *AnalyticsProcessor) ensureProductsBulk(ctx context.Context, tx *sql.Tx,
 		result[sku] = id
 	}
 	return result, nil
+}
+
+func ensureSuppliersBulk(ctx context.Context, tx *sql.Tx, names map[string]string) (map[string]int, error) {
+	result := make(map[string]int, len(names))
+	if len(names) == 0 {
+		return result, nil
+	}
+	lowerNames := make([]string, 0, len(names))
+	for key := range names {
+		lowerNames = append(lowerNames, key)
+	}
+	rows, err := tx.QueryContext(ctx,
+		`SELECT LOWER(name) AS key, id FROM suppliers WHERE LOWER(name) = ANY($1)`,
+		pq.Array(lowerNames),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load supplier ids: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key string
+		var id int
+		if err := rows.Scan(&key, &id); err != nil {
+			return nil, fmt.Errorf("failed to scan supplier id: %w", err)
+		}
+		result[key] = id
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("supplier rows error: %w", err)
+	}
+
+	insertStmt := `
+		INSERT INTO suppliers (name, created_at, updated_at)
+		VALUES ($1, NOW(), NOW())
+		ON CONFLICT (LOWER(name)) WHERE original_id IS NULL DO UPDATE SET updated_at = NOW()
+		RETURNING id
+	`
+	for key, displayName := range names {
+		if _, exists := result[key]; exists {
+			continue
+		}
+		var id int
+		if err := tx.QueryRowContext(ctx, insertStmt, displayName).Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to upsert supplier %s: %w", displayName, err)
+		}
+		result[key] = id
+	}
+	return result, nil
+}
+
+func (p *AnalyticsProcessor) ensureProductsWithNamesBulk(ctx context.Context, tx *sql.Tx, skuNames map[string]string) (map[string]int, error) {
+	if len(skuNames) == 0 {
+		return map[string]int{}, nil
+	}
+	skus := make(map[string]struct{}, len(skuNames))
+	for sku := range skuNames {
+		skus[sku] = struct{}{}
+	}
+	productIDs, err := p.ensureProductsBulk(ctx, tx, skus)
+	if err != nil {
+		return nil, err
+	}
+	insertStmt := `
+		INSERT INTO products (sku, name, created_at, updated_at)
+		VALUES ($1, $2, NOW(), NOW())
+		ON CONFLICT (sku) DO UPDATE
+			SET name = EXCLUDED.name,
+			    updated_at = NOW()
+		RETURNING id
+	`
+	for sku, name := range skuNames {
+		if name == "" {
+			name = "Product " + sku
+		}
+		if _, exists := productIDs[sku]; exists {
+			continue
+		}
+		var id int
+		if err := tx.QueryRowContext(ctx, insertStmt, sku, name).Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to upsert product %s: %w", sku, err)
+		}
+		productIDs[sku] = id
+	}
+	return productIDs, nil
 }
 
 func (p *AnalyticsProcessor) updateProductHPPBulk(ctx context.Context, tx *sql.Tx, skuHPP map[string]float64) error {
