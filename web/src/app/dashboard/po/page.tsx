@@ -71,7 +71,7 @@ function PODashboardContent() {
 
     // Define the desired order for PO status cards
     const statusOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived'];
-    
+
     // Sort status summaries according to the defined order
     const statusSummaries = (data.status_summaries ?? []).sort((a: any, b: any) => {
         const indexA = statusOrder.indexOf(a.status);
@@ -81,7 +81,7 @@ function PODashboardContent() {
         if (indexB === -1) return -1;
         return indexA - indexB;
     });
-    
+
     const funnelData = data.lifecycle_funnel ?? [];
     const trendData = data.trends ?? [];
     const agingData = data.aging ?? [];
@@ -149,21 +149,35 @@ function PODashboardContent() {
                 <POTrendChart data={trendData} />
             </div>
 
+
             {/* 3. Charts Row 2: Aging & Supplier Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <POAgingTable data={agingData} />
                 <SupplierPerformanceChart data={supplierPerformanceData} />
             </div>
-            <POSnapshotDialog
-                status={selectedStatus}
-                open={statusModalOpen}
-                onOpenChange={(open: boolean) => {
-                    setStatusModalOpen(open);
-                    if (!open) {
-                        setSelectedStatus(null);
-                    }
-                }}
-            />
+
+            {/* Find the summary for the selected status to pass totals */}
+            {(() => {
+                const selectedSummary = statusSummaries.find((s: any) => s.status === selectedStatus);
+                return (
+                    <POSnapshotDialog
+                        status={selectedStatus}
+                        open={statusModalOpen}
+                        onOpenChange={(open: boolean) => {
+                            setStatusModalOpen(open);
+                            if (!open) {
+                                setSelectedStatus(null);
+                            }
+                        }}
+                        summaryDefaults={selectedSummary ? {
+                            totalPOs: selectedSummary.count,
+                            totalQty: selectedSummary.total_qty,
+                            totalValue: selectedSummary.total_value,
+                            totalSkus: selectedSummary.sku_count
+                        } : undefined}
+                    />
+                );
+            })()}
         </div>
     );
 }
