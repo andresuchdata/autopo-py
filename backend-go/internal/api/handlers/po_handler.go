@@ -125,6 +125,24 @@ func parseNonNegativeInt(value string) int {
 	return 0
 }
 
+func (h *POHandler) parseDashboardFilter(c *gin.Context) *domain.DashboardFilter {
+	poType := strings.TrimSpace(c.Query("po_type"))
+	releasedDate := strings.TrimSpace(c.Query("released_date"))
+
+	if poType == "" && releasedDate == "" {
+		return nil
+	}
+
+	filter := &domain.DashboardFilter{}
+	if poType != "" {
+		filter.POType = strings.ToUpper(poType)
+	}
+	if releasedDate != "" {
+		filter.ReleasedDate = releasedDate
+	}
+	return filter
+}
+
 // GetStoreResults returns the processing results for a specific store
 func (h *POHandler) GetStoreResults(c *gin.Context) {
 	storeName := c.Param("store")
@@ -147,7 +165,8 @@ func (h *POHandler) GetStoreResults(c *gin.Context) {
 
 // GetDashboardSummary returns the aggregated dashboard data
 func (h *POHandler) GetDashboardSummary(c *gin.Context) {
-	summary, err := h.poService.GetDashboardSummary(c.Request.Context())
+	filter := h.parseDashboardFilter(c)
+	summary, err := h.poService.GetDashboardSummary(c.Request.Context(), filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch dashboard summary"})
 		return
