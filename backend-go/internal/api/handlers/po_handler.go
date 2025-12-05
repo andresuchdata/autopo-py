@@ -225,7 +225,10 @@ func (h *POHandler) GetPOSnapshotItems(c *gin.Context) {
 	sortField := c.DefaultQuery("sort_field", "po_number")
 	sortDirection := c.DefaultQuery("sort_direction", "asc")
 
-	response, err := h.poService.GetPOSnapshotItems(c.Request.Context(), statusCode, page, pageSize, sortField, sortDirection)
+	// Parse optional filter parameters
+	filter := h.parseDashboardFilter(c)
+
+	response, err := h.poService.GetPOSnapshotItems(c.Request.Context(), statusCode, page, pageSize, sortField, sortDirection, filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch PO snapshot items"})
 		return
