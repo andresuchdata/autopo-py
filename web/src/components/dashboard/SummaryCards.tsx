@@ -49,19 +49,30 @@ interface SummaryCardsProps {
 }
 
 const CONDITIONS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
+const HIGHLIGHT_CONDITIONS = new Set<ConditionKey>(['no_sales', 'negative_stock']);
 
 function HeaderRow() {
     return (
         <>
             <div className="hidden md:block"></div> {/* Spacer for left column */}
             {CONDITIONS.map((condition) => (
-                <div
-                    key={condition}
-                    className="flex items-center justify-center p-3 rounded-lg border-2 bg-white dark:bg-gray-900/40 font-medium text-sm text-center shadow-sm text-gray-800 dark:text-gray-100"
-                    style={{ borderColor: COLORS[condition] }}
-                >
-                    {HEADER_LABELS[condition]}
-                </div>
+                (() => {
+                    const isHighlighted = HIGHLIGHT_CONDITIONS.has(condition);
+                    const baseClasses =
+                        "flex items-center justify-center p-3 rounded-lg border-2 font-medium text-sm text-center shadow-sm";
+                    const palette = isHighlighted
+                        ? "bg-gradient-to-b from-slate-800 via-slate-700 to-slate-600 text-white border-slate-600 shadow-lg"
+                        : "bg-white dark:bg-gray-900/40 text-gray-800 dark:text-gray-100";
+                    return (
+                        <div
+                            key={condition}
+                            className={`${baseClasses} ${palette}`}
+                            style={{ borderColor: COLORS[condition] }}
+                        >
+                            {HEADER_LABELS[condition]}
+                        </div>
+                    );
+                })()
             ))}
         </>
     );
@@ -106,24 +117,30 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
                 const displayPercentage = Number.isInteger(normalizedPercentage)
                     ? normalizedPercentage.toString()
                     : normalizedPercentage.toFixed(1);
+                const isHighlighted = HIGHLIGHT_CONDITIONS.has(condition);
+                const cardPalette = isHighlighted
+                    ? "bg-gradient-to-br from-slate-800 via-slate-700 to-slate-600 text-white border-slate-600 shadow-xl"
+                    : "bg-white dark:bg-gray-900/50 text-gray-900 dark:text-gray-100 border-gray-100 dark:border-gray-800";
+                const valueTextClass = isHighlighted ? "text-white" : "text-gray-900 dark:text-gray-100";
+                const percentageTextClass = isHighlighted ? "text-slate-200" : "text-muted-foreground dark:text-gray-400";
 
                 return (
                     <Card
                         key={condition}
-                        className="cursor-pointer hover:shadow-md transition-all border-t-4 bg-white dark:bg-gray-900/50 border-2 border-gray-100 dark:border-gray-800"
+                        className={`cursor-pointer hover:shadow-lg transition-all border-t-4 border-2 ${cardPalette}`}
                         style={{ borderTopColor: COLORS[condition] }}
                         onClick={() => onCardClick(condition, grouping)}
                     >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                            <CardTitle className="text-[10px] font-bold text-muted-foreground dark:text-gray-300 uppercase tracking-wider">
+                            <CardTitle className={`text-[10px] font-bold uppercase tracking-wider ${isHighlighted ? 'text-white/80' : 'text-muted-foreground dark:text-gray-300'}`}>
                                 {CONDITION_LABELS[condition]}
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4 pt-0">
-                            <div className={`font-bold ${type === 'currency' ? 'text-lg' : 'text-2xl'} text-gray-900 dark:text-gray-100`}>
+                            <div className={`font-bold ${type === 'currency' ? 'text-lg' : 'text-2xl'} ${valueTextClass}`}>
                                 {formatValue(value)}
                             </div>
-                            <p className="text-xs text-muted-foreground dark:text-gray-400 mt-1">
+                            <p className={`text-xs mt-1 ${percentageTextClass}`}>
                                 {displayPercentage}% of total
                             </p>
                         </CardContent>
