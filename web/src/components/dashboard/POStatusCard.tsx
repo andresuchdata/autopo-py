@@ -1,11 +1,13 @@
 import React from 'react';
-import { ArrowUp, ArrowDown, Check } from 'lucide-react';
+import { ArrowUp, ArrowDown, Package, ShoppingCart, DollarSign, Clock, Layers } from 'lucide-react';
 import { getStatusColor } from '@/constants/poStatusColors';
 
 interface POStatusCardProps {
     title: string;
     count: number;
-    value: number;
+    totalValue: number;
+    skuCount: number;
+    totalQty: number;
     avgDays: number;
     diffDays?: number; // For the "big number" diff or similar
     isActive?: boolean;
@@ -13,20 +15,35 @@ interface POStatusCardProps {
     className?: string;
 }
 
-const formatCurrency = (value: number) => {
+const formatCurrencyShort = (value: number) => {
     if (value >= 1000000000) {
-        return `Rp ${(value / 1000000000).toFixed(1)} bio`;
+        return `${(value / 1000000000).toFixed(1)}B`;
     }
     if (value >= 1000000) {
-        return `Rp ${(value / 1000000).toFixed(1)} mio`;
+        return `${(value / 1000000).toFixed(1)}M`;
     }
-    return `Rp ${value.toLocaleString()}`;
+    if (value >= 1000) {
+        return `${(value / 1000).toFixed(1)}K`;
+    }
+    return value.toLocaleString();
+};
+
+const formatNumberShort = (value: number) => {
+    if (value >= 1000000) {
+        return `${(value / 1000000).toFixed(1)}M`;
+    }
+    if (value >= 1000) {
+        return `${(value / 1000).toFixed(1)}K`;
+    }
+    return value.toLocaleString();
 };
 
 export const POStatusCard: React.FC<POStatusCardProps> = ({
     title,
     count,
-    value,
+    totalValue,
+    skuCount,
+    totalQty,
     avgDays,
     diffDays,
     isActive,
@@ -36,9 +53,17 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
     // Extract status name from title (e.g., "PO Released" -> "Released")
     const statusName = title.replace('PO ', '');
     const statusColor = getStatusColor(statusName);
-    const activeClasses = isActive ? 'bg-primary/10 shadow-lg border-transparent' : 'bg-card border-border hover:border-transparent';
-    const interactiveClasses = onClick ? 'hover:-translate-y-1 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary' : '';
-    const cardClasses = `relative overflow-hidden p-4 rounded-2xl border flex flex-col items-center justify-center text-center cursor-pointer select-none transition-all duration-300 ease-out ${activeClasses} ${interactiveClasses} ${className ?? ''}`.trim();
+
+    // Determine styles based on active state
+    // Active: slightly colored background, ring, backdrop blur
+    // Inactive: standard card, hover effects
+    const activeClasses = isActive
+        ? 'ring-2 ring-primary ring-offset-2 bg-card/80 backdrop-blur-sm'
+        : 'bg-card border-border hover:border-primary/50 hover:bg-muted/50';
+
+    const interactiveClasses = onClick
+        ? 'cursor-pointer transition-all duration-200 select-none'
+        : '';
 
     return (
         <div
@@ -53,33 +78,81 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
                 }
             }}
             aria-pressed={isActive}
-            className={cardClasses}
+            className={`
+                group relative overflow-hidden rounded-xl border p-4
+                flex flex-col gap-3 min-h-[160px]
+                ${activeClasses} ${interactiveClasses} ${className ?? ''}
+            `.trim()}
             style={{
                 borderColor: isActive ? statusColor : undefined,
             }}
         >
+            {/* Top accent bar */}
             <div
-                className="absolute inset-x-6 top-3 h-1 rounded-full opacity-30 transition-opacity"
+                className="absolute inset-x-0 top-0 h-1 transition-opacity opacity-80"
                 style={{ backgroundColor: statusColor }}
             />
-            <h3 className="text-sm font-medium text-muted-foreground mb-2 mt-2">{title}</h3>
-            <div className="text-4xl font-bold mb-2 tracking-tight">{count}</div>
 
-            <div className="flex items-center gap-2 text-xs mb-1">
-                {diffDays !== undefined && (
-                    <span className={`flex items-center ${diffDays > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {diffDays > 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-                        {Math.abs(diffDays)}
-                    </span>
-                )}
-                <Check size={12} style={{ color: statusColor }} />
-
-                <span className="text-muted-foreground">|</span>
-                <span className="font-medium">{formatCurrency(value)}</span>
+            {/* Header: Title and Main PO Count */}
+            <div className="flex items-start justify-between">
+                <div>
+                    <h3 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">{statusName}</h3>
+                    <div className="text-3xl font-bold tracking-tight mt-1">{count} <span className="text-sm font-normal text-muted-foreground">POs</span></div>
+                </div>
+                <div
+                    className="p-2 rounded-full bg-muted/50 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors"
+                    style={{ color: isActive ? statusColor : undefined, backgroundColor: isActive ? `${statusColor}20` : undefined }}
+                >
+                </div>
             </div>
 
-            <div className="text-xs text-muted-foreground">
-                Avg. Days in Status: {avgDays.toFixed(0)}
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 gap-x-2 gap-y-3 mt-auto pt-2 border-t border-border/50">
+                {/* Total Value */}
+                <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground font-medium flex items-center gap-1">
+                        <DollarSign size={10} /> Value
+                    </span>
+                    <span className="text-sm font-bold" title={`Rp ${totalValue.toLocaleString()}`}>
+                        {formatCurrencyShort(totalValue)}
+                    </span>
+                </div>
+
+                {/* Total Qty */}
+                <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground font-medium flex items-center gap-1">
+                        <Package size={10} /> Qty
+                    </span>
+                    <span className="text-sm font-bold" title={totalQty.toLocaleString()}>
+                        {formatNumberShort(totalQty)}
+                    </span>
+                </div>
+
+                {/* SKU Count */}
+                <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground font-medium flex items-center gap-1">
+                        <Layers size={10} /> SKUs
+                    </span>
+                    <span className="text-sm font-bold">
+                        {skuCount.toLocaleString()}
+                    </span>
+                </div>
+
+                {/* Avg Days */}
+                <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-muted-foreground font-medium flex items-center gap-1">
+                        <Clock size={10} /> Avg Days
+                    </span>
+                    <div className="flex items-center gap-1">
+                        <span className="text-sm font-bold">{avgDays.toFixed(0)}</span>
+                        {diffDays !== undefined && diffDays !== 0 && (
+                            <span className={`text-[10px] items-center flex ${diffDays > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                {diffDays > 0 ? <ArrowUp size={8} /> : <ArrowDown size={8} />}
+                                {Math.abs(diffDays)}
+                            </span>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

@@ -24,6 +24,12 @@ interface POSnapshotDialogProps {
     status: string | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    summaryDefaults?: {
+        totalPOs: number;
+        totalQty: number;
+        totalValue: number;
+        totalSkus: number;
+    };
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
@@ -46,11 +52,14 @@ const formatDate = (value: string | null) => {
     });
 };
 
-export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialogProps) {
+export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }: POSnapshotDialogProps) {
     const [items, setItems] = useState<POSnapshotItem[]>([]);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
     const [total, setTotal] = useState(0);
+    // Use summaryDefaults if available for initial state, but can still be updated by API if needed,
+    // though the requirement is to use the passed summary for "Global Totals".
+    // We will separate the "display" totals from the "API response" totals.
     const [grandTotals, setGrandTotals] = useState({
         totalPOS: 0,
         totalQty: 0,
@@ -142,6 +151,7 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
                         </DialogDescription>
                     </DialogHeader>
 
+
                     <div className="space-y-4">
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Global totals (respecting current filters)</p>
@@ -150,19 +160,28 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                             <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
                                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Items (SKU)</p>
-                                <p className="mt-2 text-2xl font-semibold">{total.toLocaleString('id-ID')}</p>
+                                {/* Use summaryDefaults.totalSkus if available, otherwise fall back to 'total' which is items count from API */}
+                                <p className="mt-2 text-2xl font-semibold">
+                                    {(summaryDefaults?.totalSkus ?? total).toLocaleString('id-ID')}
+                                </p>
                             </div>
                             <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
                                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Total PO Count</p>
-                                <p className="mt-2 text-2xl font-semibold">{grandTotals.totalPOS.toLocaleString('id-ID')}</p>
+                                <p className="mt-2 text-2xl font-semibold">
+                                    {(summaryDefaults?.totalPOs ?? grandTotals.totalPOS).toLocaleString('id-ID')}
+                                </p>
                             </div>
                             <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
                                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Ordered Qty</p>
-                                <p className="mt-2 text-2xl font-semibold">{grandTotals.totalQty.toLocaleString('id-ID')}</p>
+                                <p className="mt-2 text-2xl font-semibold">
+                                    {(summaryDefaults?.totalQty ?? grandTotals.totalQty).toLocaleString('id-ID')}
+                                </p>
                             </div>
                             <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
                                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Value</p>
-                                <p className="mt-2 text-2xl font-semibold">{formatCurrency(grandTotals.totalValue)}</p>
+                                <p className="mt-2 text-2xl font-semibold">
+                                    {formatCurrency(summaryDefaults?.totalValue ?? grandTotals.totalValue)}
+                                </p>
                             </div>
                         </div>
                         <div className="grid gap-3 sm:grid-cols-3">
@@ -184,64 +203,64 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
                     <div className="flex-1 min-h-0 rounded-2xl border border-border/60 overflow-y-auto">
                         <div className="h-full min-h-0 w-full overflow-auto">
                             <Table className="min-w-[900px]">
-                            <TableHeader>
-                                <TableRow className="bg-muted/40">
-                                    <TableHead>PO Number</TableHead>
-                                    <TableHead>SKU</TableHead>
-                                    <TableHead>Product</TableHead>
-                                    <TableHead>Store</TableHead>
-                                    <TableHead className="text-right">Qty</TableHead>
-                                    <TableHead className="text-right">Total</TableHead>
-                                    <TableHead className="text-right">Released</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {!status && (
-                                    <TableRow>
-                                        <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-                                            Select a status card to view details.
-                                        </TableCell>
+                                <TableHeader>
+                                    <TableRow className="bg-muted/40">
+                                        <TableHead>PO Number</TableHead>
+                                        <TableHead>SKU</TableHead>
+                                        <TableHead>Product</TableHead>
+                                        <TableHead>Store</TableHead>
+                                        <TableHead className="text-right">Qty</TableHead>
+                                        <TableHead className="text-right">Total</TableHead>
+                                        <TableHead className="text-right">Released</TableHead>
                                     </TableRow>
-                                )}
-                                {status && loading && (
-                                    <TableRow>
-                                        <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-                                            <div className="flex flex-col items-center gap-3">
-                                                <Loader2 className="h-6 w-6 animate-spin" />
-                                                Loading purchase orders…
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                                {status && !loading && error && (
-                                    <TableRow>
-                                        <TableCell colSpan={7} className="py-12 text-center text-red-500">
-                                            {error}
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                                {status && !loading && !error && items.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-                                            No purchase orders found for this status.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                                {status && !loading && !error &&
-                                    items.map((item) => (
-                                        <TableRow key={`${item.po_number}-${item.sku}`} className="hover:bg-muted/30">
-                                            <TableCell className="font-mono text-xs">{item.po_number}</TableCell>
-                                            <TableCell className="font-mono text-xs">{item.sku}</TableCell>
-                                            <TableCell className="max-w-[220px] truncate" title={item.product_name}>
-                                                {item.product_name}
+                                </TableHeader>
+                                <TableBody>
+                                    {!status && (
+                                        <TableRow>
+                                            <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
+                                                Select a status card to view details.
                                             </TableCell>
-                                            <TableCell>{item.store_name || '—'}</TableCell>
-                                            <TableCell className="text-right">{item.po_qty.toLocaleString('id-ID')}</TableCell>
-                                            <TableCell className="text-right">{formatCurrency(item.total_amount)}</TableCell>
-                                            <TableCell className="text-right">{formatDate(item.po_released_at)}</TableCell>
                                         </TableRow>
-                                    ))}
-                            </TableBody>
+                                    )}
+                                    {status && loading && (
+                                        <TableRow>
+                                            <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <Loader2 className="h-6 w-6 animate-spin" />
+                                                    Loading purchase orders…
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                    {status && !loading && error && (
+                                        <TableRow>
+                                            <TableCell colSpan={7} className="py-12 text-center text-red-500">
+                                                {error}
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                    {status && !loading && !error && items.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
+                                                No purchase orders found for this status.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                    {status && !loading && !error &&
+                                        items.map((item) => (
+                                            <TableRow key={`${item.po_number}-${item.sku}`} className="hover:bg-muted/30">
+                                                <TableCell className="font-mono text-xs">{item.po_number}</TableCell>
+                                                <TableCell className="font-mono text-xs">{item.sku}</TableCell>
+                                                <TableCell className="max-w-[220px] truncate" title={item.product_name}>
+                                                    {item.product_name}
+                                                </TableCell>
+                                                <TableCell>{item.store_name || '—'}</TableCell>
+                                                <TableCell className="text-right">{item.po_qty.toLocaleString('id-ID')}</TableCell>
+                                                <TableCell className="text-right">{formatCurrency(item.total_amount)}</TableCell>
+                                                <TableCell className="text-right">{formatDate(item.po_released_at)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                </TableBody>
                             </Table>
                         </div>
                     </div>
