@@ -37,7 +37,7 @@ const formatCount = (count: number) => {
 export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
     // Define the desired order for PO status stages (same as PO Status cards)
     const stageOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived'];
-    
+
     // Sort data according to the defined order
     const sortedData = [...data].sort((a, b) => {
         const indexA = stageOrder.indexOf(a.stage);
@@ -101,6 +101,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
         }
     }
 
+
     // Generate segment with curved borders
     const generateSegment = (index: number, item: FunnelData) => {
         const startX = padding.left + index * segmentWidth;
@@ -117,13 +118,11 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
         const topRight = centerY - rightHeight / 2;
         const bottomRight = centerY + rightHeight / 2;
 
-        const transitionWidth = segmentWidth * curveStrength;
-        const baseControl = segmentWidth * 0.18;
-        const leftDelta = Math.abs(currentHeight - leftHeight) / chartHeight;
-        const rightDelta = Math.abs(currentHeight - rightHeight) / chartHeight;
-        const leftControlOffset = baseControl + segmentWidth * 0.25 * Math.min(leftDelta, 1);
-        const rightControlOffset = baseControl + segmentWidth * 0.25 * Math.min(rightDelta, 1);
+        const leftControlOffset = segmentWidth * 0.18 * 0.5; // Reduced control offset for tighter curves
+        const rightControlOffset = segmentWidth * 0.18 * 0.5;
 
+        // More complex path for a smoother "3D" look could be simulated with gradients, 
+        // but here we improve the curve calculation
         const path = `
             M ${startX} ${topLeft}
             C ${startX + leftControlOffset} ${topLeft} ${midX - leftControlOffset} ${topCenter} ${midX} ${topCenter}
@@ -138,62 +137,105 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
     };
 
     return (
-        <div className="w-full bg-card rounded-lg p-4 border border-border">
-            <h3 className="text-lg font-semibold mb-4">PO Lifecycle Funnel</h3>
-            <div className="w-full overflow-x-auto">
-                <svg width={svgWidth} height={svgHeight} className="w-full" viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="xMidYMid meet">
+        <div className="w-full bg-card rounded-xl p-5 border border-border/60 shadow-sm relative overflow-hidden">
+            {/* Background decoration */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+
+            <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                PO Lifecycle Funnel
+                <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">30 Days</span>
+            </h3>
+
+            <div className="w-full overflow-x-auto pb-2">
+                <svg width={svgWidth} height={svgHeight} className="w-full min-w-[600px]" viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                        {/* Define gradients for each status */}
+                        {sortedData.map((item, index) => {
+                            const color = getStatusColor(item.stage);
+                            return (
+                                <linearGradient key={`grad-${index}`} id={`grad-${index}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" stopColor={color} stopOpacity={0.8} />
+                                    <stop offset="50%" stopColor={color} stopOpacity={1} />
+                                    <stop offset="100%" stopColor={color} stopOpacity={0.8} />
+                                </linearGradient>
+                            );
+                        })}
+                        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="3" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                    </defs>
+
                     {sortedData.map((item, index) => {
-                        const { path, midX, currentHeight, topCenter, bottomCenter } = generateSegment(index, item);
-                        const textInside = currentHeight > 70;
-                        const labelY = textInside ? centerY - 18 : topCenter - 10;
-                        const statsY = textInside ? centerY + 4 : topCenter + 8;
-                        const valueY = textInside ? centerY + 26 : topCenter + 28;
+                        const { path, midX, currentHeight, topCenter } = generateSegment(index, item);
+                        const textInside = currentHeight > 90; // Increased threshold
+                        const labelY = textInside ? centerY - 22 : topCenter - 30;
+                        const statsY = textInside ? centerY + 2 : topCenter - 12;
+                        const valueY = textInside ? centerY + 24 : topCenter + 8; // Adjust based on layout
+
+                        // Connector line for outside labels
+                        const lineY1 = topCenter - 5;
+                        const lineY2 = topCenter - 35;
 
                         return (
-                            <g key={index}>
-                                {/* Segment shape with curved borders */}
+                            <g key={index} className="group">
+                                {/* Segment shape */}
                                 <path
                                     d={path}
-                                    fill={getStatusColor(item.stage)}
-                                    stroke="rgba(255, 255, 255, 0.12)"
+                                    fill={`url(#grad-${index})`}
+                                    stroke="rgba(255, 255, 255, 0.15)"
                                     strokeWidth="1"
-                                    className="transition-transform duration-300 hover:scale-[1.015] cursor-pointer"
-                                    style={{ filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.25))' }}
+                                    className="transition-all duration-300 hover:opacity-90 cursor-pointer"
+                                    style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))' }}
                                 />
 
-                                {/* Text labels */}
+                                {/* Connector line for outside labels */}
+                                {!textInside && (
+                                    <line
+                                        x1={midX} y1={lineY1} x2={midX} y2={lineY2}
+                                        stroke={getStatusColor(item.stage)}
+                                        strokeWidth="1"
+                                        strokeDasharray="2 2"
+                                        opacity="0.6"
+                                    />
+                                )}
+
+                                {/* Stage Label */}
                                 <text
                                     x={midX}
                                     y={labelY}
                                     textAnchor="middle"
-                                    fill="#fff"
-                                    fontSize="18"
+                                    fill={textInside ? "#fff" : "currentColor"}
+                                    className={textInside ? "fill-white drop-shadow-md" : "fill-muted-foreground"}
+                                    fontSize="12"
                                     fontWeight="600"
-                                    style={{ textShadow: '0px 1px 3px rgba(0,0,0,0.7)' }}
+                                    style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}
                                 >
                                     {item.stage}
                                 </text>
 
+                                {/* Count & Value M */}
                                 <text
                                     x={midX}
                                     y={statsY}
                                     textAnchor="middle"
-                                    fill="#fff"
-                                    fontSize="15"
-                                    opacity={0.95}
-                                    style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.6)' }}
+                                    fill={textInside ? "#fff" : "currentColor"}
+                                    className={textInside ? "fill-white/95 drop-shadow-sm" : "fill-foreground"}
+                                    fontSize="16"
+                                    fontWeight="700"
                                 >
-                                    {formatCount(item.count)} · {formatCount(Math.round(item.total_value / 1_000_000))}M
+                                    {formatCount(item.count)} <tspan fontSize="12" fontWeight="400" opacity="0.8">POs</tspan>
                                 </text>
 
+                                {/* Full Value */}
                                 <text
                                     x={midX}
                                     y={valueY}
                                     textAnchor="middle"
-                                    fill="#fff"
-                                    fontSize="14"
-                                    opacity={0.9}
-                                    style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.6)' }}
+                                    fill={textInside ? "#fff" : "currentColor"}
+                                    className={textInside ? "fill-white/90" : "fill-muted-foreground"}
+                                    fontSize="12"
+                                    fontWeight="500"
                                 >
                                     {formatCurrency(item.total_value)}
                                 </text>
