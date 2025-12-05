@@ -405,6 +405,7 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	storeNames := make(map[string]string)
 	supplierNames := make(map[string]string)
 
+	rowNum := 1 // Track row number for logging (header is row 1)
 	for {
 		record, err := reader.Read()
 		if err != nil {
@@ -413,8 +414,9 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 			}
 			return fmt.Errorf("error reading record: %w", err)
 		}
+		rowNum++
 
-		sku := strings.TrimSpace(record[colMap["SKU"]])
+		sku := normalizeSKU(record[colMap["SKU"]])
 		if sku == "" {
 			log.Printf("Skipping record without SKU in file %s", filePath)
 			continue
@@ -451,6 +453,20 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 			supplierNames[strings.ToLower(supplierName)] = supplierName
 		}
 
+		unitPrice := parseOptionalFloat(record, colMap, "Harga")
+		totalAmount := parseOptionalFloat(record, colMap, "Amount")
+
+		// Log warning for extremely large values that might cause issues
+		const maxReasonableAmount = 999999999999.99 // ~1 trillion
+		if totalAmount > maxReasonableAmount {
+			log.Printf("WARNING: Row %d has unusually large total_amount=%.2f (po=%s sku=%s). This may indicate data quality issues.",
+				rowNum, totalAmount, poNumber, sku)
+		}
+		if unitPrice > maxReasonableAmount {
+			log.Printf("WARNING: Row %d has unusually large unit_price=%.2f (po=%s sku=%s). This may indicate data quality issues.",
+				rowNum, unitPrice, poNumber, sku)
+		}
+
 		rawRows = append(rawRows, rawPOSnapshotRow{
 			sku:              sku,
 			productName:      productName,
@@ -459,8 +475,8 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 			storeName:        storeName,
 			supplierName:     supplierName,
 			quantityOrdered:  parseOptionalInt(record[colMap["Qty PO"]]),
-			unitPrice:        parseOptionalFloat(record, colMap, "Harga"),
-			totalAmount:      parseOptionalFloat(record, colMap, "Amount"),
+			unitPrice:        unitPrice,
+			totalAmount:      totalAmount,
 			status:           parseOptionalInt(record[colMap["Status"]]),
 			releasedAt:       parseNullableTime(record[colMap["PO Released"]]),
 			sentAt:           parseNullableTime(record[colMap["PO Sent"]]),
@@ -849,7 +865,6 @@ func ensureSuppliersBulk(ctx context.Context, tx *sql.Tx, names map[string]strin
 	insertStmt := `
 		INSERT INTO suppliers (name, created_at, updated_at)
 		VALUES ($1, NOW(), NOW())
-		ON CONFLICT (LOWER(name)) WHERE original_id IS NULL DO UPDATE SET updated_at = NOW()
 		RETURNING id
 	`
 	for key, displayName := range names {
@@ -1144,4 +1159,9 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 	}
 
 	return nil
+}
+
+// normalizeSKU normalizes SKU values by trimming whitespace
+func normalizeSKU(value string) string {
+	return strings.TrimSpace(value)
 }
