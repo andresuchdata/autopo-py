@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getPOSnapshotItems, POSnapshotItem } from '@/services/api';
 import { getStatusColor } from '@/constants/poStatusColors';
+import { usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
 
 interface POSnapshotDialogProps {
     status: string | null;
@@ -52,6 +53,7 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { poTypeFilter, releasedDateFilter } = usePODashboardFilter();
 
     const statusColor = status ? getStatusColor(status) : '#6B7280';
 
@@ -71,6 +73,8 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
                     pageSize: pageSizeValue,
                     sortField: 'total_amount',
                     sortDirection: 'desc',
+                    poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
+                    releasedDate: releasedDateFilter || undefined,
                 });
                 setItems(response.items ?? []);
                 setTotal(response.total ?? 0);
@@ -85,7 +89,7 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
                 setLoading(false);
             }
         },
-        [status]
+        [status, poTypeFilter, releasedDateFilter]
     );
 
     useEffect(() => {
@@ -97,7 +101,7 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
             setError(null);
             setPage(1);
         }
-    }, [open, status, pageSize, loadItems]);
+    }, [open, status, pageSize, poTypeFilter, releasedDateFilter, loadItems]);
 
     const handlePageChange = (nextPage: number) => {
         const clamped = Math.max(1, Math.min(totalPages, nextPage));
