@@ -194,8 +194,8 @@ func (s *POService) GetSkus(ctx context.Context, search string, limit, offset in
 }
 
 // GetDashboardSummary returns the aggregated dashboard data
-func (s *POService) GetDashboardSummary(ctx context.Context) (*domain.DashboardSummary, error) {
-	return s.repo.GetDashboardSummary(ctx)
+func (s *POService) GetDashboardSummary(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error) {
+	return s.repo.GetDashboardSummary(ctx, filter)
 }
 
 // GetPOTrend returns the trend data

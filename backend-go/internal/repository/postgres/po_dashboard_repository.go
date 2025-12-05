@@ -225,7 +225,7 @@ func (r *poRepository) getStatusSummaries(ctx context.Context, filter *domain.Da
 	// purchase_order_items has amount.
 	// Let's calculate total value from items.
 
-	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 1)
 
 	query := fmt.Sprintf(`
 		WITH latest_snapshot AS (
@@ -306,17 +306,17 @@ func (r *poRepository) getPOTrendWithFilter(ctx context.Context, interval string
 		Count      int    `db:"count"`
 	}
 
-	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 1)
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
 		WITH bucketed AS (
 			SELECT 
-				date_trunc('day', time) AS bucket,
-				status as status_code,
-				po_number,
-				sku
-			FROM po_snapshots
-			WHERE time > NOW() - INTERVAL '30 days' %s
+				date_trunc('day', s.time) AS bucket,
+				s.status as status_code,
+				s.po_number,
+				s.sku
+			FROM po_snapshots s
+			WHERE s.time > NOW() - INTERVAL '30 days' %s
 		)
 		SELECT 
 			bucket::date::text as date,
@@ -328,7 +328,7 @@ func (r *poRepository) getPOTrendWithFilter(ctx context.Context, interval string
 	`, filterClause)
 
 	var rows []trendRow
-	if err := sqlx.SelectContext(ctx, r.db, &rows, query); err != nil {
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query, filterArgs...); err != nil {
 		return nil, err
 	}
 
@@ -444,7 +444,7 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	    `, filterClause)
 
 	var rows []poAgingRow
-	if err := sqlx.SelectContext(ctx, r.db, &rows, query); err != nil {
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query, filterArgs...); err != nil {
 		return nil, err
 	}
 
@@ -469,7 +469,9 @@ func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.Sup
 func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, filter *domain.DashboardFilter) ([]domain.SupplierPerformance, error) {
 	// Lead time derived from PO snapshots: diff between PO sent and arrived timestamps
 
-	query := `
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
+
+	query := fmt.Sprintf(`
 	        WITH latest_snapshot AS (
 	            SELECT
 	                po_number,
@@ -478,8 +480,8 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
 	                po_sent_at,
 	                po_arrived_at,
 	                ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
-	            FROM po_snapshots
-	            WHERE po_number <> '' %s
+	            FROM po_snapshots s
+	            WHERE s.po_number <> '' %s
 	        ),
 	        po_level AS (
 	            SELECT

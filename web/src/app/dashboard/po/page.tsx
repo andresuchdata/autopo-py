@@ -6,8 +6,10 @@ import { POFunnelChart } from '@/components/dashboard/POFunnelChart';
 import { POTrendChart } from '@/components/dashboard/POTrendChart';
 import { POAgingTable } from '@/components/dashboard/POAgingTable';
 import { SupplierPerformanceChart } from '@/components/dashboard/SupplierPerformanceChart';
-import { getDashboardSummary } from '@/services/api';
+import { getDashboardSummary, type DashboardSummaryParams } from '@/services/api';
 import { POSnapshotDialog } from '@/components/dashboard/POSnapshotDialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 
 interface DashboardData {
     status_summaries: any[];
@@ -23,11 +25,22 @@ export default function PODashboardPage() {
     const [error, setError] = useState<string | null>(null);
     const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
     const [statusModalOpen, setStatusModalOpen] = useState(false);
+    const [poTypeFilter, setPOTypeFilter] = useState<'ALL' | 'AU' | 'PO' | 'OTHERS'>('ALL');
+    const [releasedDateFilter, setReleasedDateFilter] = useState<string>('');
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true);
+            setError(null);
             try {
-                const result = await getDashboardSummary();
+                const params: DashboardSummaryParams = {};
+                if (poTypeFilter !== 'ALL') {
+                    params.poType = poTypeFilter;
+                }
+                if (releasedDateFilter) {
+                    params.releasedDate = releasedDateFilter;
+                }
+                const result = await getDashboardSummary(params);
                 setData(result);
             } catch (err) {
                 console.error(err);
@@ -38,7 +51,7 @@ export default function PODashboardPage() {
         };
 
         fetchData();
-    }, []);
+    }, [poTypeFilter, releasedDateFilter]);
 
     if (loading) {
         return (
@@ -77,9 +90,36 @@ export default function PODashboardPage() {
     return (
         <div className="min-h-screen bg-background text-foreground p-6 space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold">Purchase Orders Dashboard</h1>
-                {/* Add date filter or other controls here if needed */}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold">Purchase Orders Dashboard</h1>
+                    <p className="text-sm text-muted-foreground">Filter by PO type prefix and released date to focus the insights.</p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-medium uppercase text-muted-foreground">PO Type</label>
+                        <Select value={poTypeFilter} onValueChange={(value: 'ALL' | 'AU' | 'PO' | 'OTHERS') => setPOTypeFilter(value)}>
+                            <SelectTrigger className="w-40">
+                                <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">All</SelectItem>
+                                <SelectItem value="AU">AU</SelectItem>
+                                <SelectItem value="PO">PO</SelectItem>
+                                <SelectItem value="OTHERS">Others</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-medium uppercase text-muted-foreground">PO Released Date</label>
+                        <Input
+                            type="date"
+                            value={releasedDateFilter}
+                            onChange={(event) => setReleasedDateFilter(event.target.value)}
+                            className="w-44"
+                        />
+                    </div>
+                </div>
             </div>
 
             {/* 1. Status Summary Cards */}
