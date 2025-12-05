@@ -78,6 +78,12 @@ type DashboardSummary struct {
 	SupplierPerformance []SupplierPerformance `json:"supplier_performance"`
 }
 
+// DashboardFilter represents optional filters that can be applied to dashboard queries
+type DashboardFilter struct {
+	POType       string `json:"po_type"`
+	ReleasedDate string `json:"released_date"`
+}
+
 // POSnapshotItem represents a single PO snapshot item for the detail dialog
 type POSnapshotItem struct {
 	PONumber     string  `json:"po_number" db:"po_number"`
