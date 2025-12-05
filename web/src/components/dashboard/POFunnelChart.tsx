@@ -48,7 +48,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
         return indexA - indexB;
     });
 
-    const svgHeight = 300;
+    const svgHeight = 420;
     const svgWidth = 980;
     const padding = { top: 30, right: 20, bottom: 30, left: 20 };
     const chartHeight = svgHeight - padding.top - padding.bottom;

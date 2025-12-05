@@ -71,7 +71,7 @@ export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
     const timeColors = generateTimeColors(dateKeys.length);
 
     return (
-        <div className="w-full h-[300px] bg-card rounded-lg p-4 border border-border">
+        <div className="w-full bg-card rounded-lg p-4 border border-border">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">PO Trend by Status</h3>
                 {/* Add interval selector here if needed */}
