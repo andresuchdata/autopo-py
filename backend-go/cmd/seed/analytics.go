@@ -45,15 +45,43 @@ func SeedAnalyticsData(c *cli.Context) error {
 
 	// Truncate analytics tables if reset flag is set
 	if resetAnalytics {
-		log.Println("Resetting analytics tables...")
-		resetQuery := `
-			TRUNCATE TABLE daily_stock_data RESTART IDENTITY CASCADE;
-			TRUNCATE TABLE po_snapshots RESTART IDENTITY CASCADE;
-		`
-		if _, err := db.ExecContext(c.Context, resetQuery); err != nil {
-			return fmt.Errorf("failed to reset analytics tables: %w", err)
+		// Build reset query based on what's being processed
+		var resetQueries []string
+		var tableNames []string
+
+		if processStockHealth {
+			resetQueries = append(resetQueries, "TRUNCATE TABLE daily_stock_data RESTART IDENTITY CASCADE;")
+			tableNames = append(tableNames, "daily_stock_data")
 		}
-		log.Println("Analytics tables reset successfully")
+		if processPOSnapshots {
+			resetQueries = append(resetQueries, "TRUNCATE TABLE po_snapshots RESTART IDENTITY CASCADE;")
+			tableNames = append(tableNames, "po_snapshots")
+		}
+
+		if len(resetQueries) == 0 {
+			return fmt.Errorf("no tables to reset")
+		}
+
+		log.Printf("Resetting analytics tables: %v...", tableNames)
+
+		// Execute all reset queries in a single transaction
+		tx, err := db.BeginTx(c.Context, nil)
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction: %w", err)
+		}
+		defer tx.Rollback()
+
+		for i, query := range resetQueries {
+			if _, err := tx.ExecContext(c.Context, query); err != nil {
+				return fmt.Errorf("failed to reset table %s: %w", tableNames[i], err)
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit reset transaction: %w", err)
+		}
+
+		log.Printf("Successfully reset tables: %v", tableNames)
 	}
 
 	// Initialize the analytics processor

@@ -239,6 +239,8 @@ interface POSnapshotItemsParams {
     pageSize?: number;
     sortField?: string;
     sortDirection?: 'asc' | 'desc';
+    poType?: 'AU' | 'PO' | 'OTHERS';
+    releasedDate?: string;
 }
 
 export const getPOSnapshotItems = async ({
@@ -247,6 +249,8 @@ export const getPOSnapshotItems = async ({
     pageSize = 20,
     sortField = 'po_number',
     sortDirection = 'asc',
+    poType,
+    releasedDate,
 }: POSnapshotItemsParams): Promise<POSnapshotItemsResponse> => {
     try {
         const response = await api.get('/po/analytics/items', {
@@ -256,6 +260,8 @@ export const getPOSnapshotItems = async ({
                 page_size: pageSize,
                 sort_field: sortField,
                 sort_direction: sortDirection,
+                po_type: poType,
+                released_date: releasedDate,
             },
         });
         return response.data;

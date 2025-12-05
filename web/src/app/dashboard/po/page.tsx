@@ -10,6 +10,7 @@ import { getDashboardSummary, type DashboardSummaryParams } from '@/services/api
 import { POSnapshotDialog } from '@/components/dashboard/POSnapshotDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { PODashboardFilterProvider, usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
 
 interface DashboardData {
     status_summaries: any[];
@@ -19,14 +20,13 @@ interface DashboardData {
     supplier_performance: any[];
 }
 
-export default function PODashboardPage() {
+function PODashboardContent() {
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
     const [statusModalOpen, setStatusModalOpen] = useState(false);
-    const [poTypeFilter, setPOTypeFilter] = useState<'ALL' | 'AU' | 'PO' | 'OTHERS'>('ALL');
-    const [releasedDateFilter, setReleasedDateFilter] = useState<string>('');
+    const { poTypeFilter, setPOTypeFilter, releasedDateFilter, setReleasedDateFilter } = usePODashboardFilter();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -163,5 +163,13 @@ export default function PODashboardPage() {
                 }}
             />
         </div>
+    );
+}
+
+export default function PODashboardPage() {
+    return (
+        <PODashboardFilterProvider>
+            <PODashboardContent />
+        </PODashboardFilterProvider>
     );
 }
