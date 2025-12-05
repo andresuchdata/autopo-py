@@ -16,7 +16,9 @@ interface DashboardChartsProps {
     isLoading?: boolean;
 }
 
+const EXCLUDED_CONDITIONS: ConditionKey[] = ['no_sales', 'negative_stock'];
 const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
+const INCLUDED_CONDITION_KEYS = CONDITION_KEYS.filter((key) => !EXCLUDED_CONDITIONS.includes(key));
 
 export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoading }: DashboardChartsProps) {
     const buildStackedData = (breakdown: ConditionBreakdownResponse[], dimension: 'brand' | 'store') => {
@@ -25,7 +27,10 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
         breakdown.forEach((entry) => {
             const label = (dimension === 'brand' ? entry.brand : entry.store) ?? 'Unknown';
             const condition = (entry.condition as ConditionKey) ?? 'out_of_stock';
-            const existing = map.get(label) ?? Object.fromEntries(CONDITION_KEYS.map((key) => [key, 0])) as Record<ConditionKey, number>;
+            if (EXCLUDED_CONDITIONS.includes(condition)) {
+                return;
+            }
+            const existing = map.get(label) ?? Object.fromEntries(INCLUDED_CONDITION_KEYS.map((key) => [key, 0])) as Record<ConditionKey, number>;
             existing[condition] = (existing[condition] || 0) + entry.count;
             map.set(label, existing);
         });
@@ -38,6 +43,16 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
 
     const brandData = buildStackedData(brandBreakdown, 'brand');
     const storeData = buildStackedData(storeBreakdown, 'store');
+
+    const pieDataBySkuCount = (charts.pieDataBySkuCount ?? []).filter(
+        (item) => !EXCLUDED_CONDITIONS.includes(item.condition as ConditionKey)
+    );
+    const pieDataByStock = (charts.pieDataByStock ?? []).filter(
+        (item) => !EXCLUDED_CONDITIONS.includes(item.condition as ConditionKey)
+    );
+    const pieDataByValue = (charts.pieDataByValue ?? []).filter(
+        (item) => !EXCLUDED_CONDITIONS.includes(item.condition as ConditionKey)
+    );
 
     // Helper to format currency
     const formatCurrency = (value: number) => {
@@ -148,15 +163,15 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
             {/* Pie Charts Row */}
             <div className="grid gap-6 md:grid-cols-3">
                 {renderPieChart(
-                    charts.pieDataBySkuCount,
+                    pieDataBySkuCount,
                     "SKU Count Distribution"
                 )}
                 {renderPieChart(
-                    charts.pieDataByStock,
+                    pieDataByStock,
                     "Total Stock Quantity"
                 )}
                 {renderPieChart(
-                    charts.pieDataByValue,
+                    pieDataByValue,
                     "Total Value (HPP)",
                     formatCurrency
                 )}
@@ -182,15 +197,17 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                                         <YAxis dataKey="brand" type="category" width={100} tick={{ fontSize: 12 }} />
                                         <Tooltip cursor={{ fill: 'transparent' }} />
                                         <Legend />
-                                        {Object.entries(COLORS).map(([condition, color]) => (
-                                            <Bar
-                                                key={condition}
-                                                dataKey={condition}
-                                                stackId="a"
-                                                fill={color}
-                                                name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS]}
-                                            />
-                                        ))}
+                                        {Object.entries(COLORS)
+                                            .filter(([condition]) => INCLUDED_CONDITION_KEYS.includes(condition as ConditionKey))
+                                            .map(([condition, color]) => (
+                                                <Bar
+                                                    key={condition}
+                                                    dataKey={condition}
+                                                    stackId="a"
+                                                    fill={color}
+                                                    name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS]}
+                                                />
+                                            ))}
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
@@ -216,15 +233,17 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                                         <YAxis dataKey="store" type="category" width={100} tick={{ fontSize: 12 }} />
                                         <Tooltip cursor={{ fill: 'transparent' }} />
                                         <Legend />
-                                        {Object.entries(COLORS).map(([condition, color]) => (
-                                            <Bar
-                                                key={condition}
-                                                dataKey={condition}
-                                                stackId="a"
-                                                fill={color}
-                                                name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS].split(' ')[0]}
-                                            />
-                                        ))}
+                                        {Object.entries(COLORS)
+                                            .filter(([condition]) => INCLUDED_CONDITION_KEYS.includes(condition as ConditionKey))
+                                            .map(([condition, color]) => (
+                                                <Bar
+                                                    key={condition}
+                                                    dataKey={condition}
+                                                    stackId="a"
+                                                    fill={color}
+                                                    name={CONDITION_LABELS[condition as keyof typeof CONDITION_LABELS].split(' ')[0]}
+                                                />
+                                            ))}
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
