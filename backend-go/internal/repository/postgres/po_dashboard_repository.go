@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/jmoiron/sqlx"
@@ -24,9 +25,7 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context) (*domain.Dashboa
 	}
 	summary.StatusSummaries = statusSummaries
 
-	// 2. Lifecycle Funnel (reuse status summaries or fetch if different)
-	// Funnel is essentially the same as status summary but might have different visualization needs.
-	// We can map status summaries to funnel.
+	// 2. Lifecycle Funnel derived from status summaries
 	for _, s := range statusSummaries {
 		summary.LifecycleFunnel = append(summary.LifecycleFunnel, domain.POLifecycleFunnel{
 			Stage:      s.Status,
@@ -35,8 +34,8 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context) (*domain.Dashboa
 		})
 	}
 
-	// 3. Trends
-	trends, err := r.GetPOTrend(ctx, "day") // Default to daily or weekly? Requirement says "past 5 days, or past 5 weeks". Let's default to last 30 days daily for now.
+	// 3. Trends (default interval day)
+	trends, err := r.GetPOTrend(ctx, "day")
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch trends")
 		return nil, fmt.Errorf("failed to get trends: %w", err)
@@ -60,6 +59,117 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context) (*domain.Dashboa
 	summary.SupplierPerformance = perf
 
 	return summary, nil
+}
+
+// GetSupplierPOItems fetches PO items filtered by supplier with pagination and sorting
+func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPOItemsResponse, error) {
+	if supplierID <= 0 {
+		return nil, fmt.Errorf("invalid supplier ID")
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	validSortFields := map[string]string{
+		"po_number":      "s.po_number",
+		"sku":            "s.sku",
+		"product_name":   "s.product_name",
+		"brand_name":     "brand_name",
+		"po_released_at": "s.po_released_at",
+		"po_sent_at":     "s.po_sent_at",
+		"po_approved_at": "s.po_approved_at",
+		"po_arrived_at":  "s.po_arrived_at",
+		"po_received_at": "s.po_received_at",
+	}
+
+	sortColumn, ok := validSortFields[sortField]
+	if !ok {
+		sortColumn = "s.po_number"
+	}
+
+	if strings.ToLower(sortDirection) != "desc" {
+		sortDirection = "asc"
+	} else {
+		sortDirection = "desc"
+	}
+
+	offset := (page - 1) * pageSize
+
+	orderClause := fmt.Sprintf("ORDER BY %s %s", sortColumn, sortDirection)
+
+	query := fmt.Sprintf(`
+		WITH latest_snapshot AS (
+			SELECT
+				po_number,
+				sku,
+				MAX(time) AS latest_time
+			FROM po_snapshots
+			WHERE supplier_id = $1
+			GROUP BY po_number, sku
+		)
+		SELECT
+			s.po_number,
+			s.sku,
+			s.product_name,
+			COALESCE(b.name, '') AS brand_name,
+			s.supplier_id,
+			COALESCE(sup.name, '') AS supplier_name,
+			TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') AS po_released_at,
+			TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') AS po_sent_at,
+			TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') AS po_approved_at,
+			TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') AS po_arrived_at,
+			TO_CHAR(s.po_received_at, 'YYYY-MM-DD HH24:MI:SS') AS po_received_at
+		FROM po_snapshots s
+		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+		LEFT JOIN brands b ON s.brand_id = b.id
+		LEFT JOIN suppliers sup ON s.supplier_id = sup.id
+		%s
+		LIMIT $2 OFFSET $3
+	`, orderClause)
+
+	countQuery := `
+		WITH latest_snapshot AS (
+			SELECT
+				po_number,
+				sku,
+				MAX(time) AS latest_time
+			FROM po_snapshots
+			WHERE supplier_id = $1
+			GROUP BY po_number, sku
+		)
+		SELECT COUNT(*)
+		FROM po_snapshots s
+		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+	`
+
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery, supplierID); err != nil {
+		log.Error().Err(err).Int64("supplier_id", supplierID).Msg("failed to count supplier PO items")
+		return nil, fmt.Errorf("failed to count supplier PO items: %w", err)
+	}
+
+	items := make([]domain.SupplierPOItem, 0, pageSize)
+	if err := sqlx.SelectContext(ctx, r.db, &items, query, supplierID, pageSize, offset); err != nil {
+		log.Error().Err(err).Int64("supplier_id", supplierID).Msg("failed to fetch supplier PO items")
+		return nil, fmt.Errorf("failed to fetch supplier PO items: %w", err)
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return &domain.SupplierPOItemsResponse{
+		Items:      items,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
 }
 
 type statusSummaryRow struct {

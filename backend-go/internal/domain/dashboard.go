@@ -15,6 +15,30 @@ type POStatusSummary struct {
 	// Let's provide all necessary data.
 }
 
+// SupplierPOItem represents purchase order entries filtered by supplier
+type SupplierPOItem struct {
+	PONumber     string  `json:"po_number" db:"po_number"`
+	SKU          string  `json:"sku" db:"sku"`
+	ProductName  string  `json:"product_name" db:"product_name"`
+	BrandName    string  `json:"brand_name" db:"brand_name"`
+	SupplierID   int64   `json:"supplier_id" db:"supplier_id"`
+	SupplierName string  `json:"supplier_name" db:"supplier_name"`
+	POReleasedAt *string `json:"po_released_at" db:"po_released_at"`
+	POSentAt     *string `json:"po_sent_at" db:"po_sent_at"`
+	POApprovedAt *string `json:"po_approved_at" db:"po_approved_at"`
+	POArrivedAt  *string `json:"po_arrived_at" db:"po_arrived_at"`
+	POReceivedAt *string `json:"po_received_at" db:"po_received_at"`
+}
+
+// SupplierPOItemsResponse represents paginated supplier PO entries
+type SupplierPOItemsResponse struct {
+	Items      []SupplierPOItem `json:"items"`
+	Total      int              `json:"total"`
+	Page       int              `json:"page"`
+	PageSize   int              `json:"page_size"`
+	TotalPages int              `json:"total_pages"`
+}
+
 // POLifecycleFunnel represents the funnel chart data
 type POLifecycleFunnel struct {
 	Stage      string  `json:"stage"`
