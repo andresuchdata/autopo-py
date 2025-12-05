@@ -15,7 +15,7 @@ type PORepository interface {
 	GetSkus(ctx context.Context, search string, limit, offset int) ([]*domain.Product, error)
 
 	// Dashboard methods
-	GetDashboardSummary(ctx context.Context) (*domain.DashboardSummary, error)
+	GetDashboardSummary(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error)
 	GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error)
 	GetPOAging(ctx context.Context) ([]domain.POAging, error)
 	GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error)
