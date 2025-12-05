@@ -231,6 +231,9 @@ export interface POSnapshotItemsResponse {
     page: number;
     page_size: number;
     total_pages: number;
+    total_pos: number;
+    total_qty: number;
+    total_value: number;
 }
 
 interface POSnapshotItemsParams {

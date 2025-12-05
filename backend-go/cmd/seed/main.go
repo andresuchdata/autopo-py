@@ -165,7 +165,7 @@ func analyticsFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:    "stock-health-file",
-			Usage:   "Optional CSV filename or path to process (defaults to all files in stock-health-dir)",
+			Usage:   "Optional CSV filename or path (absolute or relative to stock-health-dir) to process; defaults to all files",
 			EnvVars: []string{"STOCK_HEALTH_FILE"},
 		},
 		&cli.StringFlag{
@@ -509,7 +509,7 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name:    "stock-health-file",
-						Usage:   "Optional CSV filename or path to process (defaults to all files in stock-health-dir)",
+						Usage:   "Optional CSV filename or path (absolute or relative to stock-health-dir) to process; defaults to all files",
 						EnvVars: []string{"STOCK_HEALTH_FILE"},
 					},
 					&cli.StringFlag{

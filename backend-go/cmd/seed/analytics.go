@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -25,6 +26,7 @@ func SeedAnalyticsData(c *cli.Context) error {
 	}
 
 	stockHealthDir := c.String("stock-health-dir")
+	stockHealthFile := c.String("stock-health-file")
 	poSnapshotsDir := c.String("po-snapshots-dir")
 	stockHealthOnly := c.Bool("stock-health-only")
 	poSnapshotsOnly := c.Bool("po-snapshots-only")
@@ -90,14 +92,15 @@ func SeedAnalyticsData(c *cli.Context) error {
 	tasks := make([]analyticsTask, 0, 2)
 
 	if processStockHealth {
-		stockFiles, err := collectCSVFiles(stockHealthDir)
+		stockFiles, err := resolveStockHealthFiles(stockHealthDir, stockHealthFile)
 		if err != nil {
-			return fmt.Errorf("error walking stock health directory: %w", err)
+			return fmt.Errorf("error preparing stock health files: %w", err)
 		}
 		tasks = append(tasks, analyticsTask{
-			name:  "stock health",
-			dir:   stockHealthDir,
-			files: stockFiles,
+			name:       "stock health",
+			dir:        stockHealthDir,
+			files:      stockFiles,
+			maxWorkers: 1,
 			handler: func(ctx context.Context, path string) error {
 				log.Printf("Processing stock health file: %s", path)
 				if err := processor.ProcessFile(ctx, path); err != nil {
@@ -131,24 +134,49 @@ func SeedAnalyticsData(c *cli.Context) error {
 }
 
 type analyticsTask struct {
-	name    string
-	dir     string
-	files   []string
-	handler func(context.Context, string) error
+	name       string
+	dir        string
+	files      []string
+	handler    func(context.Context, string) error
+	maxWorkers int
 }
 
-func runAnalyticsTasks(ctx context.Context, tasks []analyticsTask, workers int) error {
+func runAnalyticsTasks(ctx context.Context, tasks []analyticsTask, defaultWorkers int) error {
 	if len(tasks) == 0 {
+		return nil
+	}
+	if defaultWorkers < 1 {
+		defaultWorkers = 1
+	}
+
+	for _, task := range tasks {
+		workers := defaultWorkers
+		if task.maxWorkers > 0 && task.maxWorkers < workers {
+			workers = task.maxWorkers
+		}
+		log.Printf("Processing %d %s file(s) with %d worker(s)...", len(task.files), task.name, workers)
+		if err := runTaskWithWorkers(ctx, task, workers); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runTaskWithWorkers(ctx context.Context, task analyticsTask, workers int) error {
+	if len(task.files) == 0 {
 		return nil
 	}
 	if workers < 1 {
 		workers = 1
 	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
 	jobs := make(chan string)
-	errCh := make(chan error, workers)
+	errCh := make(chan error, 1)
 	var wg sync.WaitGroup
+
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
@@ -161,7 +189,7 @@ func runAnalyticsTasks(ctx context.Context, tasks []analyticsTask, workers int) 
 					if !ok {
 						return
 					}
-					if err := processFile(ctx, path, tasks); err != nil {
+					if err := task.handler(ctx, path); err != nil {
 						select {
 						case errCh <- err:
 						default:
@@ -173,44 +201,57 @@ func runAnalyticsTasks(ctx context.Context, tasks []analyticsTask, workers int) 
 			}
 		}()
 	}
-	var enqueueErr error
-outer:
-	for _, task := range tasks {
-		log.Printf("Processing %d %s file(s) with %d worker(s)...", len(task.files), task.name, workers)
-		for _, file := range task.files {
+
+	for _, file := range task.files {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
 			select {
-			case <-ctx.Done():
-				enqueueErr = ctx.Err()
-				break outer
-			case jobs <- file:
+			case err := <-errCh:
+				return err
+			default:
+				if err := ctx.Err(); err != nil && err != context.Canceled {
+					return err
+				}
+				return context.Canceled
 			}
+		case jobs <- file:
 		}
 	}
+
 	close(jobs)
 	wg.Wait()
+
 	select {
 	case err := <-errCh:
 		return err
 	default:
-		if enqueueErr != nil && enqueueErr != context.Canceled {
-			return enqueueErr
+		if err := ctx.Err(); err != nil && err != context.Canceled {
+			return err
 		}
-		if ctx.Err() != nil && ctx.Err() != context.Canceled {
-			return ctx.Err()
-		}
+		return nil
 	}
-	return nil
 }
 
-func processFile(ctx context.Context, path string, tasks []analyticsTask) error {
-	for _, task := range tasks {
-		for _, file := range task.files {
-			if file == path {
-				return task.handler(ctx, path)
-			}
-		}
+func resolveStockHealthFiles(root, override string) ([]string, error) {
+	if override == "" {
+		return collectCSVFiles(root)
 	}
-	return fmt.Errorf("unknown file: %s", path)
+
+	target := override
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(root, override)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return nil, fmt.Errorf("stock health file %s: %w", target, err)
+	}
+
+	if info.IsDir() {
+		return collectCSVFiles(target)
+	}
+
+	return []string{target}, nil
 }
 
 func collectCSVFiles(root string) ([]string, error) {

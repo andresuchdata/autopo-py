@@ -3,8 +3,10 @@ package domain
 // POStatusSummary represents the summary card data for a specific PO status
 type POStatusSummary struct {
 	Status     string  `json:"status" db:"status"`
-	Count      int     `json:"count" db:"count"`
-	TotalValue float64 `json:"total_value" db:"total_value"`
+	Count      int     `json:"count" db:"count"`             // Number of unique PO numbers in this status
+	SKUCount   int     `json:"sku_count" db:"sku_count"`     // Number of unique PO+SKU combinations
+	TotalQty   int     `json:"total_qty" db:"total_qty"`     // Sum of ordered quantity
+	TotalValue float64 `json:"total_value" db:"total_value"` // Sum of total amount
 	AvgDays    float64 `json:"avg_days" db:"avg_days"`
 	DiffDays   int     `json:"diff_days" db:"diff_days"` // Difference in days from current date (for "big number") - wait, the requirement says "big number on the center is date of the respective status become the status... and difference with current date". Let's assume this means average duration or similar. Actually looking at image: "8" for Released, "24" for Sent. It seems to be the Count?
 	// Re-reading requirement: "big number on the center is date of the respective status become the status (PO Released, Sent, etc) and difference with current date"
@@ -108,4 +110,7 @@ type POSnapshotItemsResponse struct {
 	Page       int              `json:"page"`
 	PageSize   int              `json:"page_size"`
 	TotalPages int              `json:"total_pages"`
+	TotalPOs   int              `json:"total_pos"`
+	TotalQty   int              `json:"total_qty"`
+	TotalValue float64          `json:"total_value"`
 }

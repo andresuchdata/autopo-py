@@ -129,7 +129,9 @@ function PODashboardContent() {
                         key={summary.status}
                         title={`PO ${summary.status}`}
                         count={summary.count}
-                        value={summary.total_value}
+                        totalValue={summary.total_value}
+                        skuCount={summary.sku_count}
+                        totalQty={summary.total_qty}
                         avgDays={summary.avg_days}
                         diffDays={summary.diff_days}
                         isActive={statusModalOpen && summary.status === selectedStatus}
