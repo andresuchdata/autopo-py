@@ -211,10 +211,19 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 
 type statusSummaryRow struct {
 	StatusCode int     `db:"status_code"`
-	Count      int     `db:"count"`
+	POCount    int     `db:"po_count"`
+	SKUCount   int     `db:"sku_count"`
+	TotalQty   int     `db:"total_qty"`
 	TotalValue float64 `db:"total_value"`
 	AvgDays    float64 `db:"avg_days"`
 	DiffDays   int     `db:"diff_days"`
+}
+
+type snapshotTotals struct {
+	TotalItems int     `db:"total_items"`
+	TotalPOs   int     `db:"total_pos"`
+	TotalQty   int     `db:"total_qty"`
+	TotalValue float64 `db:"total_value"`
 }
 
 func (r *poRepository) getStatusSummaries(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
@@ -239,25 +248,28 @@ func (r *poRepository) getStatusSummaries(ctx context.Context, filter *domain.Da
 		),
 		po_values AS (
 			SELECT
+				s.po_number,
 				CONCAT(s.po_number, '::', s.sku) AS po_sku_identifier,
-				MAX(s.status) AS status_code,
-				SUM(s.total_amount) AS total_value,
+				s.status AS status_code,
+				COALESCE(s.quantity_ordered, 0) AS quantity_ordered,
+				COALESCE(s.total_amount, 0) AS total_amount,
 				COALESCE(
-					MAX(CASE WHEN s.status = 2 THEN s.po_released_at END),
-					MAX(CASE WHEN s.status = 3 THEN s.po_sent_at END),
-					MAX(CASE WHEN s.status = 4 THEN s.po_approved_at END),
-					MAX(CASE WHEN s.status = 5 THEN s.po_arrived_at END),
-					MAX(CASE WHEN s.status = 6 THEN s.po_received_at END),
-					MAX(s.time)
+					NULLIF(s.po_released_at, NULL),
+					NULLIF(s.po_sent_at, NULL),
+					NULLIF(s.po_approved_at, NULL),
+					NULLIF(s.po_arrived_at, NULL),
+					NULLIF(s.po_received_at, NULL),
+					s.time
 				) AS status_change_at
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			GROUP BY s.po_number, s.sku
 		)
 		SELECT 
 			status_code,
-			COUNT(po_sku_identifier) as count,
-			COALESCE(SUM(total_value), 0) as total_value,
+			COUNT(DISTINCT po_number) as po_count,
+			COUNT(po_sku_identifier) as sku_count,
+			COALESCE(SUM(quantity_ordered), 0) as total_qty,
+			COALESCE(SUM(total_amount), 0) as total_value,
 			COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400), 0) as avg_days,
 			COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400)::int, 0) as diff_days
 		FROM po_values
@@ -281,7 +293,9 @@ func (r *poRepository) getStatusSummaries(ctx context.Context, filter *domain.Da
 	for i, row := range rows {
 		results[i] = domain.POStatusSummary{
 			Status:     domain.POStatusLabel(row.StatusCode),
-			Count:      row.Count,
+			Count:      row.POCount,
+			SKUCount:   row.SKUCount,
+			TotalQty:   row.TotalQty,
 			TotalValue: row.TotalValue,
 			AvgDays:    row.AvgDays,
 			DiffDays:   row.DiffDays,
@@ -616,6 +630,32 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	queryArgs = append(queryArgs, filterArgs...)
 	queryArgs = append(queryArgs, pageSize, offset)
 
+	// Totals query
+	totalsQuery := fmt.Sprintf(`
+		WITH latest_snapshot AS (
+			SELECT 
+				po_number,
+				sku,
+				MAX(time) AS latest_time
+			FROM po_snapshots
+			WHERE status = $1%s
+			GROUP BY po_number, sku
+		)
+		SELECT 
+			COUNT(*) as total_items,
+			COUNT(DISTINCT s.po_number) as total_pos,
+			COALESCE(SUM(s.quantity_ordered), 0) as total_qty,
+			COALESCE(SUM(s.total_amount), 0) as total_value
+		FROM po_snapshots s
+		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+	`, filterClause)
+
+	var totals snapshotTotals
+	if err := r.db.GetContext(ctx, &totals, totalsQuery, countArgs...); err != nil {
+		log.Error().Err(err).Int("status_code", statusCode).Msg("failed to fetch totals for PO snapshot items")
+		return nil, fmt.Errorf("failed to fetch totals: %w", err)
+	}
+
 	// Execute main query
 	var items []domain.POSnapshotItem
 	if err := sqlx.SelectContext(ctx, r.db, &items, query, queryArgs...); err != nil {
@@ -634,5 +674,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 		Page:       page,
 		PageSize:   pageSize,
 		TotalPages: totalPages,
+		TotalPOs:   totals.TotalPOs,
+		TotalQty:   totals.TotalQty,
+		TotalValue: totals.TotalValue,
 	}, nil
 }

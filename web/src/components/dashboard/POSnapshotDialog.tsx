@@ -51,6 +51,11 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
     const [total, setTotal] = useState(0);
+    const [grandTotals, setGrandTotals] = useState({
+        totalPOS: 0,
+        totalQty: 0,
+        totalValue: 0,
+    });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { poTypeFilter, releasedDateFilter } = usePODashboardFilter();
@@ -60,6 +65,7 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
     const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
     const currentValueTotal = useMemo(() => items.reduce((sum, item) => sum + (item.total_amount ?? 0), 0), [items]);
     const currentPOCount = useMemo(() => new Set(items.map((item) => item.po_number)).size, [items]);
+    const currentQtyTotal = useMemo(() => items.reduce((sum, item) => sum + (item.po_qty ?? 0), 0), [items]);
 
     const loadItems = useCallback(
         async (pageValue: number, pageSizeValue: number) => {
@@ -78,6 +84,11 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
                 });
                 setItems(response.items ?? []);
                 setTotal(response.total ?? 0);
+                setGrandTotals({
+                    totalPOS: response.total_pos ?? 0,
+                    totalQty: response.total_qty ?? 0,
+                    totalValue: response.total_value ?? 0,
+                });
                 setPage(pageValue);
                 setPageSize(pageSizeValue);
             } catch (err) {
@@ -131,18 +142,42 @@ export function POSnapshotDialog({ status, open, onOpenChange }: POSnapshotDialo
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Items (SKU)</p>
-                            <p className="mt-2 text-2xl font-semibold">{total.toLocaleString('id-ID')}</p>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Global totals (respecting current filters)</p>
+                            <span className="text-[11px] text-muted-foreground">Last snapshot set</span>
                         </div>
-                        <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total PO Count</p>
-                            <p className="mt-2 text-2xl font-semibold">{currentPOCount.toLocaleString('id-ID')}</p>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+                                <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Items (SKU)</p>
+                                <p className="mt-2 text-2xl font-semibold">{total.toLocaleString('id-ID')}</p>
+                            </div>
+                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+                                <p className="text-xs uppercase tracking-wide text-muted-foreground">Total PO Count</p>
+                                <p className="mt-2 text-2xl font-semibold">{grandTotals.totalPOS.toLocaleString('id-ID')}</p>
+                            </div>
+                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+                                <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Ordered Qty</p>
+                                <p className="mt-2 text-2xl font-semibold">{grandTotals.totalQty.toLocaleString('id-ID')}</p>
+                            </div>
+                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+                                <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Value</p>
+                                <p className="mt-2 text-2xl font-semibold">{formatCurrency(grandTotals.totalValue)}</p>
+                            </div>
                         </div>
-                        <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Value</p>
-                            <p className="mt-2 text-2xl font-semibold">{formatCurrency(currentValueTotal)}</p>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            <div className="rounded-2xl border border-dashed border-border/60 bg-card/30 p-3">
+                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Page Items</p>
+                                <p className="mt-1 text-lg font-semibold">{items.length.toLocaleString('id-ID')}</p>
+                            </div>
+                            <div className="rounded-2xl border border-dashed border-border/60 bg-card/30 p-3">
+                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Page PO Count</p>
+                                <p className="mt-1 text-lg font-semibold">{currentPOCount.toLocaleString('id-ID')}</p>
+                            </div>
+                            <div className="rounded-2xl border border-dashed border-border/60 bg-card/30 p-3">
+                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Page Ordered Qty</p>
+                                <p className="mt-1 text-lg font-semibold">{currentQtyTotal.toLocaleString('id-ID')}</p>
+                            </div>
                         </div>
                     </div>
 
