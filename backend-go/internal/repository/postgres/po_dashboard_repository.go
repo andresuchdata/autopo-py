@@ -548,8 +548,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 
 	offset := (page - 1) * pageSize
 
-	// Build filter clause for additional filters
-	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 2)
+	// Build filter clause for CTE (no table alias needed in CTE)
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 2)
 
 	// Query to get latest snapshots for the given status
 	query := fmt.Sprintf(`
