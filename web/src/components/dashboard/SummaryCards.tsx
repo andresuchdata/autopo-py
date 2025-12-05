@@ -31,8 +31,8 @@ const HEADER_LABELS = {
     'low': '7 < Days Stock Cover <= 21 days',
     'nearly_out': '0 < Days Stock Cover <= 7 days',
     'out_of_stock': 'Days Stock Cover = 0 day',
-    'no_sales': 'Daily Sales = 0',
-    'negative_stock': 'Days Stock Cover < 0'
+    'no_sales': 'Not Sales',
+    'negative_stock': 'Stock Minus'
 };
 
 interface SummaryCardsProps {
