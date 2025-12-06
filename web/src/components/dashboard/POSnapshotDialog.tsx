@@ -15,7 +15,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Loader2, ChevronLeft, ChevronRight, Package, ShoppingCart, DollarSign, Layers } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, Package, ShoppingCart, DollarSign, Layers, ArrowUp, ArrowDown, Download } from 'lucide-react';
 import { getPOSnapshotItems, POSnapshotItem } from '@/services/api';
 import { getStatusColor } from '@/constants/poStatusColors';
 import { usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
@@ -66,6 +66,8 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
     const [items, setItems] = useState<POSnapshotItem[]>([]);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
+    const [sortField, setSortField] = useState('total_amount');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [total, setTotal] = useState(0);
     const [grandTotals, setGrandTotals] = useState({
         totalPOS: 0,
@@ -74,6 +76,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isDownloading, setIsDownloading] = useState(false);
     const { poTypeFilter, releasedDateFilter } = usePODashboardFilter();
 
     const statusColor = status ? getStatusColor(status) : '#6B7280';
@@ -84,7 +87,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
     const currentQtyTotal = useMemo(() => items.reduce((sum, item) => sum + (item.po_qty ?? 0), 0), [items]);
 
     const loadItems = useCallback(
-        async (pageValue: number, pageSizeValue: number) => {
+        async (pageValue: number, pageSizeValue: number, sortFieldValue: string, sortDirectionValue: 'asc' | 'desc') => {
             if (!status) return;
             setLoading(true);
             setError(null);
@@ -93,8 +96,8 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                     status,
                     page: pageValue,
                     pageSize: pageSizeValue,
-                    sortField: 'total_amount',
-                    sortDirection: 'desc',
+                    sortField: sortFieldValue,
+                    sortDirection: sortDirectionValue,
                     poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
                     releasedDate: releasedDateFilter || undefined,
                 });
@@ -121,23 +124,160 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
 
     useEffect(() => {
         if (open && status) {
-            loadItems(1, pageSize);
+            loadItems(1, pageSize, sortField, sortDirection);
         } else if (!open) {
             setItems([]);
             setTotal(0);
             setError(null);
             setPage(1);
+            // Reset sort if desired, or keep user preference
+            setSortField('total_amount');
+            setSortDirection('desc');
         }
-    }, [open, status, pageSize, poTypeFilter, releasedDateFilter, loadItems]);
+    }, [open, status, pageSize, poTypeFilter, releasedDateFilter, sortField, sortDirection, loadItems]);
+
+    const handleSort = (field: string) => {
+        if (sortField === field) {
+            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDirection('desc'); // Default to desc for new fields usually better for numbers
+        }
+    };
 
     const handlePageChange = (nextPage: number) => {
         const clamped = Math.max(1, Math.min(totalPages, nextPage));
-        loadItems(clamped, pageSize);
+        // State updates will trigger useEffect to reload
+        setPage(clamped);
     };
 
     const handlePageSizeChange = (size: number) => {
-        loadItems(1, size);
+        setPageSize(size);
+        setPage(1);
     };
+
+    const fetchAllItemsForDownload = useCallback(async () => {
+        if (!status) return [];
+
+        const aggregated: POSnapshotItem[] = [];
+        const dlPageSize = 500;
+        let dlPage = 1;
+        let dlTotal = Infinity;
+
+        while (aggregated.length < dlTotal) {
+            const response = await getPOSnapshotItems({
+                status,
+                page: dlPage,
+                pageSize: dlPageSize,
+                sortField,
+                sortDirection,
+                poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
+                releasedDate: releasedDateFilter || undefined,
+            });
+
+            if (!response.items || response.items.length === 0) {
+                break;
+            }
+
+            aggregated.push(...response.items);
+            dlTotal = response.total ?? aggregated.length;
+
+            if (response.items.length < dlPageSize) {
+                break;
+            }
+            dlPage += 1;
+        }
+        return aggregated;
+    }, [status, poTypeFilter, releasedDateFilter, sortField, sortDirection]);
+
+    const handleDownload = useCallback(async () => {
+        if (!status || isDownloading) return;
+
+        setIsDownloading(true);
+        try {
+            const allItems = await fetchAllItemsForDownload();
+            if (allItems.length === 0) {
+                setError('No items available to download');
+                return;
+            }
+
+            const headers = [
+                'PO Number',
+                'SKU',
+                'Product Name',
+                'Brand',
+                'Store',
+                'Qty',
+                'Total Amount',
+                'Released',
+                'Sent',
+                'Approved',
+                'Arrived',
+                'Received',
+            ];
+
+            const escapeCsvValue = (value: string | number | null) => {
+                const stringValue = value === null ? '' : `${value}`;
+                if (/[",\n]/.test(stringValue)) {
+                    return `"${stringValue.replace(/"/g, '""')}"`;
+                }
+                return stringValue;
+            };
+
+            const rows = allItems.map(item => [
+                item.po_number,
+                item.sku,
+                item.product_name,
+                item.brand_name,
+                item.store_name,
+                item.po_qty,
+                item.total_amount,
+                formatDate(item.po_released_at),
+                formatDate(item.po_sent_at),
+                formatDate(item.po_approved_at),
+                formatDate(item.po_arrived_at),
+            ]);
+
+            const csvContent = [headers, ...rows]
+                .map(row => row.map(escapeCsvValue).join(','))
+                .join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const datePart = new Date().toISOString().split('T')[0];
+            link.download = `po-snapshot-${status}-${datePart}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Failed to download CSV', err);
+            setError('Failed to download CSV');
+        } finally {
+            setIsDownloading(false);
+        }
+    }, [status, isDownloading, fetchAllItemsForDownload]);
+
+    // Helper to render sort arrow
+    const renderSortIcon = (field: string) => {
+        if (sortField !== field) return null;
+        return sortDirection === 'asc' ? <ArrowUp size={14} className="ml-1" /> : <ArrowDown size={14} className="ml-1" />;
+    };
+
+    // Helper for table head cell
+    const SortableHead = ({ field, label, align = 'left', className = '' }: { field: string, label: string, align?: 'left' | 'right', className?: string }) => (
+        <TableHead
+            className={`cursor-pointer hover:bg-muted/50 transition-colors select-none ${className}`}
+            onClick={() => handleSort(field)}
+        >
+            <div className={`flex items-center ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                {label}
+                {renderSortIcon(field)}
+            </div>
+        </TableHead>
+    );
 
     // Calculate display values
     const displaySkus = summaryDefaults?.totalSkus ?? total;
@@ -150,21 +290,33 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             <DialogContent className="w-[96vw] max-w-6xl h-[90vh] p-0 flex flex-col gap-0 border-none bg-background/95 backdrop-blur-xl shadow-2xl overflow-hidden focus-visible:outline-none">
                 {/* Header Section */}
                 <div className="flex-none p-6 pb-2 border-b border-border/40">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-3 text-2xl font-bold tracking-tight">
-                            <div
-                                className="flex h-4 w-4 rounded-full shadow-md ring-2 ring-offset-2 ring-offset-background"
-                                style={{ backgroundColor: statusColor, boxShadow: `0 0 10px ${statusColor}60` }}
-                            />
-                            {status ? `PO ${status}` : 'Purchase Orders'}
-                            <span className="text-sm font-normal text-muted-foreground ml-2 px-2 py-0.5 rounded-full bg-muted">
-                                {displayPOs.toLocaleString('id-ID')} Orders
-                            </span>
-                        </DialogTitle>
-                        <DialogDescription className="text-base mt-1.5 ml-7 text-muted-foreground/80">
-                            Detailed breakdown of purchase orders currently in <span className="font-medium text-foreground">{status}</span> status.
-                        </DialogDescription>
-                    </DialogHeader>
+                    <div className="flex justify-between items-start">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-3 text-2xl font-bold tracking-tight">
+                                <div
+                                    className="flex h-4 w-4 rounded-full shadow-md ring-2 ring-offset-2 ring-offset-background"
+                                    style={{ backgroundColor: statusColor, boxShadow: `0 0 10px ${statusColor}60` }}
+                                />
+                                {status ? `PO ${status}` : 'Purchase Orders'}
+                                <span className="text-sm font-normal text-muted-foreground ml-2 px-2 py-0.5 rounded-full bg-muted">
+                                    {displayPOs.toLocaleString('id-ID')} Orders
+                                </span>
+                            </DialogTitle>
+                            <DialogDescription className="text-base mt-1.5 ml-7 text-muted-foreground/80">
+                                Detailed breakdown of purchase orders currently in <span className="font-medium text-foreground">{status}</span> status.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="gap-1 mt-1"
+                            onClick={handleDownload}
+                            disabled={loading || isDownloading || items.length === 0}
+                        >
+                            <Download className="h-4 w-4" />
+                            {isDownloading ? 'Downloading...' : 'Download CSV'}
+                        </Button>
+                    </div>
 
                     {/* Global Stats Cards */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
@@ -220,13 +372,13 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                         <Table>
                             <TableHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur shadow-sm">
                                 <TableRow className="hover:bg-transparent border-b border-border/60">
-                                    <TableHead className="w-[140px] font-semibold text-foreground/80">PO Number</TableHead>
-                                    <TableHead className="w-[120px] font-semibold text-foreground/80">SKU</TableHead>
-                                    <TableHead className="min-w-[200px] font-semibold text-foreground/80">Product</TableHead>
-                                    <TableHead className="min-w-[150px] font-semibold text-foreground/80">Store</TableHead>
-                                    <TableHead className="text-right font-semibold text-foreground/80">Qty</TableHead>
-                                    <TableHead className="text-right font-semibold text-foreground/80">Total</TableHead>
-                                    <TableHead className="text-right font-semibold text-foreground/80">Released</TableHead>
+                                    <SortableHead field="po_number" label="PO Number" className="w-[140px] font-semibold text-foreground/80" />
+                                    <SortableHead field="sku" label="SKU" className="w-[120px] font-semibold text-foreground/80" />
+                                    <SortableHead field="product_name" label="Product" className="min-w-[200px] font-semibold text-foreground/80" />
+                                    <SortableHead field="store_name" label="Store" className="min-w-[150px] font-semibold text-foreground/80" />
+                                    <SortableHead field="po_qty" label="Qty" align="right" className="text-right font-semibold text-foreground/80" />
+                                    <SortableHead field="total_amount" label="Total" align="right" className="text-right font-semibold text-foreground/80" />
+                                    <SortableHead field="po_released_at" label="Released" align="right" className="text-right font-semibold text-foreground/80" />
                                 </TableRow>
                             </TableHeader>
                             <TableBody>

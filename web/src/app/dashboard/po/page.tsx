@@ -70,17 +70,31 @@ function PODashboardContent() {
     }
 
     // Define the desired order for PO status cards
-    const statusOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived'];
+    const statusOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived', 'Received'];
 
-    // Sort status summaries according to the defined order
-    const statusSummaries = (data.status_summaries ?? []).sort((a: any, b: any) => {
-        const indexA = statusOrder.indexOf(a.status);
-        const indexB = statusOrder.indexOf(b.status);
-        // If status not found in order array, put it at the end
-        if (indexA === -1) return 1;
-        if (indexB === -1) return -1;
-        return indexA - indexB;
+    const rawSummaries = data.status_summaries ?? [];
+    const summariesByStatus = rawSummaries.reduce<Record<string, any>>((acc, summary) => {
+        acc[summary.status] = summary;
+        return acc;
+    }, {});
+
+    // Ensure we always render cards for the known statuses even if the API returns zero data
+    const orderedSummaries = statusOrder.map((status) => {
+        return summariesByStatus[status] ?? {
+            status,
+            count: 0,
+            total_value: 0,
+            sku_count: 0,
+            total_qty: 0,
+            avg_days: 0,
+            diff_days: 0
+        };
     });
+
+    // Append any additional statuses that weren't in the predefined order
+    const extraSummaries = rawSummaries.filter((summary: any) => !statusOrder.includes(summary.status));
+
+    const statusSummaries = [...orderedSummaries, ...extraSummaries];
 
     const funnelData = data.lifecycle_funnel ?? [];
     const trendData = data.trends ?? [];
