@@ -15,7 +15,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { getSupplierPOItems, SupplierPOItem } from '@/services/api';
 
 interface SupplierPODialogProps {
@@ -44,6 +44,7 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
 
@@ -96,18 +97,131 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
         loadItems(1, size);
     };
 
+    const fetchAllItemsForDownload = useCallback(async () => {
+        if (!supplier) return [];
+
+        const aggregated: SupplierPOItem[] = [];
+        const dlPageSize = 500;
+        let dlPage = 1;
+        let dlTotal = Infinity;
+
+        while (aggregated.length < dlTotal) {
+            const response = await getSupplierPOItems({
+                supplierId: supplier.id,
+                page: dlPage,
+                pageSize: dlPageSize,
+                sortField: 'po_released_at',
+                sortDirection: 'desc',
+            });
+
+            if (!response.items || response.items.length === 0) {
+                break;
+            }
+
+            aggregated.push(...response.items);
+            dlTotal = response.total ?? aggregated.length;
+
+            if (response.items.length < dlPageSize) {
+                break;
+            }
+            dlPage += 1;
+        }
+        return aggregated;
+    }, [supplier]);
+
+    const handleDownload = useCallback(async () => {
+        if (!supplier || isDownloading) return;
+
+        setIsDownloading(true);
+        try {
+            const allItems = await fetchAllItemsForDownload();
+            if (allItems.length === 0) {
+                setError('No items available to download');
+                return;
+            }
+
+            const headers = [
+                'PO Number',
+                'SKU',
+                'Product Name',
+                'Brand',
+                'Supplier ID',
+                'Supplier Name',
+                'Released',
+                'Sent',
+                'Approved',
+                'Arrived',
+                'Received',
+            ];
+
+            const escapeCsvValue = (value: string | number | null) => {
+                const stringValue = value === null ? '' : `${value}`;
+                if (/[",\n]/.test(stringValue)) {
+                    return `"${stringValue.replace(/"/g, '""')}"`;
+                }
+                return stringValue;
+            };
+
+            const rows = allItems.map(item => [
+                item.po_number,
+                item.sku,
+                item.product_name,
+                item.brand_name,
+                item.supplier_id,
+                item.supplier_name,
+                formatDate(item.po_released_at),
+                formatDate(item.po_sent_at),
+                formatDate(item.po_approved_at),
+                formatDate(item.po_arrived_at),
+                formatDate(item.po_received_at),
+            ]);
+
+            const csvContent = [headers, ...rows]
+                .map(row => row.map(escapeCsvValue).join(','))
+                .join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const datePart = new Date().toISOString().split('T')[0];
+            link.download = `supplier-po-${supplier.id}-${datePart}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Failed to download CSV', err);
+            setError('Failed to download CSV');
+        } finally {
+            setIsDownloading(false);
+        }
+    }, [supplier, isDownloading, fetchAllItemsForDownload]);
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="w-[96vw] max-w-6xl border-border/60 bg-background/95 backdrop-blur-xl max-h-[90vh] overflow-y-auto p-0 sm:p-6 flex flex-col">
                 <div className="flex h-full min-h-0 flex-col gap-4">
-                    <DialogHeader className="py-4 sm:py-0 sm:pb-4">
-                        <DialogTitle className="text-xl font-semibold">
-                            {supplier ? `Supplier: ${supplier.name}` : 'Supplier Purchase Orders'}
-                        </DialogTitle>
-                        <DialogDescription>
-                            Detailed PO lines grouped by supplier. Includes SKU, brand, and PO lifecycle timestamps.
-                        </DialogDescription>
-                    </DialogHeader>
+                    <div className="flex justify-between items-start py-4 sm:py-0 sm:pb-4 border-b sm:border-none border-border/60">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl font-semibold">
+                                {supplier ? `Supplier: ${supplier.name}` : 'Supplier Purchase Orders'}
+                            </DialogTitle>
+                            <DialogDescription>
+                                Detailed PO lines grouped by supplier. Includes SKU, brand, and PO lifecycle timestamps.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="gap-1 mt-1 mr-4 sm:mr-0"
+                            onClick={handleDownload}
+                            disabled={loading || isDownloading || items.length === 0}
+                        >
+                            <Download className="h-4 w-4" />
+                            {isDownloading ? 'Downloading...' : 'Download CSV'}
+                        </Button>
+                    </div>
 
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">

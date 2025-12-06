@@ -39,7 +39,7 @@ const generateTimeColors = (count: number): string[] => {
 
 // Transform data: group by status (x-axis), with dates as separate bars
 const transformData = (data: TrendData[]) => {
-    const statusOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived'];
+    const statusOrder = ['Released', 'Sent', 'Approved', 'Arrived', 'Received'];
     const grouped: Record<string, any> = {};
     const dates = new Set<string>();
 
@@ -55,10 +55,11 @@ const transformData = (data: TrendData[]) => {
     // Sort dates chronologically
     const sortedDates = Array.from(dates).sort();
 
-    // Sort statuses by defined order
-    const chartData = statusOrder
-        .filter(status => grouped[status])
-        .map(status => grouped[status]);
+    // Sort statuses by defined order and ensure all exist
+    const chartData = statusOrder.map(status => ({
+        status,
+        ...(grouped[status] || {})
+    }));
 
     return {
         chartData,
@@ -70,7 +71,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-popover/95 backdrop-blur-sm border border-border/50 rounded-lg p-3 shadow-xl">
-                <p className="font-semibold text-sm mb-2">{new Date(label).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p className="font-semibold text-sm mb-2">{label}</p>
                 <div className="space-y-1">
                     {payload.map((entry: any, index: number) => (
                         <div key={index} className="flex items-center gap-2 text-xs">
@@ -126,6 +127,14 @@ export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
                             axisLine={false}
                             tick={{ fill: 'hsl(var(--muted-foreground))' }}
                             dx={-10}
+                            label={{
+                                value: 'PO Count',
+                                angle: -90,
+                                position: 'insideLeft',
+                                fill: 'hsl(var(--muted-foreground))',
+                                fontSize: 12,
+                                offset: -5
+                            }}
                         />
                         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
                         <Legend

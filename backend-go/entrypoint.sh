@@ -39,7 +39,7 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
   if [ -n "$DATABASE_URL" ]; then
     SEED_DB_URL="$DATABASE_URL"
   else
-    SEED_DB_URL="postgres://$DB_USER:$DB_PASSWORD@$DB_HOST@$DB_PORT/$DB_NAME?sslmode=${DB_SSLMODE:-disable}"
+    SEED_DB_URL="postgres://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?sslmode=${DB_SSLMODE:-disable}"
   fi
 
   SEED_TARGET=${SEED_TARGET:-all}

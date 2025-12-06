@@ -584,15 +584,30 @@ func (p *AnalyticsProcessor) flushPOSnapshotBatch(ctx context.Context, tx *sql.T
 
 	seen := make(map[poSnapshotKey]int, len(batch))
 	unique := make([]poSnapshotRecord, 0, len(batch))
+	duplicateCount := 0
+	var lastDuplicate poSnapshotRecord
+
 	for _, rec := range batch {
 		key := makePOSnapshotKey(rec)
 		if idx, exists := seen[key]; exists {
-			log.Printf("duplicate PO snapshot detected for upload %s (po=%s sku=%s brand_id=%d store_id=%d supplier_id=%s); keeping latest row", rec.snapshotTime.Format(time.RFC3339), rec.poNumber, rec.sku, rec.brandID, rec.storeID, formatSupplierID(rec.supplierID))
+			duplicateCount++
+			lastDuplicate = rec
 			unique[idx] = rec
 			continue
 		}
 		seen[key] = len(unique)
 		unique = append(unique, rec)
+	}
+
+	if duplicateCount > 0 {
+		log.Printf("Skipped %d duplicate PO snapshots in batch (keeping latest). Sample duplicate: upload %s (po=%s sku=%s brand_id=%d store_id=%d supplier_id=%s)",
+			duplicateCount,
+			lastDuplicate.snapshotTime.Format(time.RFC3339),
+			lastDuplicate.poNumber,
+			lastDuplicate.sku,
+			lastDuplicate.brandID,
+			lastDuplicate.storeID,
+			formatSupplierID(lastDuplicate.supplierID))
 	}
 
 	valueStrings := make([]string, 0, len(unique))
