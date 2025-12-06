@@ -67,7 +67,7 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
                         />
                         <Tooltip
                             content={<CustomTooltip />}
-                            cursor={{ fill: 'hsl(var(--muted)/0.2)', radius: 4 }}
+                            cursor={{ fill: 'transparent' }}
                         />
                         <Bar
                             dataKey="avg_lead_time"

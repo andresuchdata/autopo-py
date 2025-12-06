@@ -56,10 +56,10 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
 
     // Determine styles based on active state
     // Active: slightly colored background, ring, backdrop blur
-    // Inactive: standard card, hover effects
+    // Inactive: standard card, hover effects (beautiful shadow, subtle lift, border highlight)
     const activeClasses = isActive
-        ? 'ring-2 ring-primary ring-offset-2 bg-card/80 backdrop-blur-sm'
-        : 'bg-card border-border hover:border-primary/50 hover:bg-muted/50';
+        ? 'ring-2 ring-primary ring-offset-2 bg-card/80 backdrop-blur-sm shadow-md'
+        : 'bg-card border-border hover:border-primary/40 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300';
 
     const interactiveClasses = onClick
         ? 'cursor-pointer transition-all duration-200 select-none'
