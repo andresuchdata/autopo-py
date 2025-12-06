@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/jmoiron/sqlx"
@@ -195,6 +196,10 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 				MAX(time) AS latest_time
 			FROM po_snapshots
 			WHERE supplier_id = $1
+			  AND po_sent_at IS NOT NULL
+			  AND po_arrived_at IS NOT NULL
+			  AND po_sent_at > '2000-01-01'
+			  AND po_arrived_at > '2000-01-01'
 			GROUP BY po_number, sku
 		)
 		SELECT
@@ -213,6 +218,10 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 		LEFT JOIN brands b ON s.brand_id = b.id
 		LEFT JOIN suppliers sup ON s.supplier_id = sup.id
+		WHERE s.po_sent_at IS NOT NULL
+		  AND s.po_arrived_at IS NOT NULL
+		  AND s.po_sent_at > '2000-01-01'
+		  AND s.po_arrived_at > '2000-01-01'
 		%s
 		LIMIT $2 OFFSET $3
 	`, orderClause)
@@ -225,12 +234,20 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 				MAX(time) AS latest_time
 			FROM po_snapshots
 			WHERE supplier_id = $1
+			  AND po_sent_at IS NOT NULL
+			  AND po_arrived_at IS NOT NULL
+			  AND po_sent_at > '2000-01-01'
+			  AND po_arrived_at > '2000-01-01'
 			GROUP BY po_number, sku
 		)
 		SELECT COUNT(*)
 		FROM po_snapshots s
 		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-	`
+		WHERE s.po_sent_at IS NOT NULL
+		  AND s.po_arrived_at IS NOT NULL
+		  AND s.po_sent_at > '2000-01-01'
+		  AND s.po_arrived_at > '2000-01-01'
+`
 
 	var total int
 	if err := r.db.GetContext(ctx, &total, countQuery, supplierID); err != nil {
@@ -448,9 +465,6 @@ func (r *poRepository) GetPOAging(ctx context.Context) ([]domain.POAging, error)
 }
 
 func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POAging, error) {
-	// List POs that are not completed (e.g., not Received/Cancelled?)
-	// Assuming status < 6 are active.
-
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
@@ -466,6 +480,7 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	                po_approved_at,
 	                po_arrived_at,
 	                po_received_at,
+	                supplier_id,
 	                GREATEST(
 	                    COALESCE(po_released_at, TIMESTAMP 'epoch'),
 	                    COALESCE(po_sent_at, TIMESTAMP 'epoch'),
@@ -493,7 +508,8 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	                MAX(po_approved_at) as po_approved_at,
 	                MAX(po_arrived_at) as po_arrived_at,
 	                MAX(po_received_at) as po_received_at,
-	                MAX(last_status_change_at) as last_status_change_at
+	                MAX(last_status_change_at) as last_status_change_at,
+                    MAX(supplier_id) as supplier_id
 	            FROM latest_snapshot
 	            GROUP BY po_number
 	        ),
@@ -501,6 +517,7 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	            SELECT 
 	                po_number,
 	                status_code,
+                    supplier_id,
 	                po_qty,
 	                total_amount,
 	                COALESCE(EXTRACT(DAY FROM (NOW() - COALESCE(
@@ -535,18 +552,13 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	    `, filterClause)
 
 	if filterClause != "" {
-		log.Debug().
-			Str("filter_clause", filterClause).
-			Interface("filter_args", filterArgs).
-			Msg("po dashboard: aging applying filter")
+		log.Debug().Msg("po dashboard: aging applying filter")
 	}
 
 	var rows []poAgingRow
 	if err := sqlx.SelectContext(ctx, r.db, &rows, query, filterArgs...); err != nil {
 		return nil, err
 	}
-
-	log.Debug().Int("aging_rows", len(rows)).Msg("po dashboard: aging fetched")
 
 	results := make([]domain.POAging, len(rows))
 	for i, row := range rows {
@@ -556,10 +568,259 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 			Quantity:     row.Quantity,
 			Value:        row.TotalAmount,
 			DaysInStatus: row.DaysInStatus,
+			// SupplierName not filled for legacy call, or fill empty
+		}
+	}
+	return results, nil
+}
+
+func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string) (*domain.POAgingResponse, error) {
+	// Validate pagination
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	// Validate sort
+	validSortFields := map[string]string{
+		"po_number":      "pd.po_number",
+		"po_qty":         "pd.po_qty",
+		"value":          "pd.total_amount",
+		"days_in_status": "pd.days_in_status",
+		"supplier_name":  "s.name",
+		"status":         "pd.status_code",
+	}
+	sortCol, ok := validSortFields[sortField]
+	if !ok {
+		sortCol = "pd.days_in_status"
+	}
+
+	if sortDirection != "asc" && sortDirection != "desc" {
+		sortDirection = "desc"
+	}
+
+	// Status Filter
+	var statusClause string
+	var args []interface{}
+	idx := 1
+	if status != "" && status != "ALL" {
+		statusClause = fmt.Sprintf("AND pd.status_code = $%d", idx)
+		sc, _ := domain.ParsePOStatus(status)
+		args = append(args, sc)
+		idx++
+	}
+
+	// CTE Query similar to legacy but simpler structure for pagination
+	cte := `
+        WITH latest_snapshot AS (
+            SELECT po_number, sku, status, quantity_ordered, COALESCE(total_amount, 0) as total_amount, 
+                   po_released_at, po_sent_at, po_approved_at, po_arrived_at, po_received_at, supplier_id,
+                   GREATEST(COALESCE(po_released_at, 'epoch'), COALESCE(po_sent_at, 'epoch'), COALESCE(po_approved_at, 'epoch'), 
+                            COALESCE(po_arrived_at, 'epoch'), COALESCE(po_received_at, 'epoch'), time) as last_status_change_at
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
+                FROM po_snapshots WHERE po_number <> ''
+            ) s WHERE rn = 1
+        ),
+        po_aggregate AS (
+            SELECT po_number, MAX(status) as status_code, SUM(quantity_ordered) as po_qty, SUM(total_amount) as total_amount,
+                   MAX(po_released_at) as po_released_at, MAX(po_sent_at) as po_sent_at, MAX(po_approved_at) as po_approved_at, 
+                   MAX(po_arrived_at) as po_arrived_at, MAX(po_received_at) as po_received_at, MAX(last_status_change_at) as last_status_change_at,
+                   MAX(supplier_id) as supplier_id
+            FROM latest_snapshot GROUP BY po_number
+        ),
+        po_days AS (
+            SELECT po_number, status_code, supplier_id, po_qty, total_amount,
+                   po_released_at, po_sent_at, po_arrived_at, po_received_at,
+                   COALESCE(EXTRACT(DAY FROM (NOW() - COALESCE(CASE status_code 
+                        WHEN 2 THEN po_released_at WHEN 3 THEN po_sent_at WHEN 4 THEN po_approved_at 
+                        WHEN 5 THEN po_arrived_at WHEN 6 THEN po_received_at ELSE last_status_change_at END, last_status_change_at, NOW()))), 0)::int as days_in_status
+            FROM po_aggregate WHERE status_code < 6
+        )
+    `
+
+	// Count Query
+	countQuery := cte + fmt.Sprintf(` SELECT COUNT(*) FROM po_days pd WHERE 1=1 %s`, statusClause)
+
+	// Main Query
+	query := cte + fmt.Sprintf(`
+        SELECT pd.po_number, pd.status_code, pd.po_qty, pd.total_amount, pd.days_in_status, COALESCE(s.name, '') as supplier_name,
+               pd.po_released_at, pd.po_sent_at, pd.po_arrived_at, pd.po_received_at
+        FROM po_days pd
+        LEFT JOIN suppliers s ON pd.supplier_id = s.id
+        WHERE 1=1 %s
+        ORDER BY %s %s
+        LIMIT $%d OFFSET $%d
+    `, statusClause, sortCol, sortDirection, idx, idx+1)
+
+	// Execute Count
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
+		return nil, err
+	}
+
+	// Execute Main
+	qArgs := append(args, pageSize, offset)
+	type rowType struct {
+		poAgingRow
+		SupplierName string     `db:"supplier_name"`
+		POReleasedAt *time.Time `db:"po_released_at"`
+		POSentAt     *time.Time `db:"po_sent_at"`
+		POArrivedAt  *time.Time `db:"po_arrived_at"`
+		POReceivedAt *time.Time `db:"po_received_at"`
+	}
+	var rows []rowType
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query, qArgs...); err != nil {
+		return nil, err
+	}
+
+	items := make([]domain.POAging, len(rows))
+	formatTime := func(t *time.Time) *string {
+		if t == nil {
+			return nil
+		}
+		s := t.Format(time.RFC3339)
+		return &s
+	}
+
+	for i, r := range rows {
+		items[i] = domain.POAging{
+			PONumber:     r.PONumber,
+			Status:       domain.POStatusLabel(r.StatusCode),
+			Quantity:     r.Quantity,
+			Value:        r.TotalAmount,
+			DaysInStatus: r.DaysInStatus,
+			SupplierName: r.SupplierName,
+			POReleasedAt: formatTime(r.POReleasedAt),
+			POSentAt:     formatTime(r.POSentAt),
+			POArrivedAt:  formatTime(r.POArrivedAt),
+			POReceivedAt: formatTime(r.POReceivedAt),
 		}
 	}
 
-	return results, nil
+	totalPages := (total + pageSize - 1) / pageSize
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return &domain.POAgingResponse{
+		Items:      items,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPerformanceResponse, error) {
+	// Validate pagination
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	// Validate sort
+	validSortFields := map[string]string{
+		"supplier_name": "s.name",
+		"avg_lead_time": "avg_lead_time",
+	}
+	sortCol, ok := validSortFields[sortField]
+	if !ok {
+		sortCol = "avg_lead_time"
+	}
+	if sortDirection != "asc" && sortDirection != "desc" {
+		sortDirection = "asc" // default to fastest lead time
+	}
+
+	// Base CTE for getting valid POs (Arrived and Sent are populated)
+	cte := `
+        WITH valid_pos AS (
+            SELECT 
+                po_number, 
+                supplier_id, 
+                po_sent_at, 
+                po_arrived_at,
+                ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
+            FROM po_snapshots
+            WHERE po_number <> ''
+            AND po_sent_at > '2000-01-01' 
+            AND po_arrived_at > '2000-01-01'
+        ),
+        latest_pos AS (
+             -- Need to aggregate SKUs to PO level or just pick one since dates are usually same per PO?
+             -- Actually dates are per PO.
+             -- But snapshot is per SKU.
+             -- We should group by PO Number first to allow distinct PO calc?
+             -- If a PO has 10 items, do we count it 10 times? NO.
+             -- We should select distinct valid POs.
+            SELECT DISTINCT ON (po_number)
+                po_number,
+                supplier_id,
+                po_sent_at,
+                po_arrived_at
+            FROM valid_pos
+            WHERE rn = 1
+        )
+    `
+
+	// Count Query (Supplier Count)
+	countQuery := cte + `
+        SELECT COUNT(DISTINCT s.id)
+        FROM latest_pos lp
+        JOIN suppliers s ON lp.supplier_id = s.id
+    `
+
+	// Main Select
+	query := cte + fmt.Sprintf(`
+        SELECT 
+            s.id as supplier_id,
+            s.name as supplier_name,
+            AVG(EXTRACT(EPOCH FROM (lp.po_arrived_at - lp.po_sent_at))/86400)::float as avg_lead_time,
+            COUNT(*) as total_pos,
+            MIN(EXTRACT(EPOCH FROM (lp.po_arrived_at - lp.po_sent_at))/86400)::float as min_lead_time,
+            MAX(EXTRACT(EPOCH FROM (lp.po_arrived_at - lp.po_sent_at))/86400)::float as max_lead_time
+        FROM latest_pos lp
+        JOIN suppliers s ON lp.supplier_id = s.id
+        GROUP BY s.id, s.name
+        ORDER BY %s %s, s.name ASC
+        LIMIT $%d OFFSET $%d
+    `, sortCol, sortDirection, 1, 2)
+
+	// Execute Count
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery); err != nil {
+		return nil, err
+	}
+
+	// Execute Data
+	var rows []domain.SupplierPerformance
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query, pageSize, offset); err != nil {
+		return nil, err
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	// Handle empty/null (sqlx usually returns empty slice but verify)
+	if rows == nil {
+		rows = []domain.SupplierPerformance{}
+	}
+
+	return &domain.SupplierPerformanceResponse{
+		Items:      rows,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
 }
 
 func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
