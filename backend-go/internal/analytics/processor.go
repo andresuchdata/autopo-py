@@ -412,6 +412,13 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 			if err == io.EOF {
 				break
 			}
+			// Handle CSV parse errors (e.g. wrong number of fields) gracefully
+			if parseErr, ok := err.(*csv.ParseError); ok {
+				log.Printf("Warning: skipping malformed CSV record in %s at line %d: %v", filePath, rowNum+1, parseErr)
+				rowNum++ // Still increment row num as Read likely advanced
+				continue
+			}
+
 			return fmt.Errorf("error reading record: %w", err)
 		}
 		rowNum++
@@ -671,6 +678,7 @@ func parseNullableTime(value string) *time.Time {
 		"02/01/06",
 		"02/01/2006",
 		"2006-01-02 15:04:05",
+		"2006-01-02",
 		time.RFC3339,
 	}
 	for _, layout := range formats {
