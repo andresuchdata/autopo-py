@@ -75,6 +75,7 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 					dashboardGroup.GET("/trend", poHandler.GetPOTrend)
 					dashboardGroup.GET("/aging", poHandler.GetPOAging)
 					dashboardGroup.GET("/performance", poHandler.GetSupplierPerformance)
+					dashboardGroup.GET("/supplier-performance", poHandler.GetSupplierPerformance)
 					dashboardGroup.GET("/items", poHandler.GetPOSnapshotItems)
 					dashboardGroup.GET("/supplier_items", poHandler.GetSupplierPOItems)
 				}
