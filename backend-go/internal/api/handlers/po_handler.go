@@ -187,6 +187,25 @@ func (h *POHandler) GetPOTrend(c *gin.Context) {
 
 // GetPOAging returns the aging data
 func (h *POHandler) GetPOAging(c *gin.Context) {
+	pageStr := c.Query("page")
+	if pageStr != "" {
+		// Paginated list request
+		page := parsePositiveIntWithDefault(pageStr, 1)
+		pageSize := parsePositiveIntWithDefault(c.Query("page_size"), 20)
+		sortField := c.DefaultQuery("sort_field", "days_in_status")
+		sortDirection := c.DefaultQuery("sort_direction", "desc")
+		status := c.Query("status")
+
+		response, err := h.poService.GetPOAgingItems(c.Request.Context(), page, pageSize, sortField, sortDirection, status)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch aging items"})
+			return
+		}
+		c.JSON(http.StatusOK, response)
+		return
+	}
+
+	// Summary request (legacy)
 	aging, err := h.poService.GetPOAging(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch aging data"})
@@ -197,6 +216,24 @@ func (h *POHandler) GetPOAging(c *gin.Context) {
 
 // GetSupplierPerformance returns the supplier performance data
 func (h *POHandler) GetSupplierPerformance(c *gin.Context) {
+	pageStr := c.Query("page")
+	if pageStr != "" {
+		// Paginated list request
+		page := parsePositiveIntWithDefault(pageStr, 1)
+		pageSize := parsePositiveIntWithDefault(c.Query("page_size"), 20)
+		sortField := c.DefaultQuery("sort_field", "avg_lead_time")
+		sortDirection := c.DefaultQuery("sort_direction", "asc")
+
+		response, err := h.poService.GetSupplierPerformanceItems(c.Request.Context(), page, pageSize, sortField, sortDirection)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier performance items"})
+			return
+		}
+		c.JSON(http.StatusOK, response)
+		return
+	}
+
+	// Legacy summary request
 	perf, err := h.poService.GetSupplierPerformance(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier performance"})

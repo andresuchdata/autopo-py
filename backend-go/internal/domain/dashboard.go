@@ -59,9 +59,19 @@ type POTrend struct {
 type POAging struct {
 	PONumber     string  `json:"po_number" db:"po_number"`
 	Status       string  `json:"status" db:"status_label"` // "Arrived", "Approved" etc.
+	SupplierName string  `json:"supplier_name" db:"supplier_name"`
 	Quantity     int     `json:"quantity" db:"po_qty"`
 	Value        float64 `json:"value" db:"total_amount"` // Calculated from items or stored
 	DaysInStatus int     `json:"days_in_status" db:"days_in_status"`
+}
+
+// POAgingResponse represents paginated aging items
+type POAgingResponse struct {
+	Items      []POAging `json:"items"`
+	Total      int       `json:"total"`
+	Page       int       `json:"page"`
+	PageSize   int       `json:"page_size"`
+	TotalPages int       `json:"total_pages"`
 }
 
 // SupplierPerformance represents a supplier's performance metric
@@ -69,6 +79,15 @@ type SupplierPerformance struct {
 	SupplierID   int64   `json:"supplier_id" db:"supplier_id"`
 	SupplierName string  `json:"supplier_name" db:"supplier_name"`
 	AvgLeadTime  float64 `json:"avg_lead_time" db:"avg_lead_time"` // Days
+}
+
+// SupplierPerformanceResponse represents paginated supplier performance items
+type SupplierPerformanceResponse struct {
+	Items      []SupplierPerformance `json:"items"`
+	Total      int                   `json:"total"`
+	Page       int                   `json:"page"`
+	PageSize   int                   `json:"page_size"`
+	TotalPages int                   `json:"total_pages"`
 }
 
 // DashboardSummary aggregates all dashboard data
