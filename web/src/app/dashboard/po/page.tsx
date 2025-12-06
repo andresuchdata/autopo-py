@@ -166,8 +166,8 @@ function PODashboardContent() {
 
             {/* 3. Charts Row 2: Aging & Supplier Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <POAgingTable data={agingData} />
-                <SupplierPerformanceChart data={supplierPerformanceData} />
+                <POAgingTable />
+                <SupplierPerformanceChart />
             </div>
 
             {/* Find the summary for the selected status to pass totals */}
