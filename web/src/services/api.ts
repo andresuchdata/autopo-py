@@ -196,6 +196,10 @@ export interface POAgingItem {
     value: number;
     days_in_status: number;
     supplier_name: string;
+    po_released_at: string | null;
+    po_sent_at: string | null;
+    po_arrived_at: string | null;
+    po_received_at: string | null;
 }
 
 export interface POAgingItemsResponse {
@@ -235,6 +239,9 @@ export interface SupplierPerformance {
     supplier_id: number;
     supplier_name: string;
     avg_lead_time: number;
+    total_pos: number;
+    min_lead_time: number;
+    max_lead_time: number;
 }
 
 export interface SupplierPerformanceResponse {

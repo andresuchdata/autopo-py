@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Loader2, Download } from 'lucide-react';
 import { getPOAging, POAgingItemsResponse, POAgingItem } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +23,13 @@ const formatCurrency = (value: number) => {
     return `Rp ${value.toLocaleString()}`;
 };
 
+const formatDate = (value: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
 export const POAgingTable: React.FC<POAgingTableProps> = () => {
     const [items, setItems] = useState<POAgingItem[]>([]);
     const [loading, setLoading] = useState(false);
@@ -32,6 +39,7 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
     const [sortField, setSortField] = useState('days_in_status');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [statusFilter, setStatusFilter] = useState('ALL');
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -75,6 +83,54 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
         }
     };
 
+    const handleExport = async () => {
+        if (isDownloading) return;
+        setIsDownloading(true);
+        try {
+            const res = await getPOAging({
+                page: 1,
+                pageSize: 10000,
+                sortField,
+                sortDirection,
+                status: statusFilter
+            });
+            let allItems: POAgingItem[] = [];
+            if (Array.isArray(res)) {
+                allItems = res as any;
+            } else {
+                const response = res as POAgingItemsResponse;
+                allItems = response.items || [];
+            }
+
+            if (allItems.length === 0) return;
+
+            const headers = ['PO Number', 'Supplier', 'Status', 'Qty', 'Value', 'Days', 'Released', 'Sent', 'Arrived', 'Received'];
+            const escape = (v: any) => {
+                const s = v === null || v === undefined ? '' : String(v);
+                return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            }
+            const rows = allItems.map(i => [
+                i.po_number, i.supplier_name, i.status, i.quantity, i.value, i.days_in_status,
+                formatDate(i.po_released_at), formatDate(i.po_sent_at), formatDate(i.po_arrived_at), formatDate(i.po_received_at)
+            ]);
+            const csv = [headers, ...rows].map(r => r.map(escape).join(',')).join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `po-aging-${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
     const SortIcon = ({ field }: { field: string }) => {
@@ -87,6 +143,9 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
             <div className="flex flex-row items-center justify-between">
                 <h3 className="text-lg font-semibold">PO Aging vs. Today</h3>
                 <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={handleExport} disabled={loading || isDownloading}>
+                        <Download className="mr-2 h-4 w-4" /> Export CSV
+                    </Button>
                     <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setPage(1); }}>
                         <SelectTrigger className="w-[180px] h-8">
                             <SelectValue placeholder="Status" />
@@ -113,6 +172,11 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
                             <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('supplier_name')}>
                                 <div className="flex items-center">Supplier <SortIcon field="supplier_name" /></div>
                             </TableHead>
+                            {statusFilter === 'ALL' && (
+                                <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('status')}>
+                                    <div className="flex items-center">Status <SortIcon field="status" /></div>
+                                </TableHead>
+                            )}
                             <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('po_qty')}>
                                 <div className="flex items-center justify-end">Qty <SortIcon field="po_qty" /></div>
                             </TableHead>
@@ -127,7 +191,7 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">
+                                <TableCell colSpan={statusFilter === 'ALL' ? 6 : 5} className="h-24 text-center">
                                     <div className="flex justify-center items-center gap-2">
                                         <Loader2 className="h-6 w-6 animate-spin" /> Loading...
                                     </div>
@@ -135,7 +199,7 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
                             </TableRow>
                         ) : items.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={statusFilter === 'ALL' ? 6 : 5} className="h-24 text-center text-muted-foreground">
                                     No aging POs found.
                                 </TableCell>
                             </TableRow>
@@ -144,6 +208,13 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
                                 <TableRow key={`${item.po_number}-${idx}`}>
                                     <TableCell className="font-medium">{item.po_number}</TableCell>
                                     <TableCell>{item.supplier_name || '—'}</TableCell>
+                                    {statusFilter === 'ALL' && (
+                                        <TableCell>
+                                            <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
+                                                {item.status}
+                                            </span>
+                                        </TableCell>
+                                    )}
                                     <TableCell className="text-right">{item.quantity.toLocaleString()}</TableCell>
                                     <TableCell className="text-right">{formatCurrency(item.value)}</TableCell>
                                     <TableCell className="text-right font-mono font-medium text-orange-600">

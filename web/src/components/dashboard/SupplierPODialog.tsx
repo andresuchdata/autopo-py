@@ -19,7 +19,7 @@ import { Loader2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { getSupplierPOItems, SupplierPOItem } from '@/services/api';
 
 interface SupplierPODialogProps {
-    supplier: { id: number; name: string } | null;
+    supplier: { id: number; name: string; avgLeadTime?: number } | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }
@@ -35,6 +35,16 @@ const formatDate = (value: string | null) => {
         month: 'short',
         year: 'numeric',
     });
+};
+
+const calculateLeadTime = (arrivedAt: string | null, sentAt: string | null) => {
+    if (!arrivedAt || !sentAt) return '—';
+    const start = new Date(sentAt);
+    const end = new Date(arrivedAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '—';
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return `${diffDays} days`;
 };
 
 export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODialogProps) {
@@ -147,6 +157,7 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                 'Brand',
                 'Supplier ID',
                 'Supplier Name',
+                'Lead Time (Days)',
                 'Released',
                 'Sent',
                 'Approved',
@@ -169,6 +180,7 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                 item.brand_name,
                 item.supplier_id,
                 item.supplier_name,
+                calculateLeadTime(item.po_arrived_at, item.po_sent_at).replace(' days', ''),
                 formatDate(item.po_released_at),
                 formatDate(item.po_sent_at),
                 formatDate(item.po_approved_at),
@@ -214,7 +226,7 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                         <Button
                             variant="secondary"
                             size="sm"
-                            className="gap-1 mt-1 mr-4 sm:mr-0"
+                            className="gap-1 mt-4 mr-4 sm:mr-0 ml-4"
                             onClick={handleDownload}
                             disabled={loading || isDownloading || items.length === 0}
                         >
@@ -223,19 +235,15 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                         </Button>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
                         <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
                             <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Items</p>
                             <p className="mt-2 text-2xl font-semibold">{total.toLocaleString('id-ID')}</p>
                         </div>
                         <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Supplier ID</p>
-                            <p className="mt-2 text-2xl font-semibold">{supplier?.id ?? '—'}</p>
-                        </div>
-                        <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Supplier</p>
-                            <p className="mt-2 truncate text-2xl font-semibold" title={supplier?.name || ''}>
-                                {supplier?.name ?? '—'}
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Avg Lead Time</p>
+                            <p className="mt-2 text-2xl font-semibold">
+                                {supplier?.avgLeadTime ? `${supplier.avgLeadTime.toFixed(1)} days` : '—'}
                             </p>
                         </div>
                     </div>
@@ -250,6 +258,7 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                                         <TableHead>Brand</TableHead>
                                         <TableHead>Supplier ID</TableHead>
                                         <TableHead>Supplier</TableHead>
+                                        <TableHead>Lead Time</TableHead>
                                         <TableHead>PO Released</TableHead>
                                         <TableHead>PO Sent</TableHead>
                                         <TableHead>PO Approved</TableHead>
@@ -260,14 +269,14 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                                 <TableBody>
                                     {!supplier && (
                                         <TableRow>
-                                            <TableCell colSpan={10} className="py-12 text-center text-muted-foreground">
+                                            <TableCell colSpan={11} className="py-12 text-center text-muted-foreground">
                                                 Select a bar in Supplier Performance to view its PO lines.
                                             </TableCell>
                                         </TableRow>
                                     )}
                                     {supplier && loading && (
                                         <TableRow>
-                                            <TableCell colSpan={10} className="py-12 text-center text-muted-foreground">
+                                            <TableCell colSpan={11} className="py-12 text-center text-muted-foreground">
                                                 <div className="flex flex-col items-center gap-3">
                                                     <Loader2 className="h-6 w-6 animate-spin" />
                                                     Loading supplier purchase orders…
@@ -277,14 +286,14 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                                     )}
                                     {supplier && !loading && error && (
                                         <TableRow>
-                                            <TableCell colSpan={10} className="py-12 text-center text-red-500">
+                                            <TableCell colSpan={11} className="py-12 text-center text-red-500">
                                                 {error}
                                             </TableCell>
                                         </TableRow>
                                     )}
                                     {supplier && !loading && !error && items.length === 0 && (
                                         <TableRow>
-                                            <TableCell colSpan={10} className="py-12 text-center text-muted-foreground">
+                                            <TableCell colSpan={11} className="py-12 text-center text-muted-foreground">
                                                 No purchase orders found for this supplier.
                                             </TableCell>
                                         </TableRow>
@@ -299,6 +308,9 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                                                 <TableCell>{item.brand_name || '—'}</TableCell>
                                                 <TableCell className="font-mono text-xs">{item.supplier_id}</TableCell>
                                                 <TableCell>{item.supplier_name || '—'}</TableCell>
+                                                <TableCell className="font-medium text-orange-600">
+                                                    {calculateLeadTime(item.po_arrived_at, item.po_sent_at)}
+                                                </TableCell>
                                                 <TableCell>{formatDate(item.po_released_at)}</TableCell>
                                                 <TableCell>{formatDate(item.po_sent_at)}</TableCell>
                                                 <TableCell>{formatDate(item.po_approved_at)}</TableCell>

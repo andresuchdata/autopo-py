@@ -63,6 +63,11 @@ type POAging struct {
 	Quantity     int     `json:"quantity" db:"po_qty"`
 	Value        float64 `json:"value" db:"total_amount"` // Calculated from items or stored
 	DaysInStatus int     `json:"days_in_status" db:"days_in_status"`
+	// Export fields
+	POReleasedAt *string `json:"po_released_at" db:"po_released_at"`
+	POSentAt     *string `json:"po_sent_at" db:"po_sent_at"`
+	POArrivedAt  *string `json:"po_arrived_at" db:"po_arrived_at"`
+	POReceivedAt *string `json:"po_received_at" db:"po_received_at"`
 }
 
 // POAgingResponse represents paginated aging items
@@ -79,6 +84,10 @@ type SupplierPerformance struct {
 	SupplierID   int64   `json:"supplier_id" db:"supplier_id"`
 	SupplierName string  `json:"supplier_name" db:"supplier_name"`
 	AvgLeadTime  float64 `json:"avg_lead_time" db:"avg_lead_time"` // Days
+	// Export fields
+	TotalPOs    int     `json:"total_pos" db:"total_pos"`
+	MinLeadTime float64 `json:"min_lead_time" db:"min_lead_time"`
+	MaxLeadTime float64 `json:"max_lead_time" db:"max_lead_time"`
 }
 
 // SupplierPerformanceResponse represents paginated supplier performance items

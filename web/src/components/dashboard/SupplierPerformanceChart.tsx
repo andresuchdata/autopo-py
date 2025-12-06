@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, LabelList, Cell } from 'recharts';
 import { SupplierPODialog } from '@/components/dashboard/SupplierPODialog';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Loader2, Download } from 'lucide-react';
 import { getSupplierPerformance, SupplierPerformance, SupplierPerformanceResponse } from '@/services/api';
 import {
     Select,
@@ -16,7 +16,7 @@ import {
 
 interface SupplierPerformanceChartProps { }
 
-const BAR_COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5'];
+const BAR_COLORS = ['#9a3412', '#c2410c', '#ea580c', '#f97316', '#fb923c'];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -33,17 +33,33 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 };
 
+const CustomYAxisTick = (props: any) => {
+    const { x, y, payload } = props;
+    return (
+        <text
+            x={x}
+            y={y}
+            dy={4}
+            textAnchor="end"
+            className="fill-foreground text-[11px] font-medium"
+        >
+            {payload.value}
+        </text>
+    );
+};
+
 export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> = () => {
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [selectedSupplier, setSelectedSupplier] = useState<{ id: number; name: string } | null>(null);
+    const [selectedSupplier, setSelectedSupplier] = useState<{ id: number; name: string; avgLeadTime: number } | null>(null);
+    const [isDownloading, setIsDownloading] = useState(false);
 
     // State for data and pagination
     const [items, setItems] = useState<SupplierPerformance[]>([]);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(5); // Default to 5 to match typical chart height, or let user change? 5 is good for "Top N".
+    const [pageSize, setPageSize] = useState(10);
     const [total, setTotal] = useState(0);
-    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc'); // Default fastest first
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -76,9 +92,60 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
         loadData();
     }, [loadData]);
 
+    const handleExport = async () => {
+        if (isDownloading) return;
+        setIsDownloading(true);
+        try {
+            const res = await getSupplierPerformance({
+                page: 1,
+                pageSize: 10000,
+                sortField: 'avg_lead_time',
+                sortDirection,
+            });
+            let allItems: SupplierPerformance[] = [];
+            if (res && 'items' in res) {
+                const response = res as SupplierPerformanceResponse;
+                allItems = response.items || [];
+            } else if (Array.isArray(res)) {
+                allItems = res as any;
+            }
+
+            if (allItems.length === 0) return;
+
+            const headers = ['Supplier ID', 'Supplier Name', 'Avg Lead Time (Days)', 'Total POs', 'Min Lead Time (Days)', 'Max Lead Time (Days)'];
+            const escape = (v: any) => {
+                const s = v === null || v === undefined ? '' : String(v);
+                return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            }
+            const rows = allItems.map(i => [
+                i.supplier_id, i.supplier_name, i.avg_lead_time?.toFixed(2),
+                i.total_pos, i.min_lead_time?.toFixed(2), i.max_lead_time?.toFixed(2)
+            ]);
+
+            const csv = [headers, ...rows].map(r => r.map(escape).join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `supplier-performance-${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
     const handleBarClick = (payload?: SupplierPerformance) => {
         if (!payload) return;
-        setSelectedSupplier({ id: payload.supplier_id, name: payload.supplier_name });
+        setSelectedSupplier({
+            id: payload.supplier_id,
+            name: payload.supplier_name,
+            avgLeadTime: payload.avg_lead_time,
+        });
         setDialogOpen(true);
     };
 
@@ -92,6 +159,9 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
                     <p className="text-xs text-muted-foreground">Average Lead Time (Days)</p>
                 </div>
                 <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={handleExport} disabled={loading || isDownloading}>
+                        <Download className="mr-2 h-4 w-4" /> Export
+                    </Button>
                     <Button
                         variant="ghost"
                         size="icon"
@@ -125,8 +195,8 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
                             <YAxis
                                 dataKey="supplier_name"
                                 type="category"
-                                width={120}
-                                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                                width={230}
+                                tick={<CustomYAxisTick />}
                                 axisLine={false}
                                 tickLine={false}
                             />
@@ -150,12 +220,26 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
                                 ))}
                                 <LabelList
                                     dataKey="avg_lead_time"
-                                    position="insideRight"
-                                    fill="#fff"
-                                    fontSize={11}
-                                    fontWeight={600}
-                                    formatter={(val: any) => `${Number(val).toFixed(1)}d`}
-                                    offset={8}
+                                    content={(props: any) => {
+                                        const { x, y, width, height, value } = props;
+                                        // If bar is too short (e.g. < 40px), put label outside
+                                        const isSmall = width < 40;
+                                        const finalValue = `${Number(value).toFixed(1)}d`;
+
+                                        return (
+                                            <text
+                                                x={isSmall ? x + width + 5 : x + width - 5}
+                                                y={y + height / 2}
+                                                fill={isSmall ? "hsl(var(--foreground))" : "#fff"}
+                                                textAnchor={isSmall ? "start" : "end"}
+                                                dy={4}
+                                                fontSize={11}
+                                                fontWeight={600}
+                                            >
+                                                {finalValue}
+                                            </text>
+                                        );
+                                    }}
                                 />
                             </Bar>
                         </BarChart>

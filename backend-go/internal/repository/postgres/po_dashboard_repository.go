@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/jmoiron/sqlx"
@@ -195,6 +196,10 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 				MAX(time) AS latest_time
 			FROM po_snapshots
 			WHERE supplier_id = $1
+			  AND po_sent_at IS NOT NULL
+			  AND po_arrived_at IS NOT NULL
+			  AND po_sent_at > '2000-01-01'
+			  AND po_arrived_at > '2000-01-01'
 			GROUP BY po_number, sku
 		)
 		SELECT
@@ -213,6 +218,10 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 		LEFT JOIN brands b ON s.brand_id = b.id
 		LEFT JOIN suppliers sup ON s.supplier_id = sup.id
+		WHERE s.po_sent_at IS NOT NULL
+		  AND s.po_arrived_at IS NOT NULL
+		  AND s.po_sent_at > '2000-01-01'
+		  AND s.po_arrived_at > '2000-01-01'
 		%s
 		LIMIT $2 OFFSET $3
 	`, orderClause)
@@ -225,12 +234,20 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 				MAX(time) AS latest_time
 			FROM po_snapshots
 			WHERE supplier_id = $1
+			  AND po_sent_at IS NOT NULL
+			  AND po_arrived_at IS NOT NULL
+			  AND po_sent_at > '2000-01-01'
+			  AND po_arrived_at > '2000-01-01'
 			GROUP BY po_number, sku
 		)
 		SELECT COUNT(*)
 		FROM po_snapshots s
 		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-	`
+		WHERE s.po_sent_at IS NOT NULL
+		  AND s.po_arrived_at IS NOT NULL
+		  AND s.po_sent_at > '2000-01-01'
+		  AND s.po_arrived_at > '2000-01-01'
+`
 
 	var total int
 	if err := r.db.GetContext(ctx, &total, countQuery, supplierID); err != nil {
@@ -617,6 +634,7 @@ func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, 
         ),
         po_days AS (
             SELECT po_number, status_code, supplier_id, po_qty, total_amount,
+                   po_released_at, po_sent_at, po_arrived_at, po_received_at,
                    COALESCE(EXTRACT(DAY FROM (NOW() - COALESCE(CASE status_code 
                         WHEN 2 THEN po_released_at WHEN 3 THEN po_sent_at WHEN 4 THEN po_approved_at 
                         WHEN 5 THEN po_arrived_at WHEN 6 THEN po_received_at ELSE last_status_change_at END, last_status_change_at, NOW()))), 0)::int as days_in_status
@@ -629,7 +647,8 @@ func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, 
 
 	// Main Query
 	query := cte + fmt.Sprintf(`
-        SELECT pd.po_number, pd.status_code, pd.po_qty, pd.total_amount, pd.days_in_status, COALESCE(s.name, '') as supplier_name
+        SELECT pd.po_number, pd.status_code, pd.po_qty, pd.total_amount, pd.days_in_status, COALESCE(s.name, '') as supplier_name,
+               pd.po_released_at, pd.po_sent_at, pd.po_arrived_at, pd.po_received_at
         FROM po_days pd
         LEFT JOIN suppliers s ON pd.supplier_id = s.id
         WHERE 1=1 %s
@@ -647,7 +666,11 @@ func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, 
 	qArgs := append(args, pageSize, offset)
 	type rowType struct {
 		poAgingRow
-		SupplierName string `db:"supplier_name"`
+		SupplierName string     `db:"supplier_name"`
+		POReleasedAt *time.Time `db:"po_released_at"`
+		POSentAt     *time.Time `db:"po_sent_at"`
+		POArrivedAt  *time.Time `db:"po_arrived_at"`
+		POReceivedAt *time.Time `db:"po_received_at"`
 	}
 	var rows []rowType
 	if err := sqlx.SelectContext(ctx, r.db, &rows, query, qArgs...); err != nil {
@@ -655,6 +678,14 @@ func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, 
 	}
 
 	items := make([]domain.POAging, len(rows))
+	formatTime := func(t *time.Time) *string {
+		if t == nil {
+			return nil
+		}
+		s := t.Format(time.RFC3339)
+		return &s
+	}
+
 	for i, r := range rows {
 		items[i] = domain.POAging{
 			PONumber:     r.PONumber,
@@ -663,6 +694,10 @@ func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, 
 			Value:        r.TotalAmount,
 			DaysInStatus: r.DaysInStatus,
 			SupplierName: r.SupplierName,
+			POReleasedAt: formatTime(r.POReleasedAt),
+			POSentAt:     formatTime(r.POSentAt),
+			POArrivedAt:  formatTime(r.POArrivedAt),
+			POReceivedAt: formatTime(r.POReceivedAt),
 		}
 	}
 
@@ -746,7 +781,10 @@ func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pa
         SELECT 
             s.id as supplier_id,
             s.name as supplier_name,
-            AVG(EXTRACT(EPOCH FROM (lp.po_arrived_at - lp.po_sent_at))/86400)::float as avg_lead_time
+            AVG(EXTRACT(EPOCH FROM (lp.po_arrived_at - lp.po_sent_at))/86400)::float as avg_lead_time,
+            COUNT(*) as total_pos,
+            MIN(EXTRACT(EPOCH FROM (lp.po_arrived_at - lp.po_sent_at))/86400)::float as min_lead_time,
+            MAX(EXTRACT(EPOCH FROM (lp.po_arrived_at - lp.po_sent_at))/86400)::float as max_lead_time
         FROM latest_pos lp
         JOIN suppliers s ON lp.supplier_id = s.id
         GROUP BY s.id, s.name
