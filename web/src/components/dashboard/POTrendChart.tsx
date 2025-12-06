@@ -127,7 +127,7 @@ export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
                             tick={{ fill: 'hsl(var(--muted-foreground))' }}
                             dx={-10}
                         />
-                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted)/0.2)', radius: 4 }} />
+                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
                         <Legend
                             wrapperStyle={{ paddingTop: '24px', fontSize: '12px' }}
                             iconType="circle"

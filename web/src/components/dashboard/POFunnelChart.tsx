@@ -36,19 +36,21 @@ const formatCount = (count: number) => {
 
 export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
     // Define the desired order for PO status stages (same as PO Status cards)
-    const stageOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived'];
+    const stageOrder = ['Released', 'Sent', 'Approved', 'Arrived'];
 
-    // Sort data according to the defined order
-    const sortedData = [...data].sort((a, b) => {
-        const indexA = stageOrder.indexOf(a.stage);
-        const indexB = stageOrder.indexOf(b.stage);
-        // If stage not found in order array, put it at the end
-        if (indexA === -1) return 1;
-        if (indexB === -1) return -1;
-        return indexA - indexB;
-    });
+    // Sort data according to the defined order and filter out ignored stages
+    const sortedData = [...data]
+        .filter(d => d.stage !== 'Declined')
+        .sort((a, b) => {
+            const indexA = stageOrder.indexOf(a.stage);
+            const indexB = stageOrder.indexOf(b.stage);
+            // If stage not found in order array, put it at the end
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+        });
 
-    const svgHeight = 420;
+    const svgHeight = 500;
     const svgWidth = 980;
     const padding = { top: 30, right: 20, bottom: 30, left: 20 };
     const chartHeight = svgHeight - padding.top - padding.bottom;
@@ -62,7 +64,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
     // Find max value for scaling heights
     const maxValue = Math.max(...sortedData.map(d => d.total_value));
 
-    const minRatio = 0.18;
+    const minRatio = 0.3; // Increased for taller segments
     const getHeight = (value: number) => {
         if (maxValue === 0) {
             return chartHeight * minRatio;
@@ -169,9 +171,9 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
                     {sortedData.map((item, index) => {
                         const { path, midX, currentHeight, topCenter } = generateSegment(index, item);
                         const textInside = currentHeight > 90; // Increased threshold
-                        const labelY = textInside ? centerY - 22 : topCenter - 30;
-                        const statsY = textInside ? centerY + 2 : topCenter - 12;
-                        const valueY = textInside ? centerY + 24 : topCenter + 8; // Adjust based on layout
+                        const labelY = textInside ? centerY - 24 : topCenter - 30;
+                        const statsY = textInside ? centerY + 4 : topCenter - 10;
+                        const valueY = textInside ? centerY + 28 : topCenter + 10;
 
                         // Connector line for outside labels
                         const lineY1 = topCenter - 5;
@@ -186,7 +188,7 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
                                     stroke="rgba(255, 255, 255, 0.15)"
                                     strokeWidth="1"
                                     className="transition-all duration-300 hover:opacity-90 cursor-pointer"
-                                    style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))' }}
+                                    style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15)) brightness(0.85)' }}
                                 />
 
                                 {/* Connector line for outside labels */}
@@ -206,9 +208,9 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
                                     y={labelY}
                                     textAnchor="middle"
                                     fill={textInside ? "#fff" : "currentColor"}
-                                    className={textInside ? "fill-white drop-shadow-md" : "fill-muted-foreground"}
-                                    fontSize="12"
-                                    fontWeight="600"
+                                    className={textInside ? "fill-white drop-shadow-md" : "fill-foreground/90"}
+                                    fontSize="16"
+                                    fontWeight="700"
                                     style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}
                                 >
                                     {item.stage}
@@ -221,10 +223,10 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
                                     textAnchor="middle"
                                     fill={textInside ? "#fff" : "currentColor"}
                                     className={textInside ? "fill-white/95 drop-shadow-sm" : "fill-foreground"}
-                                    fontSize="16"
-                                    fontWeight="700"
+                                    fontSize="24"
+                                    fontWeight="800"
                                 >
-                                    {formatCount(item.count)} <tspan fontSize="12" fontWeight="400" opacity="0.8">POs</tspan>
+                                    {formatCount(item.count)} <tspan fontSize="16" fontWeight="500" opacity="0.9">POs</tspan>
                                 </text>
 
                                 {/* Full Value */}
@@ -233,15 +235,16 @@ export const POFunnelChart: React.FC<POFunnelChartProps> = ({ data }) => {
                                     y={valueY}
                                     textAnchor="middle"
                                     fill={textInside ? "#fff" : "currentColor"}
-                                    className={textInside ? "fill-white/90" : "fill-muted-foreground"}
-                                    fontSize="12"
-                                    fontWeight="500"
+                                    className={textInside ? "fill-white/90" : "fill-foreground/80"}
+                                    fontSize="16"
+                                    fontWeight="600"
                                 >
                                     {formatCurrency(item.total_value)}
                                 </text>
                             </g>
                         );
                     })}
+
                 </svg>
             </div>
         </div>
