@@ -189,9 +189,45 @@ export const getPOTrend = async (interval: string = 'day') => {
     }
 };
 
-export const getPOAging = async () => {
+export interface POAgingItem {
+    po_number: string;
+    status: string;
+    quantity: number;
+    value: number;
+    days_in_status: number;
+    supplier_name: string;
+    po_released_at: string | null;
+    po_sent_at: string | null;
+    po_arrived_at: string | null;
+    po_received_at: string | null;
+}
+
+export interface POAgingItemsResponse {
+    items: POAgingItem[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+}
+
+interface POAgingParams {
+    page?: number;
+    pageSize?: number;
+    sortField?: string;
+    sortDirection?: 'asc' | 'desc';
+    status?: string;
+}
+
+export const getPOAging = async (params?: POAgingParams) => {
     try {
-        const response = await api.get('/po/analytics/aging');
+        const queryParams: any = {};
+        if (params?.page) queryParams.page = params.page;
+        if (params?.pageSize) queryParams.page_size = params.pageSize;
+        if (params?.sortField) queryParams.sort_field = params.sortField;
+        if (params?.sortDirection) queryParams.sort_direction = params.sortDirection;
+        if (params?.status) queryParams.status = params.status;
+
+        const response = await api.get('/po/analytics/aging', { params: queryParams });
         return response.data;
     } catch (error) {
         console.error('Error fetching PO aging:', error);
@@ -199,9 +235,39 @@ export const getPOAging = async () => {
     }
 };
 
-export const getSupplierPerformance = async () => {
+export interface SupplierPerformance {
+    supplier_id: number;
+    supplier_name: string;
+    avg_lead_time: number;
+    total_pos: number;
+    min_lead_time: number;
+    max_lead_time: number;
+}
+
+export interface SupplierPerformanceResponse {
+    items: SupplierPerformance[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+}
+
+interface SupplierPerformanceParams {
+    page?: number;
+    pageSize?: number;
+    sortField?: string;
+    sortDirection?: 'asc' | 'desc';
+}
+
+export const getSupplierPerformance = async (params?: SupplierPerformanceParams) => {
     try {
-        const response = await api.get('/po/analytics/performance');
+        const queryParams: any = {};
+        if (params?.page) queryParams.page = params.page;
+        if (params?.pageSize) queryParams.page_size = params.pageSize;
+        if (params?.sortField) queryParams.sort_field = params.sortField;
+        if (params?.sortDirection) queryParams.sort_direction = params.sortDirection;
+
+        const response = await api.get('/po/analytics/supplier-performance', { params: queryParams });
         return response.data;
     } catch (error) {
         console.error('Error fetching supplier performance:', error);

@@ -218,7 +218,17 @@ func (s *POService) GetPOSnapshotItems(ctx context.Context, statusCode int, page
 	return s.repo.GetPOSnapshotItems(ctx, statusCode, page, pageSize, sortField, sortDirection, filter)
 }
 
+// GetPOAgingItems returns paginated aging items
+func (s *POService) GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string) (*domain.POAgingResponse, error) {
+	return s.repo.GetPOAgingItems(ctx, page, pageSize, sortField, sortDirection, status)
+}
+
 // GetSupplierPOItems returns PO entries filtered by supplier
 func (s *POService) GetSupplierPOItems(ctx context.Context, supplierID int64, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPOItemsResponse, error) {
 	return s.repo.GetSupplierPOItems(ctx, supplierID, page, pageSize, sortField, sortDirection)
+}
+
+// GetSupplierPerformanceItems returns paginated supplier performance items
+func (s *POService) GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPerformanceResponse, error) {
+	return s.repo.GetSupplierPerformanceItems(ctx, page, pageSize, sortField, sortDirection)
 }

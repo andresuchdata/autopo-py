@@ -87,6 +87,37 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 };
 
+const CustomYAxisTick = (props: any) => {
+    const { x, y, payload } = props;
+    return (
+        <text
+            x={x}
+            y={y}
+            dx={-10}
+            dy={4}
+            textAnchor="end"
+            className="fill-foreground text-[12px]"
+        >
+            {payload.value}
+        </text>
+    );
+};
+
+const CustomXAxisTick = (props: any) => {
+    const { x, y, payload } = props;
+    return (
+        <text
+            x={x}
+            y={y}
+            dy={12}
+            textAnchor="middle"
+            className="fill-foreground text-[12px]"
+        >
+            {payload.value}
+        </text>
+    );
+};
+
 export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
     const { chartData, dateKeys } = transformData(data);
     const timeColors = generateTimeColors(dateKeys.length);
@@ -118,20 +149,20 @@ export const POTrendChart: React.FC<POTrendChartProps> = ({ data }) => {
                             tickLine={false}
                             axisLine={false}
                             dy={10}
-                            tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                            tick={<CustomXAxisTick />}
                         />
                         <YAxis
                             stroke="hsl(var(--muted-foreground))"
                             fontSize={12}
                             tickLine={false}
                             axisLine={false}
-                            tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                            tick={<CustomYAxisTick />}
                             dx={-10}
                             label={{
                                 value: 'PO Count',
                                 angle: -90,
                                 position: 'insideLeft',
-                                fill: 'hsl(var(--muted-foreground))',
+                                fill: 'hsl(var(--foreground))',
                                 fontSize: 12,
                                 offset: -5
                             }}
