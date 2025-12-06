@@ -54,6 +54,12 @@ func buildDashboardFilterClause(filter *domain.DashboardFilter, alias string, st
 func (r *poRepository) GetDashboardSummary(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error) {
 	summary := &domain.DashboardSummary{}
 
+	if filter != nil {
+		log.Debug().Interface("filter", filter).Msg("po dashboard: fetching summary with filter")
+	} else {
+		log.Debug().Msg("po dashboard: fetching summary without filter")
+	}
+
 	// 1. Status Summaries
 	statusSummaries, err := r.getStatusSummaries(ctx, filter)
 	if err != nil {
@@ -200,13 +206,23 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 		totalPages = 1
 	}
 
-	return &domain.SupplierPOItemsResponse{
+	resp := &domain.SupplierPOItemsResponse{
 		Items:      items,
 		Total:      total,
 		Page:       page,
 		PageSize:   pageSize,
 		TotalPages: totalPages,
-	}, nil
+	}
+
+	log.Debug().
+		Int64("supplier_id", supplierID).
+		Int("items", len(items)).
+		Int("total", total).
+		Int("page", page).
+		Int("page_size", pageSize).
+		Msg("po dashboard: supplier items fetched")
+
+	return resp, nil
 }
 
 type statusSummaryRow struct {
@@ -234,7 +250,7 @@ func (r *poRepository) getStatusSummaries(ctx context.Context, filter *domain.Da
 	// purchase_order_items has amount.
 	// Let's calculate total value from items.
 
-	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 1)
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
 		WITH latest_snapshot AS (
@@ -242,7 +258,7 @@ func (r *poRepository) getStatusSummaries(ctx context.Context, filter *domain.Da
 				po_number,
 				sku,
 				MAX(time) AS latest_time
-			FROM po_snapshots
+			FROM po_snapshots s
 			WHERE po_number <> '' %s
 			GROUP BY po_number, sku
 		),
@@ -284,10 +300,19 @@ func (r *poRepository) getStatusSummaries(ctx context.Context, filter *domain.Da
 	// Let's refine the query to be more accurate if possible, or stick to simple for MVP.
 	// The requirement says "Avg. Days in Status".
 
+	if filterClause != "" {
+		log.Debug().
+			Str("filter_clause", filterClause).
+			Interface("filter_args", filterArgs).
+			Msg("po dashboard: status summaries applying filter")
+	}
+
 	var rows []statusSummaryRow
 	if err := sqlx.SelectContext(ctx, r.db, &rows, query, filterArgs...); err != nil {
 		return nil, err
 	}
+
+	log.Debug().Int("status_rows", len(rows)).Msg("po dashboard: status summaries fetched")
 
 	results := make([]domain.POStatusSummary, len(rows))
 	for i, row := range rows {
@@ -341,10 +366,19 @@ func (r *poRepository) getPOTrendWithFilter(ctx context.Context, interval string
 		ORDER BY bucket, status_code
 	`, filterClause)
 
+	if filterClause != "" {
+		log.Debug().
+			Str("filter_clause", filterClause).
+			Interface("filter_args", filterArgs).
+			Msg("po dashboard: trends applying filter")
+	}
+
 	var rows []trendRow
 	if err := sqlx.SelectContext(ctx, r.db, &rows, query, filterArgs...); err != nil {
 		return nil, err
 	}
+
+	log.Debug().Int("trend_rows", len(rows)).Msg("po dashboard: trends fetched")
 
 	results := make([]domain.POTrend, len(rows))
 	for i, row := range rows {
@@ -374,7 +408,7 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	// List POs that are not completed (e.g., not Received/Cancelled?)
 	// Assuming status < 6 are active.
 
-	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 1)
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
 	        WITH latest_snapshot AS (
@@ -400,7 +434,7 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	            FROM (
 	                SELECT *,
 	                    ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
-	                FROM po_snapshots
+	                FROM po_snapshots s
 	                WHERE po_number <> '' %s
 	            ) s
 	            WHERE rn = 1
@@ -457,10 +491,19 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	        ORDER BY status_code
 	    `, filterClause)
 
+	if filterClause != "" {
+		log.Debug().
+			Str("filter_clause", filterClause).
+			Interface("filter_args", filterArgs).
+			Msg("po dashboard: aging applying filter")
+	}
+
 	var rows []poAgingRow
 	if err := sqlx.SelectContext(ctx, r.db, &rows, query, filterArgs...); err != nil {
 		return nil, err
 	}
+
+	log.Debug().Int("aging_rows", len(rows)).Msg("po dashboard: aging fetched")
 
 	results := make([]domain.POAging, len(rows))
 	for i, row := range rows {
@@ -525,8 +568,18 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
 	        LIMIT 5
 	    `, filterClause)
 
+	if filterClause != "" {
+		log.Debug().
+			Str("filter_clause", filterClause).
+			Interface("filter_args", filterArgs).
+			Msg("po dashboard: supplier performance applying filter")
+	}
+
 	var results []domain.SupplierPerformance
 	err := sqlx.SelectContext(ctx, r.db, &results, query, filterArgs...)
+	if err == nil {
+		log.Debug().Int("supplier_perf_rows", len(results)).Msg("po dashboard: supplier performance fetched")
+	}
 	return results, err
 }
 
@@ -562,8 +615,16 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 
 	offset := (page - 1) * pageSize
 
-	// Build filter clause for CTE (no table alias needed in CTE)
-	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 2)
+	// Build filter clause with table alias for CTE
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 2)
+
+	if filterClause != "" {
+		log.Debug().
+			Str("filter_clause", filterClause).
+			Interface("filter_args", filterArgs).
+			Int("status_code", statusCode).
+			Msg("po dashboard: snapshot items applying filter")
+	}
 
 	// Query to get latest snapshots for the given status
 	query := fmt.Sprintf(`
@@ -572,7 +633,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				po_number,
 				sku,
 				MAX(time) AS latest_time
-			FROM po_snapshots
+			FROM po_snapshots s
 			WHERE status = $1%s
 			GROUP BY po_number, sku
 		)
@@ -605,7 +666,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				po_number,
 				sku,
 				MAX(time) AS latest_time
-			FROM po_snapshots
+			FROM po_snapshots s
 			WHERE status = $1%s
 			GROUP BY po_number, sku
 		)
@@ -637,7 +698,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				po_number,
 				sku,
 				MAX(time) AS latest_time
-			FROM po_snapshots
+			FROM po_snapshots s
 			WHERE status = $1%s
 			GROUP BY po_number, sku
 		)
@@ -668,7 +729,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 		totalPages = 1
 	}
 
-	return &domain.POSnapshotItemsResponse{
+	resp := &domain.POSnapshotItemsResponse{
 		Items:      items,
 		Total:      total,
 		Page:       page,
@@ -677,5 +738,15 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 		TotalPOs:   totals.TotalPOs,
 		TotalQty:   totals.TotalQty,
 		TotalValue: totals.TotalValue,
-	}, nil
+	}
+
+	log.Debug().
+		Int("status_code", statusCode).
+		Int("items", len(items)).
+		Int("total", total).
+		Int("page", page).
+		Int("page_size", pageSize).
+		Msg("po dashboard: snapshot items fetched")
+
+	return resp, nil
 }
