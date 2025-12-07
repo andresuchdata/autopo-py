@@ -214,8 +214,16 @@ func (s *POService) GetDashboardSummary(ctx context.Context, filter *domain.Dash
 		return nil, err
 	}
 
+	log.Debug().
+		Interface("filter", filter).
+		Msg("po service: attempting to cache dashboard summary")
+
 	if err := s.dashboardCache.SetSummary(ctx, filter, summary); err != nil {
 		log.Warn().Err(err).Msg("po service: dashboard cache set failed")
+	} else {
+		log.Debug().
+			Interface("filter", filter).
+			Msg("po service: dashboard summary cached")
 	}
 
 	return summary, nil

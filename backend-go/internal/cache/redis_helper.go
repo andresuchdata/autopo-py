@@ -8,6 +8,7 @@ import (
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 )
 
 const defaultCacheTTL = time.Minute
@@ -15,6 +16,7 @@ const defaultCacheTTL = time.Minute
 func newRedisClient(cfg config.CacheConfig) (*redis.Client, time.Duration, error) {
 	opts, err := buildRedisOptions(cfg)
 	if err != nil {
+		log.Error().Err(err).Msg("cache: failed to build redis options")
 		return nil, 0, err
 	}
 
@@ -23,6 +25,7 @@ func newRedisClient(cfg config.CacheConfig) (*redis.Client, time.Duration, error
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
+		log.Error().Err(err).Msg("cache: redis ping failed")
 		return nil, 0, fmt.Errorf("redis ping failed: %w", err)
 	}
 
@@ -30,6 +33,12 @@ func newRedisClient(cfg config.CacheConfig) (*redis.Client, time.Duration, error
 	if ttl <= 0 {
 		ttl = defaultCacheTTL
 	}
+
+	log.Info().
+		Str("addr", client.Options().Addr).
+		Int("db", client.Options().DB).
+		Dur("ttl", ttl).
+		Msg("cache: redis client initialized")
 
 	return client, ttl, nil
 }

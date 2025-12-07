@@ -61,7 +61,7 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [total, setTotal] = useState(initialItems?.length ?? 0);
-    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [interactive, setInteractive] = useState(false);
 
     useEffect(() => {
