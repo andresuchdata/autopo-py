@@ -147,8 +147,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
 
     const handlePageChange = (nextPage: number) => {
         const clamped = Math.max(1, Math.min(totalPages, nextPage));
-        // State updates will trigger useEffect to reload
-        setPage(clamped);
+        loadItems(clamped, pageSize, sortField, sortDirection);
     };
 
     const handlePageSizeChange = (size: number) => {
