@@ -4,20 +4,41 @@ import (
 	"context"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
+	"github.com/rs/zerolog/log"
 )
 
 type StockHealthService struct {
-	repo repository.StockHealthRepository
+	repo  repository.StockHealthRepository
+	cache cache.StockHealthCache
 }
 
-func NewStockHealthService(repo repository.StockHealthRepository) *StockHealthService {
-	return &StockHealthService{repo: repo}
+func NewStockHealthService(repo repository.StockHealthRepository, cacheImpl cache.StockHealthCache) *StockHealthService {
+	if cacheImpl == nil {
+		cacheImpl = cache.NewNoopStockHealthCache()
+	}
+	return &StockHealthService{repo: repo, cache: cacheImpl}
 }
 
 func (s *StockHealthService) GetSummary(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealthSummary, error) {
-	return s.repo.GetStockHealthSummary(ctx, filter)
+	if summaries, ok, err := s.cache.GetSummary(ctx, filter); err == nil && ok {
+		return summaries, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("stock health: cache get summary failed")
+	}
+
+	summaries, err := s.repo.GetStockHealthSummary(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.cache.SetSummary(ctx, filter, summaries); err != nil {
+		log.Warn().Err(err).Msg("stock health: cache set summary failed")
+	}
+
+	return summaries, nil
 }
 
 func (s *StockHealthService) GetItems(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealth, int, error) {
@@ -40,7 +61,7 @@ func (s *StockHealthService) GetStoreBreakdown(ctx context.Context, filter domai
 }
 
 func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter domain.StockHealthFilter) (*domain.StockHealthDashboard, error) {
-	summary, err := s.repo.GetStockHealthSummary(ctx, filter)
+	summary, err := s.GetSummary(ctx, filter)
 	if err != nil {
 		return nil, err
 	}

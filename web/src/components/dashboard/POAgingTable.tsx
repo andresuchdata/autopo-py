@@ -11,7 +11,9 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-interface POAgingTableProps { }
+interface POAgingTableProps {
+    initialItems?: POAgingItem[];
+}
 
 const formatCurrency = (value: number) => {
     if (value >= 1000000000) {
@@ -30,8 +32,8 @@ const formatDate = (value: string | null) => {
     return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
-export const POAgingTable: React.FC<POAgingTableProps> = () => {
-    const [items, setItems] = useState<POAgingItem[]>([]);
+export const POAgingTable: React.FC<POAgingTableProps> = ({ initialItems }) => {
+    const [items, setItems] = useState<POAgingItem[]>(initialItems ?? []);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
@@ -40,6 +42,16 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [isDownloading, setIsDownloading] = useState(false);
+    const [interactive, setInteractive] = useState(false);
+
+    // Keep initial items in sync while still allowing fetched overrides
+    useEffect(() => {
+        if (interactive) {
+            return;
+        }
+        setItems(initialItems ?? []);
+        setTotal(initialItems?.length ?? 0);
+    }, [initialItems, interactive]);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -71,10 +83,20 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
     }, [page, pageSize, sortField, sortDirection, statusFilter]);
 
     useEffect(() => {
+        if (!interactive) {
+            return;
+        }
         loadData();
-    }, [loadData]);
+    }, [interactive, loadData]);
+
+    const enableInteractive = useCallback(() => {
+        if (!interactive) {
+            setInteractive(true);
+        }
+    }, [interactive]);
 
     const handleSort = (field: string) => {
+        enableInteractive();
         if (sortField === field) {
             setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
         } else {
@@ -85,6 +107,7 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
 
     const handleExport = async () => {
         if (isDownloading) return;
+        enableInteractive();
         setIsDownloading(true);
         try {
             const res = await getPOAging({
@@ -235,7 +258,10 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        onClick={() => {
+                            enableInteractive();
+                            setPage(p => Math.max(1, p - 1));
+                        }}
                         disabled={page === 1 || loading}
                     >
                         <ChevronLeft className="h-4 w-4" />
@@ -243,7 +269,10 @@ export const POAgingTable: React.FC<POAgingTableProps> = () => {
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        onClick={() => {
+                            enableInteractive();
+                            setPage(p => Math.min(totalPages, p + 1));
+                        }}
                         disabled={page === totalPages || loading}
                     >
                         <ChevronRight className="h-4 w-4" />
