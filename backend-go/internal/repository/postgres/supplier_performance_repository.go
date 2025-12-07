@@ -10,6 +10,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const defaultSupplierPerformanceLimit = 10
+
 func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPerformanceResponse, error) {
 	if page < 1 {
 		page = 1
@@ -104,7 +106,7 @@ func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pa
 }
 
 func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
-	return r.getSupplierPerformanceWithFilter(ctx, nil)
+	return r.getSupplierPerformanceWithFilter(ctx, nil, defaultSupplierPerformanceLimit)
 }
 
 // GetSupplierPOItems fetches PO items filtered by supplier with pagination and sorting
@@ -243,7 +245,11 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 	return resp, nil
 }
 
-func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, filter *domain.DashboardFilter) ([]domain.SupplierPerformance, error) {
+func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, filter *domain.DashboardFilter, limit int) ([]domain.SupplierPerformance, error) {
+	if limit <= 0 {
+		limit = defaultSupplierPerformanceLimit
+	}
+
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
@@ -271,7 +277,10 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
             supplier_aggregated AS (
                 SELECT
                     supplier_id,
-                    AVG(EXTRACT(EPOCH FROM (po_arrived_at - po_sent_at))/86400) as avg_lead_time
+                    COUNT(*) as total_pos,
+                    AVG(EXTRACT(EPOCH FROM (po_arrived_at - po_sent_at))/86400) as avg_lead_time,
+                    MIN(EXTRACT(EPOCH FROM (po_arrived_at - po_sent_at))/86400) as min_lead_time,
+                    MAX(EXTRACT(EPOCH FROM (po_arrived_at - po_sent_at))/86400) as max_lead_time
                 FROM po_level
                 WHERE supplier_id IS NOT NULL AND po_sent_at IS NOT NULL AND po_arrived_at IS NOT NULL
                 GROUP BY supplier_id
@@ -279,12 +288,15 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
             SELECT 
                 s.id as supplier_id,
                 s.name as supplier_name,
-                sa.avg_lead_time
+                sa.avg_lead_time,
+                sa.total_pos,
+                sa.min_lead_time,
+                sa.max_lead_time
             FROM supplier_aggregated sa
             JOIN suppliers s ON sa.supplier_id = s.id
-            ORDER BY sa.avg_lead_time ASC
-            LIMIT 5
-        `, filterClause)
+            ORDER BY sa.avg_lead_time ASC, s.name ASC
+            LIMIT %d
+        `, filterClause, limit)
 
 	if filterClause != "" {
 		log.Debug().

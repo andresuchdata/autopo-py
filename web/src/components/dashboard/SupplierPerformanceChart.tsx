@@ -14,7 +14,9 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 
-interface SupplierPerformanceChartProps { }
+interface SupplierPerformanceChartProps {
+    initialItems?: SupplierPerformance[];
+}
 
 const BAR_COLORS = ['#9a3412', '#c2410c', '#ea580c', '#f97316', '#fb923c'];
 
@@ -48,18 +50,27 @@ const CustomYAxisTick = (props: any) => {
     );
 };
 
-export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> = () => {
+export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> = ({ initialItems }) => {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedSupplier, setSelectedSupplier] = useState<{ id: number; name: string; avgLeadTime: number } | null>(null);
     const [isDownloading, setIsDownloading] = useState(false);
 
     // State for data and pagination
-    const [items, setItems] = useState<SupplierPerformance[]>([]);
+    const [items, setItems] = useState<SupplierPerformance[]>(initialItems ?? []);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
-    const [total, setTotal] = useState(0);
+    const [total, setTotal] = useState(initialItems?.length ?? 0);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+    const [interactive, setInteractive] = useState(false);
+
+    useEffect(() => {
+        if (interactive) {
+            return;
+        }
+        setItems(initialItems ?? []);
+        setTotal(initialItems?.length ?? 0);
+    }, [initialItems, interactive]);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -89,11 +100,21 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
     }, [page, pageSize, sortDirection]);
 
     useEffect(() => {
+        if (!interactive) {
+            return;
+        }
         loadData();
-    }, [loadData]);
+    }, [interactive, loadData]);
+
+    const enableInteractive = useCallback(() => {
+        if (!interactive) {
+            setInteractive(true);
+        }
+    }, [interactive]);
 
     const handleExport = async () => {
         if (isDownloading) return;
+        enableInteractive();
         setIsDownloading(true);
         try {
             const res = await getSupplierPerformance({
@@ -166,7 +187,10 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                        onClick={() => {
+                            enableInteractive();
+                            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                        }}
                         title={sortDirection === 'asc' ? "Sort by Slowest" : "Sort by Fastest"}
                     >
                         {sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
@@ -256,7 +280,10 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
                         variant="outline"
                         size="sm"
                         className="h-7 px-2"
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        onClick={() => {
+                            enableInteractive();
+                            setPage(p => Math.max(1, p - 1));
+                        }}
                         disabled={page === 1 || loading}
                     >
                         <ArrowLeft className="h-3 w-3 mr-1" /> Prev
@@ -265,12 +292,19 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
                         variant="outline"
                         size="sm"
                         className="h-7 px-2"
-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        onClick={() => {
+                            enableInteractive();
+                            setPage(p => Math.min(totalPages, p + 1));
+                        }}
                         disabled={page === totalPages || loading}
                     >
                         Next <ArrowRight className="h-3 w-3 ml-1" />
                     </Button>
-                    <Select value={pageSize.toString()} onValueChange={(v) => { setPage(1); setPageSize(Number(v)); }}>
+                    <Select value={pageSize.toString()} onValueChange={(v) => {
+                        enableInteractive();
+                        setPage(1);
+                        setPageSize(Number(v));
+                    }}>
                         <SelectTrigger className="h-7 w-[70px] text-xs">
                             <SelectValue />
                         </SelectTrigger>

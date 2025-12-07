@@ -59,16 +59,22 @@ func main() {
 	poRepo := postgres.NewPORepository(dbConn)
 	stockHealthRepo := repository.NewStockHealthRepository(dbConn.DB)
 
-	// Initialize cache
+	// Initialize caches
 	dashboardCache, err := cache.NewDashboardCache(cfg.Cache)
 	if err != nil {
 		logger.Log.Warn().Err(err).Msg("Falling back to noop dashboard cache")
 		dashboardCache = cache.NewNoopDashboardCache()
 	}
 
+	stockHealthCache, err := cache.NewStockHealthCache(cfg.Cache)
+	if err != nil {
+		logger.Log.Warn().Err(err).Msg("Falling back to noop stock health cache")
+		stockHealthCache = cache.NewNoopStockHealthCache()
+	}
+
 	// Initialize services
 	poService := service.NewPOService(poRepo, dashboardCache)
-	stockHealthService := service.NewStockHealthService(stockHealthRepo)
+	stockHealthService := service.NewStockHealthService(stockHealthRepo, stockHealthCache)
 
 	// Initialize HTTP server
 	router := api.NewRouter(&api.Services{
