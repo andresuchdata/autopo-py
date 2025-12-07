@@ -25,6 +25,20 @@ services:
     networks:
       - autopo-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: autopo-redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - autopo-network
+
   app:
     build:
       context: .
@@ -33,6 +47,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       - DB_HOST=db
       - DB_PORT=5432
@@ -43,6 +59,12 @@ services:
       - APP_UPLOAD_DIR=/app/data/uploads
       - APP_DATA_DIR=/app/data/output
       - SEED_DATA_DIR=/app/data/seeds
+      - CACHE_ENABLED=${CACHE_ENABLED:-true}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=${REDIS_DB:-0}
+      - CACHE_DASHBOARD_TTL_SECONDS=${CACHE_DASHBOARD_TTL_SECONDS:-60}
     entrypoint: ["/app/entrypoint.sh"]
     command: ["/app/server"]
     ports:

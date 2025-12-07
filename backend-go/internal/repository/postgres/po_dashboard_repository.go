@@ -53,7 +53,7 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context, filter *domain.D
 	summary.Trends = trends
 
 	// 4. Aging
-	aging, err := r.getPOAgingWithFilter(ctx, filter)
+	aging, err := r.getPOAgingWithFilter(ctx, filter, defaultAgingSummaryLimit)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch aging data")
 		return nil, fmt.Errorf("failed to get aging: %w", err)
@@ -61,7 +61,7 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context, filter *domain.D
 	summary.Aging = aging
 
 	// 5. Supplier Performance
-	perf, err := r.getSupplierPerformanceWithFilter(ctx, filter)
+	perf, err := r.getSupplierPerformanceWithFilter(ctx, filter, defaultSupplierPerformanceLimit)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch supplier performance")
 		return nil, fmt.Errorf("failed to get supplier performance: %w", err)

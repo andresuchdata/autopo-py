@@ -10,17 +10,25 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/rs/zerolog/log"
 )
 
 type POService struct {
-	repo repository.PORepository
+	repo           repository.PORepository
+	dashboardCache cache.DashboardCache
 }
 
-func NewPOService(repo repository.PORepository) *POService {
-	return &POService{repo: repo}
+func NewPOService(repo repository.PORepository, dashboardCache cache.DashboardCache) *POService {
+	if dashboardCache == nil {
+		dashboardCache = cache.NewNoopDashboardCache()
+	}
+	return &POService{
+		repo:           repo,
+		dashboardCache: dashboardCache,
+	}
 }
 
 // ProcessPOFiles processes multiple PO files concurrently
@@ -195,22 +203,82 @@ func (s *POService) GetSkus(ctx context.Context, search string, limit, offset in
 
 // GetDashboardSummary returns the aggregated dashboard data
 func (s *POService) GetDashboardSummary(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error) {
-	return s.repo.GetDashboardSummary(ctx, filter)
+	if summary, ok, err := s.dashboardCache.GetSummary(ctx, filter); err == nil && ok {
+		return summary, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard cache get failed")
+	}
+
+	summary, err := s.repo.GetDashboardSummary(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.dashboardCache.SetSummary(ctx, filter, summary); err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard cache set failed")
+	}
+
+	return summary, nil
 }
 
 // GetPOTrend returns the trend data
 func (s *POService) GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error) {
-	return s.repo.GetPOTrend(ctx, interval)
+	if trends, ok, err := s.dashboardCache.GetTrend(ctx, interval, nil); err == nil && ok {
+		return trends, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard trend cache get failed")
+	}
+
+	trends, err := s.repo.GetPOTrend(ctx, interval)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.dashboardCache.SetTrend(ctx, interval, nil, trends); err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard trend cache set failed")
+	}
+
+	return trends, nil
 }
 
 // GetPOAging returns the aging data
 func (s *POService) GetPOAging(ctx context.Context) ([]domain.POAging, error) {
-	return s.repo.GetPOAging(ctx)
+	if aging, ok, err := s.dashboardCache.GetAging(ctx, nil); err == nil && ok {
+		return aging, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard aging cache get failed")
+	}
+
+	aging, err := s.repo.GetPOAging(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.dashboardCache.SetAging(ctx, nil, aging); err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard aging cache set failed")
+	}
+
+	return aging, nil
 }
 
 // GetSupplierPerformance returns the supplier performance data
 func (s *POService) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
-	return s.repo.GetSupplierPerformance(ctx)
+	if perf, ok, err := s.dashboardCache.GetSupplierPerformance(ctx, nil); err == nil && ok {
+		return perf, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard supplier perf cache get failed")
+	}
+
+	perf, err := s.repo.GetSupplierPerformance(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.dashboardCache.SetSupplierPerformance(ctx, nil, perf); err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard supplier perf cache set failed")
+	}
+
+	return perf, nil
 }
 
 // GetPOSnapshotItems returns PO snapshot items filtered by status with pagination and sorting
