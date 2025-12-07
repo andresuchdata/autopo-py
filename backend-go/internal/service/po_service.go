@@ -10,17 +10,25 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/rs/zerolog/log"
 )
 
 type POService struct {
-	repo repository.PORepository
+	repo           repository.PORepository
+	dashboardCache cache.DashboardSummaryCache
 }
 
-func NewPOService(repo repository.PORepository) *POService {
-	return &POService{repo: repo}
+func NewPOService(repo repository.PORepository, dashboardCache cache.DashboardSummaryCache) *POService {
+	if dashboardCache == nil {
+		dashboardCache = cache.NewNoopDashboardCache()
+	}
+	return &POService{
+		repo:           repo,
+		dashboardCache: dashboardCache,
+	}
 }
 
 // ProcessPOFiles processes multiple PO files concurrently
@@ -195,7 +203,22 @@ func (s *POService) GetSkus(ctx context.Context, search string, limit, offset in
 
 // GetDashboardSummary returns the aggregated dashboard data
 func (s *POService) GetDashboardSummary(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error) {
-	return s.repo.GetDashboardSummary(ctx, filter)
+	if summary, ok, err := s.dashboardCache.GetSummary(ctx, filter); err == nil && ok {
+		return summary, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard cache get failed")
+	}
+
+	summary, err := s.repo.GetDashboardSummary(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.dashboardCache.SetSummary(ctx, filter, summary); err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard cache set failed")
+	}
+
+	return summary, nil
 }
 
 // GetPOTrend returns the trend data

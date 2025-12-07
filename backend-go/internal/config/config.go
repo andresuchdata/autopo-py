@@ -14,6 +14,7 @@ type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	App      AppConfig
+	Cache    CacheConfig
 }
 
 type ServerConfig struct {
@@ -38,6 +39,16 @@ type AppConfig struct {
 	DataDir   string
 }
 
+type CacheConfig struct {
+	Enabled             bool
+	RedisURL            string
+	RedisHost           string
+	RedisPort           string
+	RedisPassword       string
+	RedisDB             int
+	DashboardTTLSeconds int
+}
+
 var (
 	once     sync.Once
 	instance *Config
@@ -60,6 +71,13 @@ func Load() *Config {
 		viper.SetDefault("SERVER_ALLOWED_ORIGINS", []string{"*"})
 		viper.SetDefault("APP_UPLOAD_DIR", "./data/uploads")
 		viper.SetDefault("APP_DATA_DIR", "./data/output")
+		viper.SetDefault("CACHE_ENABLED", false)
+		viper.SetDefault("REDIS_URL", "")
+		viper.SetDefault("REDIS_HOST", "127.0.0.1")
+		viper.SetDefault("REDIS_PORT", "6379")
+		viper.SetDefault("REDIS_PASSWORD", "")
+		viper.SetDefault("REDIS_DB", 0)
+		viper.SetDefault("CACHE_DASHBOARD_TTL_SECONDS", 60)
 
 		// Read from environment variables
 		viper.AutomaticEnv()
@@ -87,6 +105,15 @@ func Load() *Config {
 			App: AppConfig{
 				UploadDir: viper.GetString("APP_UPLOAD_DIR"),
 				DataDir:   viper.GetString("APP_DATA_DIR"),
+			},
+			Cache: CacheConfig{
+				Enabled:             viper.GetBool("CACHE_ENABLED"),
+				RedisURL:            viper.GetString("REDIS_URL"),
+				RedisHost:           viper.GetString("REDIS_HOST"),
+				RedisPort:           viper.GetString("REDIS_PORT"),
+				RedisPassword:       viper.GetString("REDIS_PASSWORD"),
+				RedisDB:             viper.GetInt("REDIS_DB"),
+				DashboardTTLSeconds: viper.GetInt("CACHE_DASHBOARD_TTL_SECONDS"),
 			},
 		}
 	})

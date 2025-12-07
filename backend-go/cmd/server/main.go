@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/api"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository/postgres"
@@ -58,8 +59,15 @@ func main() {
 	poRepo := postgres.NewPORepository(dbConn)
 	stockHealthRepo := repository.NewStockHealthRepository(dbConn.DB)
 
+	// Initialize cache
+	dashboardCache, err := cache.NewDashboardCache(cfg.Cache)
+	if err != nil {
+		logger.Log.Warn().Err(err).Msg("Falling back to noop dashboard cache")
+		dashboardCache = cache.NewNoopDashboardCache()
+	}
+
 	// Initialize services
-	poService := service.NewPOService(poRepo)
+	poService := service.NewPOService(poRepo, dashboardCache)
 	stockHealthService := service.NewStockHealthService(stockHealthRepo)
 
 	// Initialize HTTP server
