@@ -289,6 +289,7 @@ export interface POSnapshotItem {
     po_sent_at: string | null;
     po_approved_at: string | null;
     po_arrived_at: string | null;
+    po_received_at: string | null;
 }
 
 export interface POSnapshotItemsResponse {

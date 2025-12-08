@@ -62,13 +62,13 @@ func normalizeAlias(alias string) string {
 func buildDerivedStatusCase(alias string) string {
 	normalized := normalizeAlias(alias)
 	return fmt.Sprintf(`CASE
-        WHEN %[1]sstatus = 2 THEN 2
-        WHEN %[1]spo_received_at IS NOT NULL THEN 3
-        WHEN %[1]spo_arrived_at IS NOT NULL THEN 5
-        WHEN %[1]spo_approved_at IS NOT NULL THEN 1
-        WHEN %[1]spo_sent_at IS NOT NULL THEN 4
-        ELSE 0
-    END`, normalized)
+	        WHEN %[1]spo_received_at IS NOT NULL THEN 3
+	        WHEN %[1]spo_arrived_at IS NOT NULL THEN 5
+	        WHEN %[1]spo_approved_at IS NOT NULL THEN 1
+	        WHEN %[1]spo_sent_at IS NOT NULL THEN 4
+	        WHEN %[1]spo_released_at IS NOT NULL THEN 0
+	        ELSE -1
+	    END`, normalized)
 }
 
 func buildDerivedStatusTimestampCase(alias, fallbackColumn string) string {
