@@ -28,12 +28,15 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
 const formatDate = (value: string | null) => {
     if (!value) return '—';
-    const date = new Date(value);
+    const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
+    const date = new Date(normalized);
     if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleDateString('id-ID', {
+    return date.toLocaleString('id-ID', {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
     });
 };
 
@@ -43,7 +46,8 @@ const calculateLeadTime = (arrivedAt: string | null, sentAt: string | null) => {
     const end = new Date(arrivedAt);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '—';
     const diffTime = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = (diffTime / (1000 * 60 * 60 * 24)).toFixed(2);
+
     return `${diffDays} days`;
 };
 

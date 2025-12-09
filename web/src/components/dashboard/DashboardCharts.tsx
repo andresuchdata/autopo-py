@@ -20,7 +20,7 @@ const EXCLUDED_CONDITIONS: ConditionKey[] = ['no_sales', 'negative_stock'];
 const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
 const INCLUDED_CONDITION_KEYS = CONDITION_KEYS.filter((key) => !EXCLUDED_CONDITIONS.includes(key));
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label, valueFormatter }: any) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-popover/95 backdrop-blur-sm border border-border/50 rounded-lg p-3 shadow-xl text-sm">
@@ -30,7 +30,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                         <div key={index} className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: entry.color || entry.fill }} />
                             <span className="text-muted-foreground">{entry.name}:</span>
-                            <span className="font-medium text-foreground">{entry.value && (typeof entry.value === 'number' && entry.value >= 1000000 ? (entry.value / 1000000).toFixed(1) + 'M' : entry.value.toLocaleString())}</span>
+                            <span className="font-medium text-foreground">
+                                {typeof entry.value === 'number'
+                                    ? valueFormatter
+                                        ? valueFormatter(entry.value)
+                                        : (entry.value >= 1000000
+                                            ? (entry.value / 1000000).toFixed(1) + 'M'
+                                            : entry.value.toLocaleString())
+                                    : entry.value}
+                            </span>
                         </div>
                     ))}
                 </div>
@@ -74,7 +82,7 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
         (item) => !EXCLUDED_CONDITIONS.includes(item.condition as ConditionKey)
     );
 
-    // Helper to format currency
+    // Helper to format currency for Rupiah values
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('id-ID', {
             style: 'currency',
@@ -138,7 +146,9 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                 <CardContent className="flex-1 min-h-[250px] relative">
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-center">
-                            <span className="text-2xl font-bold block">{valueFormatter ? (total > 1000000000 ? (total / 1000000000).toFixed(1) + 'M' : (total / 1000).toFixed(0) + 'K') : total.toLocaleString()}</span>
+                            <span className="text-2xl font-bold block">
+                                {valueFormatter ? valueFormatter(total) : total.toLocaleString()}
+                            </span>
                             <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Total</span>
                         </div>
                     </div>
@@ -164,7 +174,9 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                                     />
                                 ))}
                             </Pie>
-                            <Tooltip content={<CustomTooltip />} />
+                            <Tooltip content={(tooltipProps) => (
+                                <CustomTooltip {...tooltipProps} valueFormatter={valueFormatter} />
+                            )} />
                             <Legend
                                 verticalAlign="bottom"
                                 height={36}
@@ -207,7 +219,7 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                 {brandData.length > 0 && (
                     <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm">
                         <CardHeader>
-                            <CardTitle className="text-lg font-semibold tracking-tight">Breakdown by Brand</CardTitle>
+                            <CardTitle className="text-lg font-semibold tracking-tight">Breakdown by Brand (Jumlah SKU)</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="h-[400px]">
@@ -215,11 +227,18 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                                     <BarChart
                                         data={brandData}
                                         layout="vertical"
-                                        margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                                        margin={{ top: 5, right: 30, left: 60, bottom: 30 }}
                                         barGap={2}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.1} />
-                                        <XAxis type="number" fontSize={11} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                                        <XAxis
+                                            type="number"
+                                            fontSize={11}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                                            label={{ value: 'Jumlah SKU', position: 'insideBottom', offset: 0, fill: 'white', fontSize: 11 }}
+                                        />
                                         <YAxis dataKey="brand" type="category" width={100} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
                                         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted)/0.2)', radius: 4 }} />
                                         <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
@@ -252,7 +271,7 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                 {storeData.length > 0 && (
                     <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm">
                         <CardHeader>
-                            <CardTitle className="text-lg font-semibold tracking-tight">Breakdown by Store</CardTitle>
+                            <CardTitle className="text-lg font-semibold tracking-tight">Breakdown by Store (Jumlah SKU)</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="h-[400px]">
@@ -260,11 +279,18 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                                     <BarChart
                                         data={storeData}
                                         layout="vertical"
-                                        margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                                        margin={{ top: 5, right: 30, left: 60, bottom: 30 }}
                                         barGap={2}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.1} />
-                                        <XAxis type="number" fontSize={11} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                                        <XAxis
+                                            type="number"
+                                            fontSize={11}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                                            label={{ value: 'Jumlah SKU', position: 'insideBottom', offset: 0, fill: 'white', fontSize: 11 }}
+                                        />
                                         <YAxis dataKey="store" type="category" width={100} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
                                         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted)/0.2)', radius: 4 }} />
                                         <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
