@@ -127,6 +127,9 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
         if [ "$RESET_MASTER_SEED" = "true" ]; then
           set -- "$@" --reset-master
         fi
+        if [ "$INCLUDE_MAPPINGS" = "true" ]; then
+          set -- "$@" --include-mappings
+        fi
         if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
           set -- "$@" --reset-analytics
         fi
