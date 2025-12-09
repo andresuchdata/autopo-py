@@ -4,6 +4,7 @@ import { COLORS, CONDITION_LABELS } from "./SummaryCards";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConditionKey } from "@/services/dashboardService";
 import { type ConditionBreakdownResponse } from "@/services/stockHealthService";
+import { formatCurrencyIDR, formatNumberID, formatPercentage } from "@/utils/formatters";
 
 interface DashboardChartsProps {
     charts: {
@@ -34,9 +35,7 @@ const CustomTooltip = ({ active, payload, label, valueFormatter }: any) => {
                                 {typeof entry.value === 'number'
                                     ? valueFormatter
                                         ? valueFormatter(entry.value)
-                                        : (entry.value >= 1000000
-                                            ? (entry.value / 1000000).toFixed(1) + 'M'
-                                            : entry.value.toLocaleString())
+                                        : formatNumberID(entry.value)
                                     : entry.value}
                             </span>
                         </div>
@@ -82,15 +81,7 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
         (item) => !EXCLUDED_CONDITIONS.includes(item.condition as ConditionKey)
     );
 
-    // Helper to format currency for Rupiah values
-    const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('id-ID', {
-            style: 'currency',
-            currency: 'IDR',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0,
-        }).format(value);
-    };
+    const formatCurrency = (value: number) => formatCurrencyIDR(value, { maximumFractionDigits: 0 });
 
     if (isLoading) {
         return (
@@ -143,53 +134,68 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                 <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold text-center uppercase tracking-wider text-muted-foreground">{title}</CardTitle>
                 </CardHeader>
-                <CardContent className="flex-1 min-h-[250px] relative">
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="text-center">
-                            <span className="text-2xl font-bold block">
-                                {valueFormatter ? valueFormatter(total) : total.toLocaleString()}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Total</span>
-                        </div>
+                <CardContent className="flex-1 min-h-[320px] flex flex-col items-center gap-4">
+                    <div className="w-full h-[220px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={data}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={70}
+                                    outerRadius={85}
+                                    paddingAngle={3}
+                                    dataKey="value"
+                                    nameKey="condition"
+                                    cornerRadius={4}
+                                    stroke="none"
+                                >
+                                    {data.map((entry, index) => (
+                                        <Cell
+                                            key={`cell-${index}`}
+                                            fill={COLORS[entry.condition as keyof typeof COLORS] || '#999999'}
+                                            className="hover:opacity-80 transition-opacity cursor-pointer"
+                                        />
+                                    ))}
+                                </Pie>
+                                <Tooltip content={(tooltipProps) => (
+                                    <CustomTooltip {...tooltipProps} valueFormatter={valueFormatter} />
+                                )} />
+                            </PieChart>
+                        </ResponsiveContainer>
                     </div>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie
-                                data={data}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={70}
-                                outerRadius={85}
-                                paddingAngle={3}
-                                dataKey="value"
-                                nameKey="condition"
-                                cornerRadius={4}
-                                stroke="none"
-                            >
-                                {data.map((entry, index) => (
-                                    <Cell
-                                        key={`cell-${index}`}
-                                        fill={COLORS[entry.condition as keyof typeof COLORS] || '#999999'}
-                                        className="hover:opacity-80 transition-opacity cursor-pointer"
-                                    />
-                                ))}
-                            </Pie>
-                            <Tooltip content={(tooltipProps) => (
-                                <CustomTooltip {...tooltipProps} valueFormatter={valueFormatter} />
-                            )} />
-                            <Legend
-                                verticalAlign="bottom"
-                                height={36}
-                                iconType="circle"
-                                iconSize={8}
-                                formatter={(value, entry: any) => {
-                                    const item = data.find(d => d.condition === entry.payload.condition);
-                                    const percent = item ? ((item.value / total) * 100).toFixed(1) : 0;
-                                    return <span className="text-xs text-muted-foreground ml-1 font-medium">{`${CONDITION_LABELS[value as keyof typeof CONDITION_LABELS]} (${percent}%)`}</span>;
-                                }}
-                            />
-                        </PieChart>
-                    </ResponsiveContainer>
+
+                    <div className="text-center space-y-1">
+                        <span className="text-2xl font-bold block">
+                            {valueFormatter ? valueFormatter(total) : formatNumberID(total)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Total</span>
+                    </div>
+
+                    <div className="w-full space-y-2">
+                        {data.map((item) => {
+                            const percent = total ? formatPercentage(item.value, { total }) : '0';
+                            const color = COLORS[item.condition as keyof typeof COLORS] || '#999999';
+                            const label = CONDITION_LABELS[item.condition as keyof typeof CONDITION_LABELS] ?? item.condition;
+                            return (
+                                <div
+                                    key={item.condition}
+                                    className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2 text-xs"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="h-2.5 w-2.5 rounded-full shadow-sm" style={{ backgroundColor: color }} />
+                                        <span className="font-medium text-muted-foreground">{label}</span>
+                                    </div>
+                                    <div className="text-right text-muted-foreground">
+                                        <span className="font-semibold text-foreground block">
+                                            {valueFormatter ? valueFormatter(item.value) : formatNumberID(item.value)}
+                                        </span>
+                                        <span>({percent}%)</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </CardContent>
             </Card>
         );
