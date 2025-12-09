@@ -129,6 +129,7 @@ type POSnapshotItem struct {
 	POSentAt     *string `json:"po_sent_at" db:"po_sent_at"`
 	POApprovedAt *string `json:"po_approved_at" db:"po_approved_at"`
 	POArrivedAt  *string `json:"po_arrived_at" db:"po_arrived_at"`
+	POReceivedAt *string `json:"po_received_at" db:"po_received_at"`
 }
 
 // POSnapshotItemsResponse represents the paginated response for PO snapshot items

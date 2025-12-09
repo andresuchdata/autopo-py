@@ -121,9 +121,15 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
                 maximumFractionDigits: 0,
             });
         }
-        if (val >= 1000) {
-            return (val / 1000).toFixed(1) + 'k';
-        }
+
+        // if (type === 'number') {
+        //     // For Qty (Pcs), always show full value with grouping, no compact 3.4k style
+        //     return val.toLocaleString();
+        // }
+
+        // if (val >= 1000) {
+        //     return (val / 1000).toFixed(1) + 'k';
+        // }
         return val.toLocaleString();
     };
 

@@ -185,6 +185,22 @@ export function useDashboard() {
   }, []);
 
   useEffect(() => {
+    handleSkuSearch('', filters.brandIds).catch((err) => {
+      console.error('Failed to refresh SKU options after brand change:', err);
+    });
+  }, [filters.brandIds, handleSkuSearch]);
+
+  const handleSkuSearchWithBrand = useCallback(
+    (search?: string) => handleSkuSearch(search ?? '', filters.brandIds),
+    [handleSkuSearch, filters.brandIds]
+  );
+
+  const handleSkuLoadMoreWithBrand = useCallback(
+    () => handleSkuLoadMore(filters.brandIds),
+    [handleSkuLoadMore, filters.brandIds]
+  );
+
+  useEffect(() => {
     if (!selectedDate || !filtersChangedRef.current) {
       return;
     }
@@ -229,9 +245,9 @@ export function useDashboard() {
     fetchItems,
     brandList: brandOptions,
     storeList: storeOptions,
-    onSkuSearch: handleSkuSearch,
+    onSkuSearch: handleSkuSearchWithBrand,
     skuSearchLoading,
-    onSkuLoadMore: handleSkuLoadMore,
+    onSkuLoadMore: handleSkuLoadMoreWithBrand,
     skuHasMoreOptions,
     skuLoadMoreLoading,
     resolveSkuOption,

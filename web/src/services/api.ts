@@ -83,7 +83,7 @@ export const poService = {
         }
     },
 
-    getSkus: async (params?: { search?: string; limit?: number; offset?: number }) => {
+    getSkus: async (params?: { search?: string; limit?: number; offset?: number; brandIds?: number[] }) => {
         const query: Record<string, string | number> = {};
         if (params?.search) {
             query.search = params.search;
@@ -93,6 +93,9 @@ export const poService = {
         }
         if (typeof params?.offset === 'number') {
             query.offset = params.offset;
+        }
+        if (Array.isArray(params?.brandIds) && params!.brandIds!.length > 0) {
+            query.brand_ids = params!.brandIds!.join(',');
         }
 
         try {
@@ -289,6 +292,7 @@ export interface POSnapshotItem {
     po_sent_at: string | null;
     po_approved_at: string | null;
     po_arrived_at: string | null;
+    po_received_at: string | null;
 }
 
 export interface POSnapshotItemsResponse {
