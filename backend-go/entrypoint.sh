@@ -52,6 +52,7 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
   RESET_DB=${RESET_DB:-false}
   RESET_MASTER_SEED=${RESET_MASTER_SEED:-false}
   RESET_ANALYTICS_SEED=${RESET_ANALYTICS_SEED:-false}
+  INCLUDE_MAPPINGS=${INCLUDE_MAPPINGS:-false}
 
   build_common_args() {
     set -- /app/bin/seed "$1" --db-url "$SEED_DB_URL" --migrations-dir "$MIGRATIONS_DIR"
@@ -73,6 +74,9 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
         set -- "$@" --data-dir "$MASTER_DATA_DIR"
         if [ "$RESET_MASTER_SEED" = "true" ]; then
           set -- "$@" --reset-master
+        fi
+        if [ "$INCLUDE_MAPPINGS" = "true" ]; then
+          set -- "$@" --include-mappings
         fi
         run_seed_command "$@"
       )
