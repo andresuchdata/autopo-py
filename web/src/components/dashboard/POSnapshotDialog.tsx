@@ -201,6 +201,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             }
 
             const headers = [
+                'Snapshot Time',
                 'PO Number',
                 'SKU',
                 'Product Name',
@@ -224,6 +225,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             };
 
             const rows = allItems.map(item => [
+                formatDate(item.snapshot_time),
                 item.po_number,
                 item.sku,
                 item.product_name,
@@ -372,6 +374,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                         <Table>
                             <TableHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur shadow-sm">
                                 <TableRow className="hover:bg-transparent border-b border-border/60">
+                                    <SortableHead field="snapshot_time" label="Snapshot Date" className="w-auto font-semibold text-foreground/80" />
                                     <SortableHead field="po_number" label="PO Number" className="w-[140px] font-semibold text-foreground/80" />
                                     <SortableHead field="sku" label="SKU" className="w-[120px] font-semibold text-foreground/80" />
                                     <SortableHead field="product_name" label="Product" className="min-w-[200px] font-semibold text-foreground/80" />
@@ -388,14 +391,14 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                             <TableBody>
                                 {!status && (
                                     <TableRow>
-                                        <TableCell colSpan={11} className="h-48 text-center text-muted-foreground">
+                                        <TableCell colSpan={12} className="h-48 text-center text-muted-foreground">
                                             Select a status card to view details.
                                         </TableCell>
                                     </TableRow>
                                 )}
                                 {status && loading && (
                                     <TableRow>
-                                        <TableCell colSpan={11} className="h-64 text-center">
+                                        <TableCell colSpan={12} className="h-64 text-center">
                                             <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground">
                                                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                                 <p>Loading purchase orders...</p>
@@ -405,14 +408,14 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 )}
                                 {status && !loading && error && (
                                     <TableRow>
-                                        <TableCell colSpan={11} className="h-48 text-center text-destructive">
+                                        <TableCell colSpan={12} className="h-48 text-center text-destructive">
                                             {error}
                                         </TableCell>
                                     </TableRow>
                                 )}
                                 {status && !loading && !error && items.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={11} className="h-48 text-center text-muted-foreground">
+                                        <TableCell colSpan={12} className="h-48 text-center text-muted-foreground">
                                             No purchase orders found for this status.
                                         </TableCell>
                                     </TableRow>
@@ -427,6 +430,9 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                                 hover:bg-muted/60
                                             `}
                                         >
+                                            <TableCell className="text-xs text-muted-foreground">
+                                                {formatDate(item.snapshot_time)}
+                                            </TableCell>
                                             <TableCell className="font-mono text-xs font-medium text-foreground/90">{item.po_number}</TableCell>
                                             <TableCell className="font-mono text-xs text-muted-foreground group-hover:text-foreground/90">{item.sku}</TableCell>
                                             <TableCell>
