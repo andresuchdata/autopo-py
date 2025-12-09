@@ -23,7 +23,6 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { type DashboardFiltersState } from "@/hooks/useDashboard";
 import { type SkuOption } from "@/hooks/useSkuOptions";
 import { type LabeledOption } from "@/hooks/useStockData";
@@ -45,96 +44,128 @@ interface DashboardFiltersProps {
     resolveSkuOption: (code: string) => SkuOption | undefined;
 }
 
-interface SkuMultiSelectProps {
-    options: SkuOption[];
-    selectedCodes: string[];
-    onChange: (codes: string[]) => void;
-    onSearch: (search?: string) => void;
-    onLoadMore: () => void;
-    hasMore: boolean;
-    isLoadingMore?: boolean;
-    resolveOption?: (code: string) => SkuOption | undefined;
-    placeholder: string;
-    searchPlaceholder: string;
-    isLoading?: boolean;
-}
+// Generic filter option types
+type FilterOption<T extends string | number = string | number> = {
+    id: T;
+    label: string;
+    name?: string;
+};
 
-function SkuMultiSelect({
+type GenericFilterConfig<T extends string | number> = {
+    mode: 'single' | 'multi';
+    options: FilterOption<T>[];
+    selected: T | T[] | null;
+    onChange: (value: T | T[] | null) => void;
+    placeholder: string;
+    searchPlaceholder?: string;
+    emptyMessage?: string;
+    // Advanced features
+    searchable?: boolean;
+    onSearch?: (query: string) => void;
+    onLoadMore?: () => void;
+    hasMore?: boolean;
+    isLoading?: boolean;
+    isLoadingMore?: boolean;
+    resolveOption?: (id: T) => FilterOption<T> | undefined;
+    showPinnedSelected?: boolean;
+    pinnedHeading?: string;
+    width?: string;
+    minHeight?: string;
+};
+
+function GenericFilter<T extends string | number>({
+    mode,
     options = [],
-    selectedCodes = [],
+    selected,
     onChange,
+    placeholder,
+    searchPlaceholder = "Search...",
+    emptyMessage = "No items found.",
+    searchable = true,
     onSearch,
     onLoadMore,
-    hasMore,
-    isLoadingMore,
+    hasMore = false,
+    isLoading = false,
+    isLoadingMore = false,
     resolveOption,
-    placeholder,
-    searchPlaceholder,
-    isLoading,
-}: SkuMultiSelectProps) {
+    showPinnedSelected = false,
+    pinnedHeading = "Selected Items",
+    width = "w-[280px]",
+    minHeight,
+}: GenericFilterConfig<T>) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
     const listRef = useRef<HTMLDivElement | null>(null);
 
+    const selectedArray = useMemo(() => {
+        if (selected === null) return [];
+        return Array.isArray(selected) ? selected : [selected];
+    }, [selected]);
+
     const handleSearchChange = (value: string) => {
         setSearch(value);
-        onSearch(value);
+        onSearch?.(value);
     };
 
     const optionMap = useMemo(() => {
-        const map = new Map<string, SkuOption>();
+        const map = new Map<T, FilterOption<T>>();
         options.forEach((option) => {
-            map.set(option.code, option);
+            map.set(option.id, option);
         });
         return map;
     }, [options]);
 
     const selectedLabels = useMemo(
         () =>
-            selectedCodes.map((code) => {
-                const option = optionMap.get(code) ?? resolveOption?.(code);
-                return option?.label ?? code;
+            selectedArray.map((id) => {
+                const option = optionMap.get(id) ?? resolveOption?.(id);
+                return option?.label ?? String(id);
             }),
-        [optionMap, resolveOption, selectedCodes]
+        [optionMap, resolveOption, selectedArray]
     );
-    const pinnedOptions = useMemo(
-        () =>
-            selectedCodes.map((code) => {
-                const option = optionMap.get(code) ?? resolveOption?.(code);
-                const baseLabel = option?.label ?? code;
-                const explicitName = option?.name;
-                const derivedName = !explicitName && baseLabel.includes(" - ") ? baseLabel.split(" - ", 2)[1] : undefined;
-                const name = explicitName ?? derivedName;
-                return {
-                    code,
-                    label: baseLabel,
-                    name,
-                };
-            }),
-        [optionMap, resolveOption, selectedCodes]
-    );
-    const availableOptions = useMemo(() => {
-        const filtered = options.filter((option) => !selectedCodes.includes(option.code));
-        console.log('SKU availableOptions:', {
-            totalOptions: options.length,
-            selectedCodes: selectedCodes.length,
-            availableCount: filtered.length,
-            sample: filtered.slice(0, 5).map(o => o.code)
-        });
-        return filtered;
-    }, [options, selectedCodes]);
 
-    const toggleOption = (code: string) => {
-        if (selectedCodes.includes(code)) {
-            onChange(selectedCodes.filter((value) => value !== code));
+    const pinnedOptions = useMemo(() => {
+        if (!showPinnedSelected) return [];
+        return selectedArray.map((id) => {
+            const option = optionMap.get(id) ?? resolveOption?.(id);
+            const baseLabel = option?.label ?? String(id);
+            const explicitName = option?.name;
+            const derivedName = !explicitName && baseLabel.includes(" - ") ? baseLabel.split(" - ", 2)[1] : undefined;
+            const name = explicitName ?? derivedName;
+            return {
+                id,
+                label: baseLabel,
+                name,
+            };
+        });
+    }, [optionMap, resolveOption, selectedArray, showPinnedSelected]);
+
+    const availableOptions = useMemo(() => {
+        return options.filter((option) => !selectedArray.includes(option.id));
+    }, [options, selectedArray]);
+
+    const handleSelect = (id: T) => {
+        if (mode === 'single') {
+            onChange(id);
+            setOpen(false);
         } else {
-            onChange([...selectedCodes, code]);
+            const newSelected = selectedArray.includes(id)
+                ? selectedArray.filter((value) => value !== id)
+                : [...selectedArray, id];
+            onChange(newSelected);
+        }
+    };
+
+    const handleClear = () => {
+        onChange(null);
+        if (mode === 'single') {
+            setOpen(false);
         }
     };
 
     const handleListScroll = useCallback(
         (event: React.UIEvent<HTMLDivElement>) => {
-            if (!hasMore || isLoading || isLoadingMore) {
+            if (!hasMore || isLoading || isLoadingMore || !onLoadMore) {
                 return;
             }
             const target = event.currentTarget;
@@ -146,64 +177,81 @@ function SkuMultiSelect({
         [hasMore, isLoading, isLoadingMore, onLoadMore]
     );
 
+    const renderTriggerContent = () => {
+        if (mode === 'single') {
+            const selectedLabel = selectedArray.length > 0 ? selectedLabels[0] : null;
+            return (
+                <span className={cn(selectedLabel === null && "text-muted-foreground")}>
+                    {selectedLabel ?? placeholder}
+                </span>
+            );
+        }
+
+        return (
+            <div className="flex flex-wrap gap-1 items-center flex-1 min-w-0 text-left">
+                {selectedArray.length === 0 && <span className="text-muted-foreground">{placeholder}</span>}
+                {selectedArray.length > 0 && selectedArray.length <= 2 && (
+                    selectedLabels.map((label, idx) => (
+                        <span
+                            key={`${label}-${idx}`}
+                            className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1 mb-0.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
+                        >
+                            {label}
+                            <span
+                                className="ml-1 cursor-pointer opacity-70 hover:opacity-100"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const id = selectedArray[idx];
+                                    handleSelect(id);
+                                }}
+                            >
+                                <X className="h-3 w-3" />
+                            </span>
+                        </span>
+                    ))
+                )}
+                {selectedArray.length > 2 && (
+                    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1">
+                        {selectedArray.length} selected
+                    </span>
+                )}
+            </div>
+        );
+    };
+
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-auto min-h-12 py-2 px-3 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
-                    <div className="flex flex-wrap gap-1 items-center flex-1 min-w-0 text-left">
-                        {selectedCodes.length === 0 && <span className="text-muted-foreground">{placeholder}</span>}
-                        {selectedCodes.length > 0 && selectedCodes.length <= 2 && (
-                            selectedLabels.map((label, idx) => (
-                                <span
-                                    key={`${label}-${idx}`}
-                                    className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1 mb-0.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
-                                >
-                                    {label}
-                                    <span
-                                        className="ml-1 cursor-pointer opacity-70 hover:opacity-100"
-                                        onMouseDown={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                        }}
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            const code = selectedCodes[idx];
-                                            toggleOption(code);
-                                        }}
-                                    >
-                                        <X className="h-3 w-3" />
-                                    </span>
-                                </span>
-                            ))
-                        )}
-                        {selectedCodes.length > 2 && (
-                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1">
-                                {selectedCodes.length} selected
-                            </span>
-                        )}
-                    </div>
+                    {renderTriggerContent()}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[300px] md:w-[480px] p-0 shadow-xl border-border/60" align="start">
-                <Command shouldFilter={false} className="rounded-lg border-none">
-                    <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={handleSearchChange} />
+            <PopoverContent className={cn(width, "p-0 shadow-xl border-border/60", minHeight)} align="start">
+                <Command shouldFilter={!onSearch} className="rounded-lg border-none">
+                    {searchable && (
+                        <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={handleSearchChange} />
+                    )}
                     <CommandList ref={listRef} onScroll={handleListScroll} className="max-h-[300px] overflow-y-auto custom-scrollbar">
-                        <CommandEmpty>No SKU found.</CommandEmpty>
+                        <CommandEmpty>{emptyMessage}</CommandEmpty>
                         <CommandGroup>
-                            <CommandItem onSelect={() => onChange([])} className="justify-center text-center font-medium text-sm text-muted-foreground hover:text-foreground">
+                            <CommandItem onSelect={handleClear} className="justify-center text-center font-medium text-sm text-muted-foreground hover:text-foreground">
                                 Clear selection
                             </CommandItem>
                         </CommandGroup>
                         {pinnedOptions.length > 0 && (
-                            <CommandGroup heading="Selected SKUs" className="text-primary font-medium">
+                            <CommandGroup heading={pinnedHeading} className="text-primary font-medium">
                                 {pinnedOptions.map((option) => (
-                                    <CommandItem key={`pinned-${option.code}`} onSelect={() => toggleOption(option.code)} className="aria-selected:bg-primary/10">
+                                    <CommandItem key={`pinned-${String(option.id)}`} onSelect={() => handleSelect(option.id)} className="aria-selected:bg-primary/10">
                                         <div
                                             className={cn(
                                                 "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all",
-                                                selectedCodes.includes(option.code)
+                                                selectedArray.includes(option.id)
                                                     ? "bg-primary text-primary-foreground"
                                                     : "opacity-50 [&_svg]:invisible"
                                             )}
@@ -211,7 +259,7 @@ function SkuMultiSelect({
                                             <Check className={cn("h-3 w-3")} />
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="font-medium text-sm leading-none mb-1">{option.code}</span>
+                                            <span className="font-medium text-sm leading-none mb-1">{String(option.id)}</span>
                                             {option.name && <span className="text-xs text-muted-foreground line-clamp-1">{option.name}</span>}
                                         </div>
                                     </CommandItem>
@@ -228,9 +276,9 @@ function SkuMultiSelect({
                         )}
                         <CommandGroup className="text-muted-foreground">
                             {availableOptions.map((option) => {
-                                const isSelected = selectedCodes.includes(option.code);
+                                const isSelected = selectedArray.includes(option.id);
                                 return (
-                                    <CommandItem key={option.code} onSelect={() => toggleOption(option.code)}>
+                                    <CommandItem key={String(option.id)} onSelect={() => handleSelect(option.id)}>
                                         <div
                                             className={cn(
                                                 "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all",
@@ -246,7 +294,7 @@ function SkuMultiSelect({
                                 );
                             })}
                         </CommandGroup>
-                        {hasMore && !isLoading && (
+                        {hasMore && !isLoading && onLoadMore && (
                             <CommandGroup className="border-t border-border/50">
                                 <CommandItem disabled={isLoadingMore} onSelect={onLoadMore} className="justify-center text-sm text-primary font-medium cursor-pointer hover:bg-primary/5 py-3">
                                     {isLoadingMore ? (
@@ -261,7 +309,6 @@ function SkuMultiSelect({
         </Popover>
     );
 }
-
 
 export function DashboardFilters({
     filters,
@@ -279,17 +326,28 @@ export function DashboardFilters({
     skuLoadMoreLoading,
     resolveSkuOption,
 }: DashboardFiltersProps) {
-    const selectableStoreOptions = useMemo(() => storeOptions.filter((option) => option.id !== null), [storeOptions]);
-    const selectedStoreId = filters.storeIds[0] ?? null;
-    const [storeSearch, setStoreSearch] = useState("");
+    // Convert LabeledOption to FilterOption format
+    const storeFilterOptions = useMemo<FilterOption<number>[]>(
+        () => storeOptions
+            .filter((opt) => opt.id !== null)
+            .map((opt) => ({ id: opt.id!, label: opt.name, name: opt.name })),
+        [storeOptions]
+    );
 
-    const filteredStoreOptions = useMemo(() => {
-        if (!storeSearch.trim()) {
-            return selectableStoreOptions;
-        }
-        const query = storeSearch.toLowerCase();
-        return selectableStoreOptions.filter((option) => option.name.toLowerCase().includes(query));
-    }, [selectableStoreOptions, storeSearch]);
+    const brandFilterOptions = useMemo<FilterOption<number>[]>(
+        () => brandOptions
+            .filter((opt) => opt.id !== null)
+            .map((opt) => ({ id: opt.id!, label: opt.name, name: opt.name })),
+        [brandOptions]
+    );
+
+    // Convert SkuOption to FilterOption format
+    const skuFilterOptions = useMemo<FilterOption<string>[]>(
+        () => skuOptions.map((opt) => ({ id: opt.code, label: opt.label, name: opt.name })),
+        [skuOptions]
+    );
+
+    const selectedStoreId = filters.storeIds[0] ?? null;
 
     return (
         <div className="flex flex-col xl:flex-row gap-5 mb-8 bg-card/50 backdrop-blur-sm p-6 rounded-2xl shadow-sm border border-border/50 transition-colors">
@@ -307,44 +365,19 @@ export function DashboardFilters({
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                         <StoreIcon size={14} className="text-primary/70" /> Store
                     </Label>
-                    <Select
-                        value={selectedStoreId !== null ? String(selectedStoreId) : ""}
-                        onValueChange={(value) => onFilterChange({ ...filters, storeIds: value ? [Number(value)] : [] })}
-                        onOpenChange={(open) => {
-                            if (!open) {
-                                setStoreSearch("");
-                            }
+                    <GenericFilter<number>
+                        mode="single"
+                        options={storeFilterOptions}
+                        selected={selectedStoreId}
+                        onChange={(value) => {
+                            const id = value as number | null;
+                            onFilterChange({ ...filters, storeIds: id !== null ? [id] : [] });
                         }}
-                    >
-                        <SelectTrigger className="w-full h-12 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
-                            <SelectValue placeholder="All Stores" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                            {selectableStoreOptions.length > 0 ? (
-                                <>
-                                    <div className="px-3 py-2 sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40">
-                                        <Input
-                                            placeholder="Search store..."
-                                            value={storeSearch}
-                                            onChange={(e) => setStoreSearch(e.target.value)}
-                                            autoFocus
-                                        />
-                                    </div>
-                                    {filteredStoreOptions.length > 0 ? (
-                                        filteredStoreOptions.map((option) => (
-                                            <SelectItem key={option.id} value={String(option.id)} className="cursor-pointer">
-                                                {option.name}
-                                            </SelectItem>
-                                        ))
-                                    ) : (
-                                        <div className="py-2 px-3 text-sm text-muted-foreground">No stores found</div>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="py-2 px-3 text-sm text-muted-foreground">No stores available</div>
-                            )}
-                        </SelectContent>
-                    </Select>
+                        placeholder="All Stores"
+                        searchPlaceholder="Search store..."
+                        emptyMessage="No store found."
+                        minHeight="min-h-[200px]"
+                    />
                 </div>
 
                 <div className="flex flex-col gap-2">
@@ -352,7 +385,7 @@ export function DashboardFilters({
                         <Calendar size={14} className="text-primary/70" /> Date (Snapshot)
                     </Label>
                     <Select value={selectedDate || ""} onValueChange={onDateChange}>
-                        <SelectTrigger className="w-full h-12 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
+                        <SelectTrigger className="w-full h-auto min-h-12 py-2 px-3 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
                             <SelectValue placeholder="Latest Snapshot" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px]">
@@ -373,12 +406,17 @@ export function DashboardFilters({
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                         <Tag size={14} className="text-primary/70" /> Brand
                     </Label>
-                    <OptionsMultiSelect
-                        options={brandOptions}
-                        selectedIds={filters.brandIds}
-                        onChange={(ids) => onFilterChange({ ...filters, brandIds: ids, skuCodes: [] })}
+                    <GenericFilter<number>
+                        mode="multi"
+                        options={brandFilterOptions}
+                        selected={filters.brandIds}
+                        onChange={(value) => {
+                            const ids = (value ?? []) as number[];
+                            onFilterChange({ ...filters, brandIds: ids, skuCodes: [] });
+                        }}
                         placeholder="All Brands"
                         searchPlaceholder="Search brand..."
+                        emptyMessage="No brand found."
                     />
                 </div>
 
@@ -386,18 +424,29 @@ export function DashboardFilters({
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                         <Barcode size={14} className="text-primary/70" /> SKU
                     </Label>
-                    <SkuMultiSelect
-                        options={skuOptions}
-                        selectedCodes={filters.skuCodes}
-                        onChange={(codes: string[]) => onFilterChange({ ...filters, skuCodes: codes })}
+                    <GenericFilter<string>
+                        mode="multi"
+                        options={skuFilterOptions}
+                        selected={filters.skuCodes}
+                        onChange={(value) => {
+                            const codes = (value ?? []) as string[];
+                            onFilterChange({ ...filters, skuCodes: codes });
+                        }}
+                        placeholder="All SKUs"
+                        searchPlaceholder="Search SKU..."
+                        emptyMessage="No SKU found."
                         onSearch={onSkuSearch}
                         onLoadMore={onSkuLoadMore}
                         hasMore={skuHasMoreOptions}
-                        isLoadingMore={skuLoadMoreLoading}
-                        resolveOption={resolveSkuOption}
-                        placeholder="All SKUs"
-                        searchPlaceholder="Search SKU..."
                         isLoading={skuSearchLoading}
+                        isLoadingMore={skuLoadMoreLoading}
+                        resolveOption={(code) => {
+                            const opt = resolveSkuOption(code);
+                            return opt ? { id: opt.code, label: opt.label, name: opt.name } : undefined;
+                        }}
+                        showPinnedSelected={true}
+                        pinnedHeading="Selected SKUs"
+                        width="w-[300px] md:w-[480px]"
                     />
                 </div>
             </div>
@@ -415,117 +464,3 @@ export function DashboardFilters({
     );
 }
 
-interface OptionsMultiSelectProps {
-    options: LabeledOption[];
-    selectedIds: number[];
-    onChange: (ids: number[]) => void;
-    placeholder: string;
-    searchPlaceholder: string;
-}
-
-function OptionsMultiSelect({
-    options = [],
-    selectedIds = [],
-    onChange,
-    placeholder,
-    searchPlaceholder,
-}: OptionsMultiSelectProps) {
-    const [open, setOpen] = useState(false);
-    const [search, setSearch] = useState("");
-
-    const selectableOptions = useMemo(() => options.filter((opt) => opt.id !== null), [options]);
-    const selectedLabels = useMemo(() => {
-        const map = new Map(selectableOptions.map((opt) => [opt.id, opt.name] as const));
-        return selectedIds.map((id) => map.get(id) ?? `#${id}`);
-    }, [selectableOptions, selectedIds]);
-
-    const filteredOptions = useMemo(() => {
-        const query = search.toLowerCase();
-        return selectableOptions.filter((opt) => opt.name.toLowerCase().includes(query));
-    }, [selectableOptions, search]);
-
-    const toggleOption = (id: number) => {
-        if (selectedIds.includes(id)) {
-            onChange(selectedIds.filter((value) => value !== id));
-        } else {
-            onChange([...selectedIds, id]);
-        }
-    };
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-auto min-h-12 py-2 px-3 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
-                    <div className="flex flex-wrap gap-1 items-center">
-                        {selectedIds.length === 0 && <span className="text-muted-foreground">{placeholder}</span>}
-                        {selectedIds.length > 0 && selectedIds.length <= 2 && (
-                            selectedLabels.map((label, idx) => (
-                                <span key={`${label}-${idx}`} className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1 mb-0.5">
-                                    {label}
-                                    <span
-                                        className="ml-1 cursor-pointer opacity-70 hover:opacity-100"
-                                        onMouseDown={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                        }}
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            const id = selectedIds[idx];
-                                            toggleOption(id);
-                                        }}
-                                    >
-                                        <X className="h-3 w-3" />
-                                    </span>
-                                </span>
-                            ))
-                        )}
-                        {selectedIds.length > 2 && (
-                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold border-border bg-secondary/80 text-secondary-foreground hover:bg-secondary mr-1">
-                                {selectedIds.length} selected
-                            </span>
-                        )}
-                    </div>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[280px] p-0 shadow-lg border-border/60" align="start">
-                <Command className="rounded-lg border-none">
-                    <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={setSearch} />
-                    <CommandList className="max-h-[300px] overflow-y-auto custom-scrollbar">
-                        <CommandEmpty>No item found.</CommandEmpty>
-                        <CommandGroup>
-                            <CommandItem onSelect={() => onChange([])} className="justify-center text-center font-medium text-sm text-muted-foreground hover:text-foreground">
-                                Clear selection
-                            </CommandItem>
-                        </CommandGroup>
-                        <CommandGroup>
-                            {filteredOptions.map((option) => {
-                                const isSelected = option.id !== null && selectedIds.includes(option.id);
-                                return (
-                                    <CommandItem
-                                        key={option.id ?? option.name}
-                                        value={option.name}
-                                        onSelect={() => option.id !== null && toggleOption(option.id)}
-                                    >
-                                        <div
-                                            className={cn(
-                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all",
-                                                isSelected
-                                                    ? "bg-primary text-primary-foreground"
-                                                    : "opacity-50 [&_svg]:invisible"
-                                            )}
-                                        >
-                                            <Check className={cn("h-3 w-3")} />
-                                        </div>
-                                        {option.name}
-                                    </CommandItem>
-                                );
-                            })}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
-    );
-}
