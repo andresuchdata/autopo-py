@@ -279,6 +279,7 @@ export const getSupplierPerformance = async (params?: SupplierPerformanceParams)
 };
 
 export interface POSnapshotItem {
+    snapshot_time: string;
     po_number: string;
     brand_name: string;
     sku: string;
