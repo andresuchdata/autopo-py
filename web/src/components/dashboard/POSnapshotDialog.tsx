@@ -235,6 +235,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                 formatDate(item.po_sent_at),
                 formatDate(item.po_approved_at),
                 formatDate(item.po_arrived_at),
+                formatDate(item.po_received_at),
             ]);
 
             const csvContent = [headers, ...rows]
@@ -378,19 +379,23 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                     <SortableHead field="po_qty" label="Qty" align="right" className="text-right font-semibold text-foreground/80" />
                                     <SortableHead field="total_amount" label="Total" align="right" className="text-right font-semibold text-foreground/80" />
                                     <SortableHead field="po_released_at" label="Released" align="right" className="text-right font-semibold text-foreground/80" />
+                                    <SortableHead field="po_sent_at" label="Sent" align="right" className="text-right font-semibold text-foreground/80" />
+                                    <SortableHead field="po_approved_at" label="Approved" align="right" className="text-right font-semibold text-foreground/80" />
+                                    <SortableHead field="po_arrived_at" label="Arrived" align="right" className="text-right font-semibold text-foreground/80" />
+                                    <SortableHead field="po_received_at" label="Received" align="right" className="text-right font-semibold text-foreground/80" />
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {!status && (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-48 text-center text-muted-foreground">
+                                        <TableCell colSpan={11} className="h-48 text-center text-muted-foreground">
                                             Select a status card to view details.
                                         </TableCell>
                                     </TableRow>
                                 )}
                                 {status && loading && (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-64 text-center">
+                                        <TableCell colSpan={11} className="h-64 text-center">
                                             <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground">
                                                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                                 <p>Loading purchase orders...</p>
@@ -400,14 +405,14 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 )}
                                 {status && !loading && error && (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-48 text-center text-destructive">
+                                        <TableCell colSpan={11} className="h-48 text-center text-destructive">
                                             {error}
                                         </TableCell>
                                     </TableRow>
                                 )}
                                 {status && !loading && !error && items.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-48 text-center text-muted-foreground">
+                                        <TableCell colSpan={11} className="h-48 text-center text-muted-foreground">
                                             No purchase orders found for this status.
                                         </TableCell>
                                     </TableRow>
@@ -434,6 +439,10 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                             <TableCell className="text-right font-mono text-sm">{item.po_qty.toLocaleString('id-ID')}</TableCell>
                                             <TableCell className="text-right font-mono text-sm font-medium text-foreground/90">{formatCurrency(item.total_amount)}</TableCell>
                                             <TableCell className="text-right text-xs text-muted-foreground">{formatDate(item.po_released_at)}</TableCell>
+                                            <TableCell className="text-right text-xs text-muted-foreground">{formatDate(item.po_sent_at)}</TableCell>
+                                            <TableCell className="text-right text-xs text-muted-foreground">{formatDate(item.po_approved_at)}</TableCell>
+                                            <TableCell className="text-right text-xs text-muted-foreground">{formatDate(item.po_arrived_at)}</TableCell>
+                                            <TableCell className="text-right text-xs text-muted-foreground">{formatDate(item.po_received_at)}</TableCell>
                                         </TableRow>
                                     ))}
                             </TableBody>
