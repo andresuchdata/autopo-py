@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
@@ -142,7 +143,7 @@ func (r *poRepository) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
 	return brands, nil
 }
 
-func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset int) ([]*domain.Product, error) {
+func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset int, brandIDs []int64) ([]*domain.Product, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -153,17 +154,43 @@ func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset
 		offset = 0
 	}
 
-	query := `
-		SELECT id, sku, name, COALESCE(hpp, 0) AS hpp, COALESCE(price, 0) AS price, created_at, updated_at
-		FROM products
-		WHERE ($1 = '' OR sku ILIKE '%' || $1 || '%' OR name ILIKE '%' || $1 || '%')
-		ORDER BY sku ASC
+	// Note: The original products table does not include brand_id in the earliest
+	// migrations. To provide brand information for SKU options without breaking
+	// older schemas, we derive brand_id from product_mappings when available.
+	// This keeps the JSON field name `brand_id` consistent with domain.Product.
+	brandFilter := ""
+	if len(brandIDs) > 0 {
+		values := make([]string, 0, len(brandIDs))
+		for _, id := range brandIDs {
+			values = append(values, fmt.Sprintf("%d", id))
+		}
+		brandFilter = " AND pm.brand_id IN (" + strings.Join(values, ",") + ")"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT DISTINCT ON (p.id)
+			p.id,
+			p.sku,
+			p.name,
+			COALESCE(pm.brand_id, 0) AS brand_id,
+			COALESCE(p.hpp, 0) AS hpp,
+			COALESCE(p.price, 0) AS price,
+			p.created_at,
+			p.updated_at
+		FROM products p
+		LEFT JOIN product_mappings pm ON pm.product_id = p.id
+		WHERE ($1 = '' OR p.sku ILIKE '%%' || $1 || '%%' OR p.name ILIKE '%%' || $1 || '%%')%s
+		ORDER BY p.id, p.sku ASC
 		LIMIT $2 OFFSET $3
-	`
+	`, brandFilter)
 
 	var products []*domain.Product
 	if err := sqlx.SelectContext(ctx, r.db, &products, query, search, limit, offset); err != nil {
 		return nil, fmt.Errorf("failed to list skus: %w", err)
+	}
+	// Ensure we never return a nil slice so JSON encoding yields [] instead of null
+	if products == nil {
+		products = []*domain.Product{}
 	}
 
 	return products, nil

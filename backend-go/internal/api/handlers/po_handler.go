@@ -99,7 +99,22 @@ func (h *POHandler) GetSkus(c *gin.Context) {
 	limit := parsePositiveIntWithDefault(c.Query("limit"), 50)
 	offset := parseNonNegativeInt(c.Query("offset"))
 
-	skus, err := h.poService.GetSkus(c.Request.Context(), search, limit, offset)
+	// Optional brand filter: accept both brand_ids (comma-separated) and brand_id (single)
+	brandIDsParam := strings.TrimSpace(c.Query("brand_ids"))
+	if brandIDsParam == "" {
+		brandIDsParam = strings.TrimSpace(c.Query("brand_id"))
+	}
+	var brandIDs []int64
+	if brandIDsParam != "" {
+		parts := strings.Split(brandIDsParam, ",")
+		for _, part := range parts {
+			if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil && id > 0 {
+				brandIDs = append(brandIDs, id)
+			}
+		}
+	}
+
+	skus, err := h.poService.GetSkus(c.Request.Context(), search, limit, offset, brandIDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch skus"})
 		return

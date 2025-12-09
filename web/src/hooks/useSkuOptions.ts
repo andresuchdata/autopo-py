@@ -5,6 +5,7 @@ export interface SkuOption {
   code: string;
   label: string;
   name?: string;
+  brandId?: number | null;
 }
 
 const SKU_PAGE_SIZE = 50;
@@ -12,10 +13,11 @@ const SKU_PAGE_SIZE = 50;
 type FetchOptions = {
   searchValue: string;
   append: boolean;
+  brandIds?: number[];
 };
 
 const normalizeSkuOptions = (items: Array<Record<string, unknown>> = []): SkuOption[] => {
-  const dedup = new Map<string, { label: string; name?: string }>();
+  const dedup = new Map<string, { label: string; name?: string; brandId?: number | null }>();
 
   items.forEach((item) => {
     const rawCode =
@@ -35,12 +37,29 @@ const normalizeSkuOptions = (items: Array<Record<string, unknown>> = []): SkuOpt
     const trimmedName = name || undefined;
     const label = trimmedName ? `${rawCode} - ${trimmedName}` : rawCode;
 
+    const rawBrandId =
+      typeof (item as any).brand_id === 'number'
+        ? (item as any).brand_id
+        : typeof (item as any).brandId === 'number'
+          ? (item as any).brandId
+          : null;
+
     if (!dedup.has(rawCode)) {
-      dedup.set(rawCode, { label, name: trimmedName });
+      dedup.set(rawCode, { label, name: trimmedName, brandId: rawBrandId });
+    } else {
+      const existing = dedup.get(rawCode)!;
+      if ((existing.brandId == null || existing.brandId === 0) && rawBrandId) {
+        existing.brandId = rawBrandId;
+      }
     }
   });
 
-  return Array.from(dedup.entries()).map(([code, data]) => ({ code, label: data.label, name: data.name }));
+  return Array.from(dedup.entries()).map(([code, data]) => ({
+    code,
+    label: data.label,
+    name: data.name,
+    brandId: data.brandId ?? null,
+  }));
 };
 
 export function useSkuOptions(initialSearch = '') {
@@ -54,7 +73,7 @@ export function useSkuOptions(initialSearch = '') {
   const optionLookupRef = useRef<Map<string, SkuOption>>(new Map());
 
   const fetchOptions = useCallback(
-    async ({ searchValue, append }: FetchOptions) => {
+    async ({ searchValue, append, brandIds }: FetchOptions) => {
       if (append) {
         setLoadMoreLoading(true);
       } else {
@@ -68,6 +87,7 @@ export function useSkuOptions(initialSearch = '') {
           search: searchValue || undefined,
           limit,
           offset,
+          brandIds,
         });
 
         const rawItems = Array.isArray(response)
@@ -81,6 +101,11 @@ export function useSkuOptions(initialSearch = '') {
         setOptions((prev) => {
           const base = append ? [...prev] : [];
           const seen = new Set(base.map((option) => option.code));
+
+          // Clear lookup when starting fresh
+          if (!append) {
+            optionLookupRef.current.clear();
+          }
 
           normalized.forEach((option) => {
             optionLookupRef.current.set(option.code, option);
@@ -110,19 +135,20 @@ export function useSkuOptions(initialSearch = '') {
   );
 
   const search = useCallback(
-    async (searchValue = '') => {
+    async (searchValue = '', brandIds?: number[]) => {
       setSearchTerm(searchValue);
       setHasMore(true);
-      await fetchOptions({ searchValue, append: false });
+      await fetchOptions({ searchValue, append: false, brandIds });
     },
     [fetchOptions]
   );
 
-  const loadMore = useCallback(async () => {
+  const loadMore = useCallback(async (brandIds?: number[]) => {
     if (!hasMore || loadMoreLoading || loading) {
       return;
     }
-    await fetchOptions({ searchValue: searchTerm, append: true });
+
+    await fetchOptions({ searchValue: searchTerm, append: true, brandIds });
   }, [fetchOptions, hasMore, loadMoreLoading, loading, searchTerm]);
 
   useEffect(() => {

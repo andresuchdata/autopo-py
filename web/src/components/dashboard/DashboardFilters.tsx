@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { type DashboardFiltersState } from "@/hooks/useDashboard";
 import { type SkuOption } from "@/hooks/useSkuOptions";
 import { type LabeledOption } from "@/hooks/useStockData";
@@ -112,7 +113,16 @@ function SkuMultiSelect({
             }),
         [optionMap, resolveOption, selectedCodes]
     );
-    const availableOptions = useMemo(() => options.filter((option) => !selectedCodes.includes(option.code)), [options, selectedCodes]);
+    const availableOptions = useMemo(() => {
+        const filtered = options.filter((option) => !selectedCodes.includes(option.code));
+        console.log('SKU availableOptions:', {
+            totalOptions: options.length,
+            selectedCodes: selectedCodes.length,
+            availableCount: filtered.length,
+            sample: filtered.slice(0, 5).map(o => o.code)
+        });
+        return filtered;
+    }, [options, selectedCodes]);
 
     const toggleOption = (code: string) => {
         if (selectedCodes.includes(code)) {
@@ -177,7 +187,7 @@ function SkuMultiSelect({
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[300px] md:w-[480px] p-0 shadow-xl border-border/60" align="start">
-                <Command className="rounded-lg border-none">
+                <Command shouldFilter={false} className="rounded-lg border-none">
                     <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={handleSearchChange} />
                     <CommandList ref={listRef} onScroll={handleListScroll} className="max-h-[300px] overflow-y-auto custom-scrollbar">
                         <CommandEmpty>No SKU found.</CommandEmpty>
@@ -189,7 +199,7 @@ function SkuMultiSelect({
                         {pinnedOptions.length > 0 && (
                             <CommandGroup heading="Selected SKUs" className="text-primary font-medium">
                                 {pinnedOptions.map((option) => (
-                                    <CommandItem key={`pinned-${option.code}`} value={option.label} onSelect={() => toggleOption(option.code)} className="aria-selected:bg-primary/10">
+                                    <CommandItem key={`pinned-${option.code}`} onSelect={() => toggleOption(option.code)} className="aria-selected:bg-primary/10">
                                         <div
                                             className={cn(
                                                 "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all",
@@ -220,7 +230,7 @@ function SkuMultiSelect({
                             {availableOptions.map((option) => {
                                 const isSelected = selectedCodes.includes(option.code);
                                 return (
-                                    <CommandItem key={option.code} value={option.label} onSelect={() => toggleOption(option.code)}>
+                                    <CommandItem key={option.code} onSelect={() => toggleOption(option.code)}>
                                         <div
                                             className={cn(
                                                 "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all",
@@ -271,6 +281,15 @@ export function DashboardFilters({
 }: DashboardFiltersProps) {
     const selectableStoreOptions = useMemo(() => storeOptions.filter((option) => option.id !== null), [storeOptions]);
     const selectedStoreId = filters.storeIds[0] ?? null;
+    const [storeSearch, setStoreSearch] = useState("");
+
+    const filteredStoreOptions = useMemo(() => {
+        if (!storeSearch.trim()) {
+            return selectableStoreOptions;
+        }
+        const query = storeSearch.toLowerCase();
+        return selectableStoreOptions.filter((option) => option.name.toLowerCase().includes(query));
+    }, [selectableStoreOptions, storeSearch]);
 
     return (
         <div className="flex flex-col xl:flex-row gap-5 mb-8 bg-card/50 backdrop-blur-sm p-6 rounded-2xl shadow-sm border border-border/50 transition-colors">
@@ -291,17 +310,36 @@ export function DashboardFilters({
                     <Select
                         value={selectedStoreId !== null ? String(selectedStoreId) : ""}
                         onValueChange={(value) => onFilterChange({ ...filters, storeIds: value ? [Number(value)] : [] })}
+                        onOpenChange={(open) => {
+                            if (!open) {
+                                setStoreSearch("");
+                            }
+                        }}
                     >
                         <SelectTrigger className="w-full h-12 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
                             <SelectValue placeholder="All Stores" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px]">
                             {selectableStoreOptions.length > 0 ? (
-                                selectableStoreOptions.map((option) => (
-                                    <SelectItem key={option.id} value={String(option.id)} className="cursor-pointer">
-                                        {option.name}
-                                    </SelectItem>
-                                ))
+                                <>
+                                    <div className="px-3 py-2 sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40">
+                                        <Input
+                                            placeholder="Search store..."
+                                            value={storeSearch}
+                                            onChange={(e) => setStoreSearch(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    {filteredStoreOptions.length > 0 ? (
+                                        filteredStoreOptions.map((option) => (
+                                            <SelectItem key={option.id} value={String(option.id)} className="cursor-pointer">
+                                                {option.name}
+                                            </SelectItem>
+                                        ))
+                                    ) : (
+                                        <div className="py-2 px-3 text-sm text-muted-foreground">No stores found</div>
+                                    )}
+                                </>
                             ) : (
                                 <div className="py-2 px-3 text-sm text-muted-foreground">No stores available</div>
                             )}
@@ -338,7 +376,7 @@ export function DashboardFilters({
                     <OptionsMultiSelect
                         options={brandOptions}
                         selectedIds={filters.brandIds}
-                        onChange={(ids) => onFilterChange({ ...filters, brandIds: ids })}
+                        onChange={(ids) => onFilterChange({ ...filters, brandIds: ids, skuCodes: [] })}
                         placeholder="All Brands"
                         searchPlaceholder="Search brand..."
                     />

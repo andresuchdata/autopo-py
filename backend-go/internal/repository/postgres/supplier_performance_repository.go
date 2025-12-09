@@ -253,7 +253,7 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
-            WITH latest_snapshot AS (
+            WITH valid_pos AS (
                 SELECT
                     po_number,
                     sku,
@@ -262,7 +262,10 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
                     po_arrived_at,
                     ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
                 FROM po_snapshots s
-                WHERE s.po_number <> '' %s
+                WHERE s.po_number <> '' 
+                  AND s.po_sent_at > '2000-01-01' 
+                  AND s.po_arrived_at > '2000-01-01'
+                  %s
             ),
             po_level AS (
                 SELECT
@@ -270,7 +273,7 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
                     MAX(supplier_id) as supplier_id,
                     MAX(po_sent_at) as po_sent_at,
                     MAX(po_arrived_at) as po_arrived_at
-                FROM latest_snapshot
+                FROM valid_pos
                 WHERE rn = 1
                 GROUP BY po_number
             ),
@@ -282,7 +285,7 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
                     MIN(EXTRACT(EPOCH FROM (po_arrived_at - po_sent_at))/86400) as min_lead_time,
                     MAX(EXTRACT(EPOCH FROM (po_arrived_at - po_sent_at))/86400) as max_lead_time
                 FROM po_level
-                WHERE supplier_id IS NOT NULL AND po_sent_at IS NOT NULL AND po_arrived_at IS NOT NULL
+                WHERE supplier_id IS NOT NULL
                 GROUP BY supplier_id
             )
             SELECT 
