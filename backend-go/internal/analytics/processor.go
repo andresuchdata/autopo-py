@@ -2,6 +2,7 @@
 package analytics
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/csv"
@@ -375,8 +376,21 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	}
 	defer file.Close()
 
-	reader := csv.NewReader(file)
-	reader.Comma = ';'
+	// Auto-detect delimiter ("," vs ";") based on the header line so we can
+	// handle both comma- and semicolon-separated exports.
+	bufReader := bufio.NewReader(file)
+	firstLine, err := bufReader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("failed to read CSV header line: %w", err)
+	}
+	sep := ','
+	if strings.Count(firstLine, ";") > strings.Count(firstLine, ",") {
+		sep = ';'
+	}
+
+	restReader := io.MultiReader(strings.NewReader(firstLine), bufReader)
+	reader := csv.NewReader(restReader)
+	reader.Comma = sep
 
 	header, err := reader.Read()
 	if err != nil {
@@ -775,6 +789,13 @@ func makePOSnapshotKey(rec poSnapshotRecord) poSnapshotKey {
 	}
 }
 
+func truncateString(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max]
+}
+
 func parseOptionalFloat(record []string, colMap map[string]int, column string) float64 {
 	idx, ok := colMap[column]
 	if !ok || idx >= len(record) {
@@ -894,6 +915,7 @@ func ensureSuppliersBulk(ctx context.Context, tx *sql.Tx, names map[string]strin
 		if _, exists := result[key]; exists {
 			continue
 		}
+		displayName = truncateString(displayName, 255)
 		var id int
 		if err := tx.QueryRowContext(ctx, insertStmt, displayName).Scan(&id); err != nil {
 			return nil, fmt.Errorf("failed to upsert supplier %s: %w", displayName, err)
@@ -927,6 +949,7 @@ func (p *AnalyticsProcessor) ensureProductsWithNamesBulk(ctx context.Context, tx
 		if name == "" {
 			name = "Product " + sku
 		}
+		name = truncateString(name, 255)
 		if _, exists := productIDs[sku]; exists {
 			continue
 		}
@@ -998,6 +1021,7 @@ func ensureStoresBulk(ctx context.Context, tx *sql.Tx, names map[string]string) 
 		if _, exists := result[key]; exists {
 			continue
 		}
+		displayName = truncateString(displayName, 255)
 		var id int
 		if err := tx.QueryRowContext(ctx, insertStmt, displayName).Scan(&id); err != nil {
 			return nil, fmt.Errorf("failed to upsert store %s: %w", displayName, err)
@@ -1046,6 +1070,7 @@ func ensureBrandsBulk(ctx context.Context, tx *sql.Tx, names map[string]string) 
 		if _, exists := result[key]; exists {
 			continue
 		}
+		displayName = truncateString(displayName, 255)
 		var id int
 		if err := tx.QueryRowContext(ctx, insertStmt, displayName).Scan(&id); err != nil {
 			return nil, fmt.Errorf("failed to upsert brand %s: %w", displayName, err)
