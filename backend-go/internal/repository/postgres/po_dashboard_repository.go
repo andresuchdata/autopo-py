@@ -248,14 +248,15 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	}
 
 	validSortFields := map[string]bool{
-		"po_number":    true,
-		"brand_name":   true,
-		"sku":          true,
-		"product_name": true,
-		"store_name":   true,
-		"unit_price":   true,
-		"total_amount": true,
-		"po_qty":       true,
+		"snapshot_time": true,
+		"po_number":     true,
+		"brand_name":    true,
+		"sku":           true,
+		"product_name":  true,
+		"store_name":    true,
+		"unit_price":    true,
+		"total_amount":  true,
+		"po_qty":        true,
 	}
 	if !validSortFields[sortField] {
 		sortField = "po_number"
@@ -309,7 +310,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
 				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
 				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
-				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at
+				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
+				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 			LEFT JOIN brands b ON s.brand_id = b.id
@@ -342,7 +344,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
 				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
 				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
-				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at
+				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
+				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 			LEFT JOIN brands b ON s.brand_id = b.id
