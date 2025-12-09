@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConditionKey } from "@/services/dashboardService";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type SummaryGrouping } from "@/types/stockHealth";
-import { formatCurrencyIDR } from "@/utils/formatters";
+import { formatCurrencyIDR, formatNumberID, formatPercentage } from "@/utils/formatters";
 import {
     Layers,
     ClipboardCheck,
@@ -121,16 +121,7 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
                 maximumFractionDigits: 0,
             });
         }
-
-        // if (type === 'number') {
-        //     // For Qty (Pcs), always show full value with grouping, no compact 3.4k style
-        //     return val.toLocaleString();
-        // }
-
-        // if (val >= 1000) {
-        //     return (val / 1000).toFixed(1) + 'k';
-        // }
-        return val.toLocaleString();
+        return formatNumberID(val);
     };
 
     const getRowIcon = () => {
@@ -163,9 +154,7 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
                 const rawPercentage = total > 0 ? (value / total) * 100 : 0;
                 const roundedPercentage = Number(rawPercentage.toFixed(1));
                 const normalizedPercentage = Object.is(roundedPercentage, -0) ? 0 : roundedPercentage;
-                const displayPercentage = Number.isInteger(normalizedPercentage)
-                    ? normalizedPercentage.toString()
-                    : normalizedPercentage.toFixed(1);
+                const displayPercentage = formatPercentage(normalizedPercentage);
 
                 const isHighlighted = HIGHLIGHT_CONDITIONS.has(condition);
                 // Glassmorphism Styles

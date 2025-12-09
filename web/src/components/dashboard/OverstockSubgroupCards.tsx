@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DashboardOverstockSummary, OverstockCategory } from "@/services/dashboardService";
 import type { SummaryGrouping } from "@/types/stockHealth";
-import { formatCurrencyIDR } from "@/utils/formatters";
+import { formatCurrencyIDR, formatNumberID, formatPercentage } from "@/utils/formatters";
 import { Scale, Weight, Feather } from "lucide-react";
 
 const CATEGORY_CONFIG: Record<OverstockCategory, { label: string; description: string; color: string; borderColor: string, icon: any }> = {
@@ -56,15 +56,7 @@ const formatValue = (value: number, type: RowConfig["type"]) => {
     });
   }
 
-  return value.toLocaleString();
-};
-
-const formatPercentage = (value: number, total: number) => {
-  if (total === 0) return "0";
-  const raw = (value / total) * 100;
-  const rounded = Number(raw.toFixed(1));
-  if (Object.is(rounded, -0)) return "0";
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return formatNumberID(value);
 };
 
 export function OverstockSubgroupCards({ breakdown, onCardClick }: OverstockSubgroupCardsProps) {
@@ -111,7 +103,8 @@ export function OverstockSubgroupCards({ breakdown, onCardClick }: OverstockSubg
 
               {CATEGORY_ORDER.map((category) => {
                 const value = data[category] || 0;
-                const percentage = formatPercentage(value, total);
+                const percentageValue = total > 0 ? (value / total) * 100 : 0;
+                const percentageLabel = formatPercentage(value, { total });
                 const config = CATEGORY_CONFIG[category];
 
                 return (
@@ -138,10 +131,10 @@ export function OverstockSubgroupCards({ breakdown, onCardClick }: OverstockSubg
 
                       <div className="mt-2 flex items-center gap-2">
                         <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-primary/60" style={{ width: `${Math.min(Number(percentage), 100)}%`, backgroundColor: config.color }} />
+                          <div className="h-full bg-primary/60" style={{ width: `${Math.min(percentageValue, 100)}%`, backgroundColor: config.color }} />
                         </div>
                         <p className="text-[10px] font-medium text-muted-foreground w-12 text-right">
-                          {percentage}%
+                          {percentageLabel}%
                         </p>
                       </div>
                     </CardContent>
