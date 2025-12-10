@@ -47,15 +47,18 @@ func (p *StockHealthPipeline) GetOutputTable() string {
 func (p *StockHealthPipeline) GetSnapshotDate(filename string) (time.Time, error) {
 	base := filepath.Base(filename)
 	base = strings.TrimSuffix(base, filepath.Ext(base))
+
 	// Expect date at the beginning of the filename using InputDateFormat
 	if p.config.InputDateFormat == "" {
 		// Fallback to YYYYMMDD
 		p.config.InputDateFormat = "20060102"
 	}
+
 	layout := p.config.InputDateFormat
 	if len(base) < len(layout) {
 		return time.Time{}, fmt.Errorf("filename %s does not contain date with layout %s", filename, layout)
 	}
+
 	return time.Parse(layout, base[:len(layout)])
 }
 
@@ -167,9 +170,67 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 	return result, nil
 }
 
+// getStoreNameFromFilename extracts a normalized store name from the filename.
+// It mirrors the notebook's get_store_name_from_filename, but also strips the
+// leading snapshot date prefix (e.g. 20251201_) that the Drive watcher adds.
+func (p *StockHealthPipeline) getStoreNameFromFilename(path string) string {
+	base := filepath.Base(path)
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+
+	// Strip leading date prefix if it matches the configured layout followed by '_'
+	layout := p.config.InputDateFormat
+	if layout == "" {
+		layout = "20060102"
+	}
+	if len(name) > len(layout)+1 && name[len(layout)] == '_' {
+		if _, err := time.Parse(layout, name[:len(layout)]); err == nil {
+			name = name[len(layout)+1:]
+		}
+	}
+
+	parts := strings.Fields(name)
+	if len(parts) >= 3 && strings.EqualFold(parts[1], "miss") && strings.EqualFold(parts[2], "glam") {
+		// e.g. "002 Miss Glam Pekanbaru" -> "PEKANBARU"
+		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[3:], " ")))
+	}
+	if len(parts) >= 2 && strings.EqualFold(parts[0], "miss") && strings.EqualFold(parts[1], "glam") {
+		// e.g. "Miss Glam Padang" -> "PADANG"
+		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[2:], " ")))
+	}
+	if len(parts) > 1 {
+		// Fallback: drop the first token (often a sequence number)
+		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[1:], " ")))
+	}
+	if len(parts) == 1 {
+		return strings.ToUpper(strings.TrimSpace(parts[0]))
+	}
+	return ""
+}
+
+// getContributionPct looks up the contribution percentage for a store using
+// the configured StoreContributions map, defaulting to 100 when not found.
+func (p *StockHealthPipeline) getContributionPct(storeName string) float64 {
+	if p.config.StoreContributions == nil {
+		return 100
+	}
+	key := strings.ToUpper(strings.TrimSpace(storeName))
+	if key == "" {
+		return 100
+	}
+	if v, ok := p.config.StoreContributions[key]; ok {
+		return v
+	}
+
+	return 100
+}
+
 // readAndCleanCSV reads a CSV file into RawStockRow slice.
 // For now this assumes the CSV already matches the RawStockRow fields.
 func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []string, error) {
+	// Derive store name and contribution from the filename, matching notebook logic
+	storeName := p.getStoreNameFromFilename(path)
+	contributionPct := p.getContributionPct(storeName)
+
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, nil, err
@@ -206,7 +267,6 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 	idxHPP := colIndex("hpp")
 	idxHarga := colIndex("harga")
 	idxMinOrder := colIndex("min_order")
-	idxContribution := colIndex("contribution_pct")
 
 	rows := make([]RawStockRow, 0)
 	for {
@@ -252,7 +312,7 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 			HPP:           parseFloat(idxHPP),
 			Harga:         parseFloat(idxHarga),
 			MinOrder:      parseFloat(idxMinOrder),
-			Contribution:  parseFloat(idxContribution),
+			Contribution:  contributionPct,
 		}
 
 		rows = append(rows, row)

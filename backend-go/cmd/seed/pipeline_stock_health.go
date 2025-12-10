@@ -16,6 +16,46 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// rewrite using format StoreContribution for mapping below
+
+var STORE_CONTRIBUTIONS = map[string]float64{
+	"PADANG":           100,
+	"PEKANBARU":        60,
+	"JAMBI":            33,
+	"BUKITTINGGI":      45,
+	"PANAM":            46,
+	"MUARO BUNGO":      42,
+	"LAMPUNG":          18,
+	"BENGKULU":         14,
+	"MEDAN":            46,
+	"PALEMBANG":        26,
+	"DAMAR":            91,
+	"BANGKA":           28,
+	"PAYAKUMBUH":       47,
+	"SOLOK":            37,
+	"TEMBILAHAN":       27,
+	"LUBUK LINGGAU":    26,
+	"DUMAI":            36,
+	"KEDATON":          18,
+	"RANTAU PRAPAT":    27,
+	"TANJUNG PINANG":   19,
+	"SUTOMO":           49,
+	"PASAMAN BARAT":    17,
+	"HALAT":            31,
+	"DURI":             28,
+	"SUDIRMAN":         44,
+	"DR. MANSYUR":      25,
+	"DR.MANSYUR":       25,
+	"MANSYUR":          25,
+	"PADANG SIDIMPUAN": 31,
+	"P. SIDIMPUAN":     31,
+	"P.SIDIMPUAN":      31,
+	"ACEH":             15,
+	"MARPOYAN":         30,
+	"SEI PENUH":        21,
+	"MAYANG":           18,
+}
+
 func stockHealthPipelineFlags() []cli.Flag {
 	return []cli.Flag{
 		newDBURLFlag(),
@@ -38,20 +78,26 @@ func stockHealthPipelineFlags() []cli.Flag {
 		&cli.StringFlag{
 			Name:    "download-dir",
 			Usage:   "Local directory where source files from Drive will be downloaded",
-			Value:   "./data/uploads/stock_health/raw",
+			Value:   "./data/pipeline/stock_health/raw",
 			EnvVars: []string{"STOCK_HEALTH_DOWNLOAD_DIR"},
 		},
 		&cli.StringFlag{
 			Name:    "intermediate-dir",
 			Usage:   "Root directory for stock health intermediate outputs",
-			Value:   "./data/intermediate/stock_health",
+			Value:   "./data/pipeline/stock_health/intermediate",
 			EnvVars: []string{"STOCK_HEALTH_INTERMEDIATE_DIR"},
 		},
 		&cli.StringFlag{
 			Name:    "output-dir",
 			Usage:   "Directory for final consolidated stock health CSVs",
-			Value:   "./data/seeds/stock_health",
+			Value:   "./data/pipeline/stock_health/output",
 			EnvVars: []string{"STOCK_HEALTH_OUTPUT_DIR"},
+		},
+		&cli.StringFlag{
+			Name:    "snapshot-date",
+			Usage:   "Specific date to process (YYYYMMDD)",
+			Value:   "",
+			EnvVars: []string{"STOCK_HEALTH_SNAPSHOT_DATE"},
 		},
 		&cli.StringFlag{
 			Name:    "input-date-format",
@@ -110,6 +156,7 @@ func runStockHealthPipeline(c *cli.Context) error {
 	outputDir := c.String("output-dir")
 	inputDateFormat := c.String("input-date-format")
 	persistDebug := c.Bool("persist-debug-layers")
+	snapshotDate := c.String("snapshot-date")
 
 	// Initialize Drive service from GOOGLE_DRIVE_CREDENTIALS_JSON env
 	credsJSON := os.Getenv("GOOGLE_DRIVE_CREDENTIALS_JSON")
@@ -127,6 +174,7 @@ func runStockHealthPipeline(c *cli.Context) error {
 	localFiles, err := downloader.DownloadFolderCSV(ctx, drive.DownloadOptions{
 		FolderID:    folderID,
 		DownloadDir: downloadDir,
+		DateLayout:  inputDateFormat,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to download files from Drive: %w", err)
@@ -136,12 +184,16 @@ func runStockHealthPipeline(c *cli.Context) error {
 		log.Println("No CSV files found in Drive folder; nothing to process")
 		return nil
 	}
+	// if snapshotDate is set, only process that file
+	if snapshotDate != "" {
+		localFiles = []string{snapshotDate}
+	}
 
 	// Build stock health pipeline
 	stockCfg := stockhealth.Config{
-		SpecialSKUs:        map[string]bool{}, // can be configured later
-		SupplierData:       nil,               // TODO: wire supplier data in a later iteration
-		StoreContributions: nil,               // TODO: wire contribution data in a later iteration
+		SpecialSKUs:        map[string]bool{},   // can be configured later
+		SupplierData:       nil,                 // TODO: wire supplier data in a later iteration
+		StoreContributions: STORE_CONTRIBUTIONS, // TODO: wire contribution data in a later iteration
 		PadangStoreName:    "Miss Glam Padang",
 		InputDateFormat:    inputDateFormat,
 		OutputDir:          outputDir,
@@ -158,6 +210,7 @@ func runStockHealthPipeline(c *cli.Context) error {
 	pCfg.IntermediateDir = intermediateDir
 	pCfg.WorkerCount = c.Int("pipeline-workers")
 
+	// generate orchestrator
 	orch := pipeline.NewOrchestrator(db, pCfg)
 	if err := orch.Run(ctx, pipelineImpl, localFiles); err != nil {
 		return fmt.Errorf("stock health pipeline run failed: %w", err)

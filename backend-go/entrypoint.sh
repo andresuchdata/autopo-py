@@ -82,6 +82,12 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
         run_seed_command "$@"
       )
       ;;
+    pipeline-stock-health)
+      (
+        eval set -- $(build_common_args "pipeline-stock-health")
+        run_seed_command "$@"
+      )
+      ;;
     analytics)
       (
         eval set -- $(build_common_args "analytics")
