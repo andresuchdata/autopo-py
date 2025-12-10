@@ -8,18 +8,37 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/analytics"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func getEnvBool(key string, def bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return def
+}
+
 func main() {
-	// Parse command line flags
+	// Parse command line flags (with env-backed defaults)
 	dbURL := flag.String("db-url", "", "Database connection string")
 	dataDir := flag.String("data-dir", "./data/seeds", "Directory containing seed data")
 	processType := flag.String("type", "", "Type of data to process (stock_health, po_snapshots, or all)")
 	dateStr := flag.String("date", time.Now().Format("20060102"), "Date in YYYYMMDD format")
+	locale := flag.String("locale", getEnv("ANALYTICS_LOCALE", "id"), "Locale for date parsing (id or us)")
+	poDaily := flag.Bool("po-daily", getEnvBool("ANALYTICS_PO_DAILY", false), "Treat PO snapshot files as daily PO exports")
 	flag.Parse()
 
 	if *dbURL == "" {
@@ -33,8 +52,9 @@ func main() {
 	}
 	defer db.Close()
 
-	// Create analytics processor
-	processor := analytics.NewAnalyticsProcessor(db)
+	// Create analytics processor with parse configuration
+	cfg := analytics.ParseConfigFromOptions(*locale, *poDaily)
+	processor := analytics.NewAnalyticsProcessor(db, cfg)
 
 	// Determine which files to process
 	filesToProcess := make(map[string]string)
