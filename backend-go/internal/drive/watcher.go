@@ -15,7 +15,8 @@ type DownloadOptions struct {
 	DownloadDir string
 	// DateLayout is the Go time layout (e.g. "20060102") used to parse
 	// snapshot dates from Drive subfolder names like 20251201.
-	DateLayout string
+	DateLayout   string
+	SnapshotDate string
 }
 
 // Downloader wraps Service to download files from a specific folder.
@@ -63,6 +64,12 @@ func (d *Downloader) DownloadFolderCSV(ctx context.Context, opts DownloadOptions
 			}
 			// Skip folders that don't parse as a date
 			if _, err := time.Parse(opts.DateLayout, dateStr[:len(opts.DateLayout)]); err != nil {
+				continue
+			}
+		}
+
+		if opts.SnapshotDate != "" {
+			if len(dateStr) < len(opts.SnapshotDate) || !strings.HasPrefix(dateStr, opts.SnapshotDate) {
 				continue
 			}
 		}

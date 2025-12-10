@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/oauth2/google"
@@ -16,9 +18,28 @@ type Service struct {
 }
 
 func NewService(credentialsJSON string) (*Service, error) {
+	// Support both inline JSON and a file path in credentialsJSON.
+	jsonBytes := []byte(credentialsJSON)
+	trimmed := strings.TrimSpace(credentialsJSON)
+	// Heuristic: if it doesn't look like JSON and points to a .json file, treat as path
+	if !strings.HasPrefix(trimmed, "{") && strings.Contains(trimmed, ".json") && (strings.Contains(trimmed, string(os.PathSeparator)) || strings.Contains(trimmed, "/")) {
+		path := trimmed
+		// Expand relative paths against current working directory
+		if !filepath.IsAbs(path) {
+			if cwd, err := os.Getwd(); err == nil {
+				path = filepath.Join(cwd, path)
+			}
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("unable to read credentials file %s: %v", path, err)
+		}
+		jsonBytes = b
+	}
+
 	// Parse credentials from JSON
 	config, err := google.JWTConfigFromJSON(
-		[]byte(credentialsJSON),
+		jsonBytes,
 		drive.DriveReadonlyScope,
 	)
 	if err != nil {
