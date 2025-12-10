@@ -100,6 +100,22 @@ services:
         condition: service_healthy
     networks:
       - autopo-network
+  
+  stock-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://missglam:secret@db:5432/missglam?sslmode=disable
+      GOOGLE_DRIVE_CREDENTIALS_JSON: "${GOOGLE_DRIVE_CREDENTIALS_JSON}"
+      STOCK_HEALTH_DRIVE_FOLDER_ID: "${STOCK_HEALTH_DRIVE_FOLDER_ID}"
+      STOCK_HEALTH_DOWNLOAD_DIR: /app/data/pipeline/stock_health/raw
+      STOCK_HEALTH_INTERMEDIATE_DIR: /app/data/pipeline/stock_health/intermediate
+      STOCK_HEALTH_OUTPUT_DIR: /app/data/pipeline/stock_health/output
+      STOCK_HEALTH_PERSIST_DEBUG_LAYERS: "true"
+      PIPELINE_WORKERS: "4"
+    command: >
+      /app/bin/seed pipeline-stock-health
 
 networks:
   autopo-network:

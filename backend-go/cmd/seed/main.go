@@ -399,6 +399,12 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
+				Name:   "pipeline-stock-health",
+				Usage:  "Run stock health pipeline end-to-end from Google Drive",
+				Flags:  stockHealthPipelineFlags(),
+				Action: runStockHealthPipeline,
+			},
+			{
 				Name:  "master",
 				Usage: "Seed master data (brands, suppliers, stores, etc.)",
 				Flags: []cli.Flag{

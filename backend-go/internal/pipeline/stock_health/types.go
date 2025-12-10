@@ -90,7 +90,7 @@ type StoreContribution struct {
 type Config struct {
 	SpecialSKUs        map[string]bool // SKUs that need 60 days cover instead of 30
 	SupplierData       []SupplierData
-	StoreContributions []StoreContribution
+	StoreContributions map[string]float64
 	PadangStoreName    string // Reference store name (usually "Miss Glam Padang")
 	InputDateFormat    string // Date format in input filenames
 	OutputDir          string // Directory for output CSVs
