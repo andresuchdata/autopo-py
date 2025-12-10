@@ -143,6 +143,39 @@ func (r *poRepository) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
 	return brands, nil
 }
 
+func (r *poRepository) GetSuppliers(ctx context.Context, search string, limit, offset int) ([]*domain.Supplier, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Note: some deployments may not yet have all extended supplier columns.
+	// To keep this endpoint robust, we only select columns that are guaranteed
+	// to exist in the current schema (id, name, created_at, updated_at).
+	// sqlx will simply leave the other struct fields at their zero values.
+	query := `
+		SELECT id, name, created_at, updated_at
+		FROM suppliers
+		WHERE ($1 = '' OR name ILIKE '%' || $1 || '%')
+		ORDER BY name
+		LIMIT $2 OFFSET $3
+	`
+
+	var suppliers []*domain.Supplier
+	if err := sqlx.SelectContext(ctx, r.db, &suppliers, query, search, limit, offset); err != nil {
+		return nil, fmt.Errorf("failed to list suppliers: %w", err)
+	}
+	if suppliers == nil {
+		suppliers = []*domain.Supplier{}
+	}
+	return suppliers, nil
+}
+
 func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset int, brandIDs []int64) ([]*domain.Product, error) {
 	if limit <= 0 {
 		limit = 50
