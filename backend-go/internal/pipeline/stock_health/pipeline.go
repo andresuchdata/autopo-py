@@ -245,9 +245,16 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 		return nil, nil, err
 	}
 
-	colIndex := func(name string) int {
+	colIndex := func(names ...string) int {
+		if len(names) == 0 {
+			return -1
+		}
+		targets := make(map[string]struct{}, len(names))
+		for _, name := range names {
+			targets[normalizeColumnName(name)] = struct{}{}
+		}
 		for i, h := range header {
-			if strings.EqualFold(strings.TrimSpace(h), name) {
+			if _, ok := targets[normalizeColumnName(h)]; ok {
 				return i
 			}
 		}
@@ -256,17 +263,17 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 
 	idxBrand := colIndex("brand")
 	idxSKU := colIndex("sku")
-	idxNama := colIndex("nama")
-	idxToko := colIndex("store")
-	idxStock := colIndex("stock")
-	idxDailySales := colIndex("daily_sales")
-	idxMaxDailySales := colIndex("max_daily_sales")
-	idxLeadTime := colIndex("lead_time")
-	idxMaxLeadTime := colIndex("max_lead_time")
-	idxSedangPO := colIndex("sedang_po")
+	idxNama := colIndex("nama", "product name")
+	idxToko := colIndex("store", "toko", "nama store")
+	idxStock := colIndex("stock", "stok")
+	idxDailySales := colIndex("daily_sales", "daily sales")
+	idxMaxDailySales := colIndex("max_daily_sales", "max. daily sales", "max daily sales")
+	idxLeadTime := colIndex("lead_time", "lead time")
+	idxMaxLeadTime := colIndex("max_lead_time", "max. lead time", "max lead time")
+	idxSedangPO := colIndex("sedang_po", "sedang po")
 	idxHPP := colIndex("hpp")
 	idxHarga := colIndex("harga")
-	idxMinOrder := colIndex("min_order")
+	idxMinOrder := colIndex("min_order", "min. order", "min order")
 
 	rows := make([]RawStockRow, 0)
 	for {
@@ -319,6 +326,13 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 	}
 
 	return rows, header, nil
+}
+
+var columnNameSanitizer = strings.NewReplacer(" ", "", "_", "", ".", "", "-", "", "/", "")
+
+func normalizeColumnName(name string) string {
+	name = strings.TrimSpace(strings.ToLower(name))
+	return columnNameSanitizer.Replace(name)
 }
 
 func (p *StockHealthPipeline) writeIntermediateCSV(date time.Time, stage string, inputFile string, header []string, rows []RawStockRow) error {
