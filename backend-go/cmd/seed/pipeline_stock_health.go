@@ -111,6 +111,11 @@ func stockHealthPipelineFlags() []cli.Flag {
 			Usage:   "Persist cleaned_base (1) intermediate layer for debugging",
 			EnvVars: []string{"STOCK_HEALTH_PERSIST_DEBUG_LAYERS"},
 		},
+		&cli.BoolFlag{
+			Name:    "reuse-local",
+			Usage:   "Skip Drive download and use existing files in download-dir",
+			EnvVars: []string{"STOCK_HEALTH_REUSE_LOCAL"},
+		},
 		&cli.IntFlag{
 			Name:    "pipeline-workers",
 			Usage:   "Number of concurrent workers for stock health pipeline",
@@ -159,33 +164,44 @@ func runStockHealthPipeline(c *cli.Context) error {
 	inputDateFormat := c.String("input-date-format")
 	persistDebug := c.Bool("persist-debug-layers")
 	snapshotDate := c.String("snapshot-date")
+	reuseLocal := c.Bool("reuse-local")
 
 	// Initialize Drive service from GOOGLE_DRIVE_CREDENTIALS_JSON env
-	credsJSON := os.Getenv("GOOGLE_DRIVE_CREDENTIALS_JSON")
-	if strings.TrimSpace(credsJSON) == "" {
-		return fmt.Errorf("GOOGLE_DRIVE_CREDENTIALS_JSON env is required")
-	}
-
-	driveSvc, err := drive.NewService(credsJSON)
-	if err != nil {
-		return fmt.Errorf("failed to create Drive service: %w", err)
-	}
-	downloader := drive.NewDownloader(driveSvc)
-
-	if snapshotDate != "" {
-		log.Printf("Downloading stock health of date '%s' from Drive folder %s to %s", snapshotDate, folderID, downloadDir)
+	var localFiles []string
+	if reuseLocal {
+		log.Printf("Reusing existing files in %s (skip Drive download)", downloadDir)
+		var err error
+		localFiles, err = filepath.Glob(filepath.Join(downloadDir, "*.csv"))
+		if err != nil {
+			return fmt.Errorf("failed to list local files: %w", err)
+		}
 	} else {
-		log.Printf("Downloading stock health files from Drive folder %s to %s", folderID, downloadDir)
-	}
+		credsJSON := os.Getenv("GOOGLE_DRIVE_CREDENTIALS_JSON")
+		if strings.TrimSpace(credsJSON) == "" {
+			return fmt.Errorf("GOOGLE_DRIVE_CREDENTIALS_JSON env is required")
+		}
 
-	localFiles, err := downloader.DownloadFolderCSV(ctx, drive.DownloadOptions{
-		FolderID:     folderID,
-		DownloadDir:  downloadDir,
-		DateLayout:   inputDateFormat,
-		SnapshotDate: snapshotDate,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to download files from Drive: %w", err)
+		driveSvc, err := drive.NewService(credsJSON)
+		if err != nil {
+			return fmt.Errorf("failed to create Drive service: %w", err)
+		}
+		downloader := drive.NewDownloader(driveSvc)
+
+		if snapshotDate != "" {
+			log.Printf("Downloading stock health of date '%s' from Drive folder %s to %s", snapshotDate, folderID, downloadDir)
+		} else {
+			log.Printf("Downloading stock health files from Drive folder %s to %s", folderID, downloadDir)
+		}
+
+		localFiles, err = downloader.DownloadFolderCSV(ctx, drive.DownloadOptions{
+			FolderID:     folderID,
+			DownloadDir:  downloadDir,
+			DateLayout:   inputDateFormat,
+			SnapshotDate: snapshotDate,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to download files from Drive: %w", err)
+		}
 	}
 
 	if len(localFiles) == 0 {
