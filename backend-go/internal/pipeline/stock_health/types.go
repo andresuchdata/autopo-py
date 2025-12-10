@@ -94,6 +94,16 @@ type Config struct {
 	PadangStoreName    string // Reference store name (usually "Miss Glam Padang")
 	InputDateFormat    string // Date format in input filenames
 	OutputDir          string // Directory for output CSVs
+
+	// Hybrid intermediate persistence configuration
+	// IntermediateDir is the root directory for per-file intermediate outputs
+	// The pipeline will use the following subdirectories under this root:
+	//   1_cleaned_base/     - cleaned pre-join table (only if PersistDebugLayers is true)
+	//   2_cleaned_merged/   - cleaned+merged table (always written when PersistMergedOnly is true)
+	//   3_with_metrics/     - table with calculated inventory metrics
+	IntermediateDir    string
+	PersistMergedOnly  bool
+	PersistDebugLayers bool
 }
 
 // ProcessingSummary holds summary statistics for a processed file

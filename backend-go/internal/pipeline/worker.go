@@ -25,7 +25,8 @@ type Worker struct {
 // NewWorker creates a new pipeline worker
 func NewWorker(pipeline Pipeline, config PipelineConfig, db *sql.DB) *Worker {
 	repo := NewRepository(db)
-	processor := analytics.NewAnalyticsProcessor(db)
+	// Initialize analytics processor with default parse config (locale, etc.)
+	processor := analytics.NewAnalyticsProcessor(db, analytics.ParseConfig{})
 
 	return &Worker{
 		pipeline:  pipeline,
