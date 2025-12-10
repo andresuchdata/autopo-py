@@ -143,17 +143,45 @@ func parseNonNegativeInt(value string) int {
 func (h *POHandler) parseDashboardFilter(c *gin.Context) *domain.DashboardFilter {
 	poType := strings.TrimSpace(c.Query("po_type"))
 	releasedDate := strings.TrimSpace(c.Query("released_date"))
-
-	if poType == "" && releasedDate == "" {
-		return nil
-	}
+	storeIDsParam := strings.TrimSpace(c.Query("store_ids"))
+	brandIDsParam := strings.TrimSpace(c.Query("brand_ids"))
 
 	filter := &domain.DashboardFilter{}
+
 	if poType != "" {
 		filter.POType = strings.ToUpper(poType)
 	}
 	if releasedDate != "" {
 		filter.ReleasedDate = releasedDate
+	}
+
+	parseInt64List := func(raw string) []int64 {
+		if raw == "" {
+			return nil
+		}
+		parts := strings.Split(raw, ",")
+		result := make([]int64, 0, len(parts))
+		for _, part := range parts {
+			if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil && id > 0 {
+				result = append(result, id)
+			}
+		}
+		if len(result) == 0 {
+			return nil
+		}
+		return result
+	}
+
+	if storeIDs := parseInt64List(storeIDsParam); len(storeIDs) > 0 {
+		filter.StoreIDs = storeIDs
+	}
+	if brandIDs := parseInt64List(brandIDsParam); len(brandIDs) > 0 {
+		filter.BrandIDs = brandIDs
+	}
+
+	// Return nil if no filters are actually set
+	if filter.POType == "" && filter.ReleasedDate == "" && len(filter.StoreIDs) == 0 && len(filter.BrandIDs) == 0 {
+		return nil
 	}
 	return filter
 }

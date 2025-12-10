@@ -42,6 +42,26 @@ func buildDashboardFilterClause(filter *domain.DashboardFilter, alias string, st
 		idx++
 	}
 
+	if len(filter.StoreIDs) > 0 {
+		placeholders := make([]string, len(filter.StoreIDs))
+		for i, id := range filter.StoreIDs {
+			placeholders[i] = fmt.Sprintf("$%d", idx)
+			args = append(args, id)
+			idx++
+		}
+		clauses = append(clauses, fmt.Sprintf("%sstore_id IN (%s)", alias, strings.Join(placeholders, ",")))
+	}
+
+	if len(filter.BrandIDs) > 0 {
+		placeholders := make([]string, len(filter.BrandIDs))
+		for i, id := range filter.BrandIDs {
+			placeholders[i] = fmt.Sprintf("$%d", idx)
+			args = append(args, id)
+			idx++
+		}
+		clauses = append(clauses, fmt.Sprintf("%sbrand_id IN (%s)", alias, strings.Join(placeholders, ",")))
+	}
+
 	if len(clauses) == 0 {
 		return "", nil
 	}

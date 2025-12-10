@@ -111,8 +111,10 @@ type DashboardSummary struct {
 
 // DashboardFilter represents optional filters that can be applied to dashboard queries
 type DashboardFilter struct {
-	POType       string `json:"po_type"`
-	ReleasedDate string `json:"released_date"`
+	POType       string  `json:"po_type"`
+	ReleasedDate string  `json:"released_date"`
+	StoreIDs     []int64 `json:"store_ids"`
+	BrandIDs     []int64 `json:"brand_ids"`
 }
 
 // POSnapshotItem represents a single PO snapshot item for the detail dialog
