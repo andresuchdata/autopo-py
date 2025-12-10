@@ -33,9 +33,20 @@ export const poService = {
         return response.data;
     },
 
-    getSuppliers: async () => {
+    getSuppliers: async (params?: { search?: string; limit?: number; offset?: number }) => {
+        const query: Record<string, string | number> = {};
+        if (params?.search) {
+            query.search = params.search;
+        }
+        if (typeof params?.limit === 'number') {
+            query.limit = params.limit;
+        }
+        if (typeof params?.offset === 'number') {
+            query.offset = params.offset;
+        }
+
         try {
-            const response = await api.get('/po/suppliers');
+            const response = await api.get('/po/suppliers', Object.keys(query).length ? { params: query } : undefined);
             return response.data;
         } catch (error) {
             console.error('Error fetching suppliers:', error);
@@ -167,6 +178,7 @@ export interface DashboardSummaryParams {
     releasedDate?: string;
     storeIds?: number[];
     brandIds?: number[];
+    supplierIds?: number[];
 }
 
 export const getDashboardSummary = async (params?: DashboardSummaryParams) => {
@@ -177,6 +189,10 @@ export const getDashboardSummary = async (params?: DashboardSummaryParams) => {
                 released_date: params?.releasedDate,
                 store_ids: params?.storeIds && params.storeIds.length > 0 ? params.storeIds.join(',') : undefined,
                 brand_ids: params?.brandIds && params.brandIds.length > 0 ? params.brandIds.join(',') : undefined,
+                supplier_ids:
+                    params?.supplierIds && params.supplierIds.length > 0
+                        ? params.supplierIds.join(',')
+                        : undefined,
             },
         });
         return response.data;

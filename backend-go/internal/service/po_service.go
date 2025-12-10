@@ -196,6 +196,11 @@ func (s *POService) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
 	return s.repo.GetBrands(ctx)
 }
 
+// GetSuppliers returns a paginated list of suppliers with optional search
+func (s *POService) GetSuppliers(ctx context.Context, search string, limit, offset int) ([]*domain.Supplier, error) {
+	return s.repo.GetSuppliers(ctx, search, limit, offset)
+}
+
 // GetSkus returns a list of SKUs matching the optional search term and brand filter with pagination
 func (s *POService) GetSkus(ctx context.Context, search string, limit, offset int, brandIDs []int64) ([]*domain.Product, error) {
 	return s.repo.GetSkus(ctx, search, limit, offset, brandIDs)

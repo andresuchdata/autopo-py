@@ -13,6 +13,8 @@ interface PODashboardFilterContextType {
     setStoreIdsFilter: (value: number[]) => void;
     brandIdsFilter: number[];
     setBrandIdsFilter: (value: number[]) => void;
+    supplierIdsFilter: number[];
+    setSupplierIdsFilter: (value: number[]) => void;
 }
 
 const PODashboardFilterContext = createContext<PODashboardFilterContextType | undefined>(undefined);
@@ -22,6 +24,7 @@ export const PODashboardFilterProvider: React.FC<{ children: ReactNode }> = ({ c
     const [releasedDateFilter, setReleasedDateFilter] = useState<string>('');
     const [storeIdsFilter, setStoreIdsFilter] = useState<number[]>([]);
     const [brandIdsFilter, setBrandIdsFilter] = useState<number[]>([]);
+    const [supplierIdsFilter, setSupplierIdsFilter] = useState<number[]>([]);
 
     return (
         <PODashboardFilterContext.Provider
@@ -34,6 +37,8 @@ export const PODashboardFilterProvider: React.FC<{ children: ReactNode }> = ({ c
                 setStoreIdsFilter,
                 brandIdsFilter,
                 setBrandIdsFilter,
+                supplierIdsFilter,
+                setSupplierIdsFilter,
             }}
         >
             {children}
