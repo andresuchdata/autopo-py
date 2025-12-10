@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DatePicker } from '@/components/ui/date-picker';
+import { Skeleton } from '@/components/ui/skeleton';
 import { PODashboardFilterProvider, usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
 
 interface DashboardData {
@@ -106,15 +107,18 @@ function PODashboardContent() {
         return `${brandIdsFilter.length} brands selected`;
     }, [brandIdsFilter, brandOptions]);
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            </div>
-        );
-    }
+    const handleClearFilters = () => {
+        if (loading) return;
+        setPOTypeFilter('ALL');
+        setReleasedDateFilter('');
+        setStoreIdsFilter([]);
+        setBrandIdsFilter([]);
+        setStoreSearch('');
+        setBrandSearch('');
+        setFiltersOpen(false);
+    };
 
-    if (error || !data) {
+    if (!loading && (error || !data)) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
                 <div className="text-red-500">{error || 'No data available'}</div>
@@ -125,7 +129,7 @@ function PODashboardContent() {
     // Define the desired order for PO status cards
     const statusOrder = ['Released', 'Sent', 'Approved', 'Declined', 'Arrived', 'Received'];
 
-    const rawSummaries = data.status_summaries ?? [];
+    const rawSummaries = data?.status_summaries ?? [];
     const summariesByStatus = rawSummaries.reduce<Record<string, any>>((acc, summary) => {
         acc[summary.status] = summary;
         return acc;
@@ -149,10 +153,10 @@ function PODashboardContent() {
 
     const statusSummaries = [...orderedSummaries, ...extraSummaries];
 
-    const funnelData = data.lifecycle_funnel ?? [];
-    const trendData = data.trends ?? [];
-    const agingData = data.aging ?? [];
-    const supplierPerformanceData = data.supplier_performance ?? [];
+    const funnelData = data?.lifecycle_funnel ?? [];
+    const trendData = data?.trends ?? [];
+    const agingData = data?.aging ?? [];
+    const supplierPerformanceData = data?.supplier_performance ?? [];
 
     return (
         <div className="min-h-screen bg-background text-foreground p-6 space-y-6">
@@ -166,10 +170,14 @@ function PODashboardContent() {
                         <p className="text-sm text-muted-foreground">Filter by PO type, store, brand, and released date to focus the insights.</p>
                     </div>
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
                     <div className="flex flex-col gap-1">
                         <Label className="text-xs font-medium uppercase text-muted-foreground">PO Type</Label>
-                        <Select value={poTypeFilter} onValueChange={(value: 'ALL' | 'AU' | 'PO' | 'OTHERS') => setPOTypeFilter(value)}>
+                        <Select
+                            value={poTypeFilter}
+                            onValueChange={(value: 'ALL' | 'AU' | 'PO' | 'OTHERS') => setPOTypeFilter(value)}
+                            disabled={loading}
+                        >
                             <SelectTrigger className="w-40 h-10 bg-background border-border rounded-lg">
                                 <SelectValue placeholder="Select type" />
                             </SelectTrigger>
@@ -183,21 +191,35 @@ function PODashboardContent() {
                     </div>
                     <div className="flex flex-col gap-1">
                         <Label className="text-xs font-medium uppercase text-muted-foreground">PO Released Date</Label>
-                        <DatePicker
-                            value={releasedDateFilter || undefined}
-                            onChange={(value) => setReleasedDateFilter(value)}
-                            placeholder="All Dates"
-                        />
+                        <div className={loading ? 'pointer-events-none opacity-60' : ''}>
+                            <DatePicker
+                                value={releasedDateFilter || undefined}
+                                onChange={(value) => {
+                                    if (!loading) {
+                                        setReleasedDateFilter(value);
+                                    }
+                                }}
+                                placeholder="All Dates"
+                            />
+                        </div>
                     </div>
                     <div className="flex flex-col gap-1">
                         <Label className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
                             <StoreIcon className="h-3 w-3 text-primary/70" /> Store
                         </Label>
-                        <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+                        <Popover
+                            open={loading ? false : filtersOpen}
+                            onOpenChange={(open) => {
+                                if (!loading) {
+                                    setFiltersOpen(open);
+                                }
+                            }}
+                        >
                             <PopoverTrigger asChild>
                                 <Button
                                     variant="outline"
                                     className="w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
+                                    disabled={loading}
                                 >
                                     <span className="truncate text-left text-sm">
                                         {selectedStoresLabel}
@@ -256,6 +278,7 @@ function PODashboardContent() {
                                 <Button
                                     variant="outline"
                                     className="w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
+                                    disabled={loading}
                                 >
                                     <span className="truncate text-left text-sm">
                                         {selectedBrandsLabel}
@@ -305,41 +328,77 @@ function PODashboardContent() {
                             </PopoverContent>
                         </Popover>
                     </div>
+                    <div className="flex items-end pb-0.5">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                            onClick={handleClearFilters}
+                            disabled={loading}
+                        >
+                            Clear filters
+                        </Button>
+                    </div>
                 </div>
             </div>
 
             {/* 1. Status Summary Cards */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                {statusSummaries.map((summary: any) => (
-                    <POStatusCard
-                        key={summary.status}
-                        title={`PO ${summary.status}`}
-                        count={summary.count}
-                        totalValue={summary.total_value}
-                        skuCount={summary.sku_count}
-                        totalQty={summary.total_qty}
-                        avgDays={summary.avg_days}
-                        diffDays={summary.diff_days}
-                        isActive={statusModalOpen && summary.status === selectedStatus}
-                        onClick={() => {
-                            setSelectedStatus(summary.status);
-                            setStatusModalOpen(true);
-                        }}
-                    />
-                ))}
+                {loading
+                    ? Array.from({ length: 6 }).map((_, idx) => (
+                          <div key={idx} className="space-y-3 rounded-xl border border-border bg-card p-4">
+                              <Skeleton className="h-4 w-24" />
+                              <Skeleton className="h-6 w-16" />
+                              <Skeleton className="h-3 w-full" />
+                              <Skeleton className="h-3 w-3/4" />
+                          </div>
+                      ))
+                    : statusSummaries.map((summary: any) => (
+                          <POStatusCard
+                              key={summary.status}
+                              title={`PO ${summary.status}`}
+                              count={summary.count}
+                              totalValue={summary.total_value}
+                              skuCount={summary.sku_count}
+                              totalQty={summary.total_qty}
+                              avgDays={summary.avg_days}
+                              diffDays={summary.diff_days}
+                              isActive={statusModalOpen && summary.status === selectedStatus}
+                              onClick={() => {
+                                  setSelectedStatus(summary.status);
+                                  setStatusModalOpen(true);
+                              }}
+                          />
+                      ))}
             </div>
 
             {/* 2. Charts Row 1: Funnel & Trend */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <POFunnelChart data={funnelData} />
-                <POTrendChart data={trendData} />
+                {loading ? (
+                    <Skeleton className="h-[320px] w-full rounded-xl" />
+                ) : (
+                    <POFunnelChart data={funnelData} />
+                )}
+                {loading ? (
+                    <Skeleton className="h-[320px] w-full rounded-xl" />
+                ) : (
+                    <POTrendChart data={trendData} />
+                )}
             </div>
 
 
             {/* 3. Charts Row 2: Aging & Supplier Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <POAgingTable initialItems={agingData} />
-                <SupplierPerformanceChart initialItems={supplierPerformanceData} />
+                {loading ? (
+                    <Skeleton className="h-[360px] w-full rounded-xl" />
+                ) : (
+                    <POAgingTable initialItems={agingData} />
+                )}
+                {loading ? (
+                    <Skeleton className="h-[360px] w-full rounded-xl" />
+                ) : (
+                    <SupplierPerformanceChart initialItems={supplierPerformanceData} />
+                )}
             </div>
 
             {/* Find the summary for the selected status to pass totals */}
