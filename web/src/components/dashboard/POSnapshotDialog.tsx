@@ -162,7 +162,8 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
         if (!status) return [];
 
         const aggregated: POSnapshotItem[] = [];
-        const dlPageSize = 500;
+        // Backend caps page_size to 100; stay within that so we can reliably page through all results
+        const dlPageSize = 100;
         let dlPage = 1;
         let dlTotal = Infinity;
 
@@ -179,22 +180,98 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                 brandIds: brandIdsFilter,
             });
 
-            if (!response.items || response.items.length === 0) {
+            const pageItems = response.items ?? [];
+            if (pageItems.length === 0) {
                 break;
             }
 
-            aggregated.push(...response.items);
+            aggregated.push(...pageItems);
             dlTotal = response.total ?? aggregated.length;
 
-            if (response.items.length < dlPageSize) {
+            if (aggregated.length >= dlTotal) {
                 break;
             }
+
             dlPage += 1;
         }
+
         return aggregated;
     }, [status, poTypeFilter, releasedDateFilter, sortField, sortDirection, storeIdsFilter, brandIdsFilter]);
 
-    const handleDownload = useCallback(async () => {
+    const handleDownloadCurrentPage = useCallback(async () => {
+        if (!status || isDownloading) return;
+
+        setIsDownloading(true);
+        try {
+            const pageItems = items;
+            if (!pageItems || pageItems.length === 0) {
+                setError('No items available to download');
+                return;
+            }
+
+            const headers = [
+                'Snapshot Time',
+                'PO Number',
+                'SKU',
+                'Product Name',
+                'Brand',
+                'Store',
+                'Qty',
+                'Total Amount',
+                'Released',
+                'Sent',
+                'Approved',
+                'Arrived',
+                'Received',
+            ];
+
+            const escapeCsvValue = (value: string | number | null) => {
+                const stringValue = value === null ? '' : `${value}`;
+                if (/[",\n]/.test(stringValue)) {
+                    return `"${stringValue.replace(/"/g, '""')}"`;
+                }
+                return stringValue;
+            };
+
+            const rows = pageItems.map(item => [
+                formatDate(item.snapshot_time),
+                item.po_number,
+                item.sku,
+                item.product_name,
+                item.brand_name,
+                item.store_name,
+                item.po_qty,
+                item.total_amount,
+                formatDate(item.po_released_at),
+                formatDate(item.po_sent_at),
+                formatDate(item.po_approved_at),
+                formatDate(item.po_arrived_at),
+                formatDate(item.po_received_at),
+            ]);
+
+            const csvContent = [headers, ...rows]
+                .map(row => row.map(escapeCsvValue).join(','))
+                .join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const datePart = new Date().toISOString().split('T')[0];
+            link.download = `po-snapshot-page-${status}-${datePart}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Failed to download CSV', err);
+            setError('Failed to download CSV');
+        } finally {
+            setIsDownloading(false);
+        }
+    }, [status, isDownloading, items]);
+
+    const handleDownloadAll = useCallback(async () => {
         if (!status || isDownloading) return;
 
         setIsDownloading(true);
@@ -254,7 +331,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             const link = document.createElement('a');
             link.href = url;
             const datePart = new Date().toISOString().split('T')[0];
-            link.download = `po-snapshot-${status}-${datePart}.csv`;
+            link.download = `po-snapshot-all-${status}-${datePart}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -313,16 +390,28 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 Detailed breakdown of purchase orders currently in <span className="font-medium text-foreground">{status}</span> status.
                             </DialogDescription>
                         </DialogHeader>
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            className="gap-1 mt-1"
-                            onClick={handleDownload}
-                            disabled={loading || isDownloading || items.length === 0}
-                        >
-                            <Download className="h-4 w-4" />
-                            {isDownloading ? 'Downloading...' : 'Download CSV'}
-                        </Button>
+                        <div className="flex gap-2 mt-1">
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                className="gap-1"
+                                onClick={handleDownloadCurrentPage}
+                                disabled={loading || isDownloading || items.length === 0}
+                            >
+                                <Download className="h-4 w-4" />
+                                {isDownloading ? 'Downloading…' : 'Download page'}
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={handleDownloadAll}
+                                disabled={loading || isDownloading || (total === 0)}
+                            >
+                                <Download className="h-4 w-4" />
+                                {isDownloading ? 'Downloading…' : 'Download all'}
+                            </Button>
+                        </div>
                     </div>
 
                     {/* Global Stats Cards */}
