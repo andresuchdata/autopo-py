@@ -86,8 +86,12 @@ func SeedAnalyticsData(c *cli.Context) error {
 		log.Printf("Successfully reset tables: %v", tableNames)
 	}
 
-	// Initialize the analytics processor
-	processor := analytics.NewAnalyticsProcessor(db)
+	// Initialize the analytics processor with locale-based config only.
+	// For seeding, rely on ANALYTICS_LOCALE to keep behavior consistent
+	// with the standalone analytics command.
+	locale := os.Getenv("ANALYTICS_LOCALE")
+	parseCfg := analytics.ParseConfigFromOptions(locale)
+	processor := analytics.NewAnalyticsProcessor(db, parseCfg)
 
 	tasks := make([]analyticsTask, 0, 2)
 

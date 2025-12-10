@@ -165,6 +165,8 @@ export const getSupplierPOItems = async ({
 export interface DashboardSummaryParams {
     poType?: 'AU' | 'PO' | 'OTHERS';
     releasedDate?: string;
+    storeIds?: number[];
+    brandIds?: number[];
 }
 
 export const getDashboardSummary = async (params?: DashboardSummaryParams) => {
@@ -173,6 +175,8 @@ export const getDashboardSummary = async (params?: DashboardSummaryParams) => {
             params: {
                 po_type: params?.poType,
                 released_date: params?.releasedDate,
+                store_ids: params?.storeIds && params.storeIds.length > 0 ? params.storeIds.join(',') : undefined,
+                brand_ids: params?.brandIds && params.brandIds.length > 0 ? params.brandIds.join(',') : undefined,
             },
         });
         return response.data;
@@ -315,6 +319,8 @@ interface POSnapshotItemsParams {
     sortDirection?: 'asc' | 'desc';
     poType?: 'AU' | 'PO' | 'OTHERS';
     releasedDate?: string;
+    storeIds?: number[];
+    brandIds?: number[];
 }
 
 export const getPOSnapshotItems = async ({
@@ -325,6 +331,8 @@ export const getPOSnapshotItems = async ({
     sortDirection = 'asc',
     poType,
     releasedDate,
+    storeIds,
+    brandIds,
 }: POSnapshotItemsParams): Promise<POSnapshotItemsResponse> => {
     try {
         const response = await api.get('/po/analytics/items', {
@@ -336,6 +344,8 @@ export const getPOSnapshotItems = async ({
                 sort_direction: sortDirection,
                 po_type: poType,
                 released_date: releasedDate,
+                store_ids: storeIds && storeIds.length > 0 ? storeIds.join(',') : undefined,
+                brand_ids: brandIds && brandIds.length > 0 ? brandIds.join(',') : undefined,
             },
         });
         return response.data;
