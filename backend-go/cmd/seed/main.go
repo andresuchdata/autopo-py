@@ -326,7 +326,7 @@ func runAnalyticsSeeder(c *cli.Context) error {
 	}
 	defer cleanup()
 
-	if err := maybeResetDatabase(c, db); err != nil {
+	if _, err := maybeResetDatabase(c, db); err != nil {
 		return err
 	}
 
@@ -367,23 +367,23 @@ func runMigrations(ctx context.Context, db *sql.DB, dir string) error {
 	return nil
 }
 
-func maybeResetDatabase(c *cli.Context, db *sql.DB) error {
+func maybeResetDatabase(c *cli.Context, db *sql.DB) (bool, error) {
 	if !c.Bool("reset-db") {
-		return nil
+		return false, nil
 	}
 	if applied, ok := c.Context.Value(resetAppliedKey).(bool); ok && applied {
-		return nil
+		return true, nil
 	}
 	ctx := context.Background()
 	if err := dropDatabaseSchema(ctx, db); err != nil {
-		return err
+		return false, err
 	}
 	migrationsDir := c.String("migrations-dir")
 	if err := runMigrations(ctx, db, migrationsDir); err != nil {
-		return err
+		return false, err
 	}
 	c.Context = context.WithValue(c.Context, resetAppliedKey, true)
-	return nil
+	return true, nil
 }
 
 func main() {
@@ -575,7 +575,7 @@ func runSeeder(c *cli.Context) error {
 
 	ctx := c.Context
 
-	if err := maybeResetDatabase(c, db); err != nil {
+	if _, err := maybeResetDatabase(c, db); err != nil {
 		return err
 	}
 

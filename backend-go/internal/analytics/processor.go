@@ -257,14 +257,30 @@ type poSnapshotKey struct {
 func (p *AnalyticsProcessor) ProcessFile(ctx context.Context, filePath string) error {
 	log.Printf("Processing file: %s, directory: %s", filePath, filepath.Base(filepath.Dir(filePath)))
 
-	switch filepath.Base(filepath.Dir(filePath)) {
+	switch detectPipelineType(filePath) {
 	case "stock_health":
 		return p.processStockHealthFile(ctx, filePath)
 	case "po_snapshots":
 		return p.processPOSnapshotFile(ctx, filePath)
 	default:
-		return fmt.Errorf("unknown file type in directory: %s", filepath.Dir(filePath))
+		return fmt.Errorf("unknown file type in directory hierarchy: %s", filepath.Dir(filePath))
 	}
+}
+
+func detectPipelineType(path string) string {
+	dir := filepath.Dir(path)
+	for dir != "." && dir != string(filepath.Separator) {
+		base := filepath.Base(dir)
+		if base == "stock_health" || base == "po_snapshots" {
+			return base
+		}
+		next := filepath.Dir(dir)
+		if next == dir {
+			break
+		}
+		dir = next
+	}
+	return ""
 }
 
 // processStockHealthFile ingests stock health CSV data in batches with deduplication

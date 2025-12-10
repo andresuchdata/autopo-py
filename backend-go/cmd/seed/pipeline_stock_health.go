@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -132,13 +133,14 @@ func runStockHealthPipeline(c *cli.Context) error {
 	}
 	defer db.Close()
 
-	if err := maybeResetDatabase(c, db); err != nil {
+	didReset, err := maybeResetDatabase(c, db)
+	if err != nil {
 		return err
 	}
 
 	// Optionally run migrations (reusing runMigrations from main.go)
 	migrationsDir := c.String("migrations-dir")
-	if migrationsDir != "" {
+	if !didReset && migrationsDir != "" {
 		if _, err := os.Stat(migrationsDir); err == nil {
 			if err := runMigrations(ctx, db, migrationsDir); err != nil {
 				return err
@@ -170,11 +172,17 @@ func runStockHealthPipeline(c *cli.Context) error {
 	}
 	downloader := drive.NewDownloader(driveSvc)
 
-	log.Printf("Downloading stock health files from Drive folder %s to %s", folderID, downloadDir)
+	if snapshotDate != "" {
+		log.Printf("Downloading stock health of date '%s' from Drive folder %s to %s", snapshotDate, folderID, downloadDir)
+	} else {
+		log.Printf("Downloading stock health files from Drive folder %s to %s", folderID, downloadDir)
+	}
+
 	localFiles, err := downloader.DownloadFolderCSV(ctx, drive.DownloadOptions{
-		FolderID:    folderID,
-		DownloadDir: downloadDir,
-		DateLayout:  inputDateFormat,
+		FolderID:     folderID,
+		DownloadDir:  downloadDir,
+		DateLayout:   inputDateFormat,
+		SnapshotDate: snapshotDate,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to download files from Drive: %w", err)
@@ -184,9 +192,20 @@ func runStockHealthPipeline(c *cli.Context) error {
 		log.Println("No CSV files found in Drive folder; nothing to process")
 		return nil
 	}
-	// if snapshotDate is set, only process that file
+
 	if snapshotDate != "" {
-		localFiles = []string{snapshotDate}
+		filtered := make([]string, 0, len(localFiles))
+		for _, path := range localFiles {
+			base := filepath.Base(path)
+			if strings.HasPrefix(base, snapshotDate) {
+				filtered = append(filtered, path)
+			}
+		}
+		if len(filtered) == 0 {
+			log.Printf("No downloaded files matched snapshot date %s; nothing to process", snapshotDate)
+			return nil
+		}
+		localFiles = filtered
 	}
 
 	// Build stock health pipeline
