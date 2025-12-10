@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -292,11 +293,18 @@ func buildFilterHash(filter *domain.DashboardFilter) string {
 	if filter.ReleasedDate != "" {
 		parts = append(parts, "released_date="+strings.TrimSpace(filter.ReleasedDate))
 	}
+	if len(filter.StoreIDs) > 0 {
+		parts = append(parts, "store_ids="+joinInt64s(filter.StoreIDs))
+	}
+	if len(filter.BrandIDs) > 0 {
+		parts = append(parts, "brand_ids="+joinInt64s(filter.BrandIDs))
+	}
 
 	if len(parts) == 0 {
 		return "default"
 	}
 
+	sort.Strings(parts)
 	raw := strings.Join(parts, "|")
 	hash := sha1.Sum([]byte(raw))
 	return hex.EncodeToString(hash[:])
