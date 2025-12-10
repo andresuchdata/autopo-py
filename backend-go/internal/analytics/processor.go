@@ -19,6 +19,36 @@ import (
 	"github.com/lib/pq"
 )
 
+type Locale string
+
+const (
+	LocaleID Locale = "id"
+	LocaleUS Locale = "us"
+)
+
+type ParseConfig struct {
+	Locale  Locale
+	PODaily bool
+}
+
+func ParseConfigFromOptions(localeStr string, poDaily bool) ParseConfig {
+	loc := LocaleID
+	switch strings.ToLower(localeStr) {
+	case "us":
+		loc = LocaleUS
+	case "id", "":
+		loc = LocaleID
+	default:
+		log.Printf("unknown locale %q, defaulting to id", localeStr)
+		loc = LocaleID
+	}
+
+	return ParseConfig{
+		Locale:  loc,
+		PODaily: poDaily,
+	}
+}
+
 // EntityIDResolver handles ID lookups for various entities
 type EntityIDResolver struct {
 	db *sql.DB
@@ -86,13 +116,60 @@ func (r *EntityIDResolver) EnsureProduct(ctx context.Context, sku string) (int, 
 type AnalyticsProcessor struct {
 	db       *sql.DB
 	resolver *EntityIDResolver
+	cfg      ParseConfig
 }
 
-func NewAnalyticsProcessor(db *sql.DB) *AnalyticsProcessor {
+func NewAnalyticsProcessor(db *sql.DB, cfg ParseConfig) *AnalyticsProcessor {
 	return &AnalyticsProcessor{
 		db:       db,
 		resolver: NewEntityIDResolver(db),
+		cfg:      cfg,
 	}
+}
+
+func (p *AnalyticsProcessor) poTimeLayouts() []string {
+	var layouts []string
+
+	switch p.cfg.Locale {
+	case LocaleUS:
+		// US-style mm/dd
+		layouts = []string{
+			"1/2/06 15:04",
+			"1/2/2006 15:04",
+			"01/02/06 15:04",
+			"01/02/2006 15:04",
+			"1/2/06",
+			"1/2/2006",
+			"01/02/06",
+			"01/02/2006",
+		}
+	default:
+		// ID-style dd/mm (existing behavior)
+		layouts = []string{
+			"2/1/06 15:04",
+			"2/1/2006 15:04",
+			"02/01/06 15:04",
+			"02/01/2006 15:04",
+			"2/1/06",
+			"2/1/2006",
+			"02/01/06",
+			"02/01/2006",
+		}
+	}
+
+	iso := []string{
+		"2006-01-02 15:04",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+		time.RFC3339,
+	}
+
+	if p.cfg.PODaily {
+		// For PO daily files, strongly prefer strict ISO first
+		return append([]string{"2006-01-02 15:04"}, append(layouts, iso[1:]...)...)
+	}
+
+	return append(layouts, iso...)
 }
 
 const analyticsBatchSize = 1000
@@ -420,6 +497,7 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	supplierNames := make(map[string]string)
 
 	rowNum := 1 // Track row number for logging (header is row 1)
+	poTimeFormats := p.poTimeLayouts()
 	for {
 		record, err := reader.Read()
 		if err != nil {
@@ -499,11 +577,11 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 			unitPrice:        unitPrice,
 			totalAmount:      totalAmount,
 			status:           parseOptionalInt(record[colMap["Status"]]),
-			releasedAt:       parseNullableTime(record[colMap["PO Released"]]),
-			sentAt:           parseNullableTime(record[colMap["PO Sent"]]),
-			approvedAt:       parseNullableTime(record[colMap["PO Approved"]]),
-			arrivedAt:        parseNullableTime(record[colMap["PO Arrived"]]),
-			receivedAt:       parseNullableTime(record[colMap["PO Received"]]),
+			releasedAt:       parseNullableTime(record[colMap["PO Released"]], poTimeFormats),
+			sentAt:           parseNullableTime(record[colMap["PO Sent"]], poTimeFormats),
+			approvedAt:       parseNullableTime(record[colMap["PO Approved"]], poTimeFormats),
+			arrivedAt:        parseNullableTime(record[colMap["PO Arrived"]], poTimeFormats),
+			receivedAt:       parseNullableTime(record[colMap["PO Received"]], poTimeFormats),
 			quantityReceived: parseOptionalInt(record[colMap["Qty Received"]]),
 		})
 	}
@@ -689,7 +767,7 @@ func parseSnapshotTimeFromFilename(path string) (time.Time, error) {
 	return time.Parse("20060102", base[:8])
 }
 
-func parseNullableTime(value string) *time.Time {
+func parseNullableTime(value string, formats []string) *time.Time {
 	value = strings.TrimSpace(value)
 	if value == "" || value == "0000-00-00 00:00:00" {
 		return nil
@@ -697,20 +775,6 @@ func parseNullableTime(value string) *time.Time {
 
 	value = normalizeTimestampSeparators(value)
 
-	formats := []string{
-		"2/1/06 15:04",
-		"2/1/2006 15:04",
-		"02/01/06 15:04",
-		"02/01/2006 15:04",
-		"2/1/06",
-		"2/1/2006",
-		"02/01/06",
-		"02/01/2006",
-		"2006-01-02 15:04",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-		time.RFC3339,
-	}
 	for _, layout := range formats {
 		if t, err := time.Parse(layout, value); err == nil {
 			return &t

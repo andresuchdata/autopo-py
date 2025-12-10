@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/analytics"
@@ -86,8 +87,19 @@ func SeedAnalyticsData(c *cli.Context) error {
 		log.Printf("Successfully reset tables: %v", tableNames)
 	}
 
-	// Initialize the analytics processor
-	processor := analytics.NewAnalyticsProcessor(db)
+	// Initialize the analytics processor with locale/PO-daily config.
+	// For seeding, we currently rely on environment variables to keep the
+	// interface simple and consistent with the standalone analytics command.
+	locale := os.Getenv("ANALYTICS_LOCALE")
+	poDailyEnv := os.Getenv("ANALYTICS_PO_DAILY")
+	poDaily := false
+	if poDailyEnv != "" {
+		if b, err := strconv.ParseBool(poDailyEnv); err == nil {
+			poDaily = b
+		}
+	}
+	parseCfg := analytics.ParseConfigFromOptions(locale, poDaily)
+	processor := analytics.NewAnalyticsProcessor(db, parseCfg)
 
 	tasks := make([]analyticsTask, 0, 2)
 

@@ -77,7 +77,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isDownloading, setIsDownloading] = useState(false);
-    const { poTypeFilter, releasedDateFilter } = usePODashboardFilter();
+    const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter } = usePODashboardFilter();
 
     const statusColor = status ? getStatusColor(status) : '#6B7280';
 
@@ -91,6 +91,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             if (!status) return;
             setLoading(true);
             setError(null);
+
             try {
                 const response = await getPOSnapshotItems({
                     status,
@@ -100,6 +101,8 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                     sortDirection: sortDirectionValue,
                     poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
                     releasedDate: releasedDateFilter || undefined,
+                    storeIds: storeIdsFilter,
+                    brandIds: brandIdsFilter,
                 });
                 setItems(response.items ?? []);
                 setTotal(response.total ?? 0);
@@ -119,7 +122,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                 setLoading(false);
             }
         },
-        [status, poTypeFilter, releasedDateFilter]
+        [status, poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter]
     );
 
     useEffect(() => {
@@ -172,6 +175,8 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                 sortDirection,
                 poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
                 releasedDate: releasedDateFilter || undefined,
+                storeIds: storeIdsFilter,
+                brandIds: brandIdsFilter,
             });
 
             if (!response.items || response.items.length === 0) {
@@ -187,7 +192,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             dlPage += 1;
         }
         return aggregated;
-    }, [status, poTypeFilter, releasedDateFilter, sortField, sortDirection]);
+    }, [status, poTypeFilter, releasedDateFilter, sortField, sortDirection, storeIdsFilter, brandIdsFilter]);
 
     const handleDownload = useCallback(async () => {
         if (!status || isDownloading) return;
