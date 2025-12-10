@@ -115,7 +115,8 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
         if (!supplier) return [];
 
         const aggregated: SupplierPOItem[] = [];
-        const dlPageSize = 500;
+        // Backend caps page_size to 100; stay within that so we can reliably page through all results
+        const dlPageSize = 100;
         let dlPage = 1;
         let dlTotal = Infinity;
 
@@ -128,22 +129,96 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                 sortDirection: 'desc',
             });
 
-            if (!response.items || response.items.length === 0) {
+            const pageItems = response.items ?? [];
+            if (pageItems.length === 0) {
                 break;
             }
 
-            aggregated.push(...response.items);
+            aggregated.push(...pageItems);
             dlTotal = response.total ?? aggregated.length;
 
-            if (response.items.length < dlPageSize) {
+            if (aggregated.length >= dlTotal) {
                 break;
             }
+
             dlPage += 1;
         }
+
         return aggregated;
     }, [supplier]);
 
-    const handleDownload = useCallback(async () => {
+    const handleDownloadCurrentPage = useCallback(async () => {
+        if (!supplier || isDownloading) return;
+
+        setIsDownloading(true);
+        try {
+            const pageItems = items;
+            if (!pageItems || pageItems.length === 0) {
+                setError('No items available to download');
+                return;
+            }
+
+            const headers = [
+                'PO Number',
+                'SKU',
+                'Product Name',
+                'Brand',
+                'Supplier ID',
+                'Supplier Name',
+                'Lead Time (Days)',
+                'Released',
+                'Sent',
+                'Approved',
+                'Arrived',
+                'Received',
+            ];
+
+            const escapeCsvValue = (value: string | number | null) => {
+                const stringValue = value === null ? '' : `${value}`;
+                if (/[",\n]/.test(stringValue)) {
+                    return `"${stringValue.replace(/"/g, '""')}"`;
+                }
+                return stringValue;
+            };
+
+            const rows = pageItems.map(item => [
+                item.po_number,
+                item.sku,
+                item.product_name,
+                item.brand_name,
+                item.supplier_id,
+                item.supplier_name,
+                calculateLeadTime(item.po_arrived_at, item.po_sent_at).replace(' days', ''),
+                formatDate(item.po_released_at),
+                formatDate(item.po_sent_at),
+                formatDate(item.po_approved_at),
+                formatDate(item.po_arrived_at),
+                formatDate(item.po_received_at),
+            ]);
+
+            const csvContent = [headers, ...rows]
+                .map(row => row.map(escapeCsvValue).join(','))
+                .join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const datePart = new Date().toISOString().split('T')[0];
+            link.download = `supplier-po-page-${supplier.id}-${datePart}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Failed to download CSV', err);
+            setError('Failed to download CSV');
+        } finally {
+            setIsDownloading(false);
+        }
+    }, [supplier, isDownloading, items]);
+
+    const handleDownloadAll = useCallback(async () => {
         if (!supplier || isDownloading) return;
 
         setIsDownloading(true);
@@ -201,7 +276,7 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
             const link = document.createElement('a');
             link.href = url;
             const datePart = new Date().toISOString().split('T')[0];
-            link.download = `supplier-po-${supplier.id}-${datePart}.csv`;
+            link.download = `supplier-po-all-${supplier.id}-${datePart}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -227,16 +302,28 @@ export function SupplierPODialog({ supplier, open, onOpenChange }: SupplierPODia
                                 Detailed PO lines grouped by supplier. Includes SKU, brand, and PO lifecycle timestamps.
                             </DialogDescription>
                         </DialogHeader>
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            className="gap-1 mt-4 mr-4 sm:mr-0 ml-4"
-                            onClick={handleDownload}
-                            disabled={loading || isDownloading || items.length === 0}
-                        >
-                            <Download className="h-4 w-4" />
-                            {isDownloading ? 'Downloading...' : 'Download CSV'}
-                        </Button>
+                        <div className="flex gap-2 mt-4 mr-4 sm:mr-0 ml-4">
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                className="gap-1"
+                                onClick={handleDownloadCurrentPage}
+                                disabled={loading || isDownloading || items.length === 0}
+                            >
+                                <Download className="h-4 w-4" />
+                                {isDownloading ? 'Downloading…' : 'Download page'}
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={handleDownloadAll}
+                                disabled={loading || isDownloading || total === 0}
+                            >
+                                <Download className="h-4 w-4" />
+                                {isDownloading ? 'Downloading…' : 'Download all'}
+                            </Button>
+                        </div>
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
