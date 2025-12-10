@@ -115,6 +115,7 @@ type DashboardFilter struct {
 	ReleasedDate string  `json:"released_date"`
 	StoreIDs     []int64 `json:"store_ids"`
 	BrandIDs     []int64 `json:"brand_ids"`
+	SupplierIDs  []int64 `json:"supplier_ids"`
 }
 
 // POSnapshotItem represents a single PO snapshot item for the detail dialog

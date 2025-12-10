@@ -93,6 +93,21 @@ func (h *POHandler) GetBrands(c *gin.Context) {
 	c.JSON(http.StatusOK, brands)
 }
 
+// GetSuppliers returns a paginated list of suppliers with optional search
+func (h *POHandler) GetSuppliers(c *gin.Context) {
+	search := c.Query("search")
+	limit := parsePositiveIntWithDefault(c.Query("limit"), 50)
+	offset := parseNonNegativeInt(c.Query("offset"))
+
+	suppliers, err := h.poService.GetSuppliers(c.Request.Context(), search, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch suppliers"})
+		return
+	}
+
+	c.JSON(http.StatusOK, suppliers)
+}
+
 // GetSkus returns a list of SKUs with optional search
 func (h *POHandler) GetSkus(c *gin.Context) {
 	search := c.Query("search")
@@ -145,6 +160,7 @@ func (h *POHandler) parseDashboardFilter(c *gin.Context) *domain.DashboardFilter
 	releasedDate := strings.TrimSpace(c.Query("released_date"))
 	storeIDsParam := strings.TrimSpace(c.Query("store_ids"))
 	brandIDsParam := strings.TrimSpace(c.Query("brand_ids"))
+	supplierIDsParam := strings.TrimSpace(c.Query("supplier_ids"))
 
 	filter := &domain.DashboardFilter{}
 
@@ -178,9 +194,12 @@ func (h *POHandler) parseDashboardFilter(c *gin.Context) *domain.DashboardFilter
 	if brandIDs := parseInt64List(brandIDsParam); len(brandIDs) > 0 {
 		filter.BrandIDs = brandIDs
 	}
+	if supplierIDs := parseInt64List(supplierIDsParam); len(supplierIDs) > 0 {
+		filter.SupplierIDs = supplierIDs
+	}
 
 	// Return nil if no filters are actually set
-	if filter.POType == "" && filter.ReleasedDate == "" && len(filter.StoreIDs) == 0 && len(filter.BrandIDs) == 0 {
+	if filter.POType == "" && filter.ReleasedDate == "" && len(filter.StoreIDs) == 0 && len(filter.BrandIDs) == 0 && len(filter.SupplierIDs) == 0 {
 		return nil
 	}
 	return filter
