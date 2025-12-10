@@ -48,6 +48,7 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
   STOCK_HEALTH_DIR=${STOCK_HEALTH_DIR:-$SEED_DATA_DIR/stock_health}
   STOCK_HEALTH_FILE=${STOCK_HEALTH_FILE:-}
   PO_SNAPSHOTS_DIR=${PO_SNAPSHOTS_DIR:-$SEED_DATA_DIR/po_snapshots}
+  PO_SNAPSHOTS_FILE=${PO_SNAPSHOTS_FILE:-}
   MIGRATIONS_DIR=${MIGRATIONS_DIR:-/app/scripts/migrations}
   RESET_DB=${RESET_DB:-false}
   RESET_MASTER_SEED=${RESET_MASTER_SEED:-false}
@@ -88,6 +89,9 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
         if [ -n "$STOCK_HEALTH_FILE" ]; then
           set -- "$@" --stock-health-file "$STOCK_HEALTH_FILE"
         fi
+        if [ -n "$PO_SNAPSHOTS_FILE" ]; then
+          set -- "$@" --po-snapshots-file "$PO_SNAPSHOTS_FILE"
+        fi
         if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
           set -- "$@" --reset-analytics
         fi
@@ -111,6 +115,9 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
       (
         eval set -- $(build_common_args "analytics-po")
         set -- "$@" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
+        if [ -n "$PO_SNAPSHOTS_FILE" ]; then
+          set -- "$@" --po-snapshots-file "$PO_SNAPSHOTS_FILE"
+        fi
         if [ "$RESET_ANALYTICS_SEED" = "true" ]; then
           set -- "$@" --reset-analytics
         fi
@@ -123,6 +130,9 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
         set -- "$@" --data-dir "$MASTER_DATA_DIR" --stock-health-dir "$STOCK_HEALTH_DIR" --po-snapshots-dir "$PO_SNAPSHOTS_DIR"
         if [ -n "$STOCK_HEALTH_FILE" ]; then
           set -- "$@" --stock-health-file "$STOCK_HEALTH_FILE"
+        fi
+        if [ -n "$PO_SNAPSHOTS_FILE" ]; then
+          set -- "$@" --po-snapshots-file "$PO_SNAPSHOTS_FILE"
         fi
         if [ "$RESET_MASTER_SEED" = "true" ]; then
           set -- "$@" --reset-master

@@ -27,11 +27,10 @@ const (
 )
 
 type ParseConfig struct {
-	Locale  Locale
-	PODaily bool
+	Locale Locale
 }
 
-func ParseConfigFromOptions(localeStr string, poDaily bool) ParseConfig {
+func ParseConfigFromOptions(localeStr string) ParseConfig {
 	loc := LocaleID
 	switch strings.ToLower(localeStr) {
 	case "us":
@@ -43,10 +42,7 @@ func ParseConfigFromOptions(localeStr string, poDaily bool) ParseConfig {
 		loc = LocaleID
 	}
 
-	return ParseConfig{
-		Locale:  loc,
-		PODaily: poDaily,
-	}
+	return ParseConfig{Locale: loc}
 }
 
 // EntityIDResolver handles ID lookups for various entities
@@ -157,16 +153,12 @@ func (p *AnalyticsProcessor) poTimeLayouts() []string {
 		}
 	}
 
+	// Always also support ISO-like formats regardless of locale.
 	iso := []string{
 		"2006-01-02 15:04",
 		"2006-01-02 15:04:05",
 		"2006-01-02",
 		time.RFC3339,
-	}
-
-	if p.cfg.PODaily {
-		// For PO daily files, strongly prefer strict ISO first
-		return append([]string{"2006-01-02 15:04"}, append(layouts, iso[1:]...)...)
 	}
 
 	return append(layouts, iso...)
