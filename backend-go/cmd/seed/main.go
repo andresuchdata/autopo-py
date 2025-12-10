@@ -174,6 +174,11 @@ func analyticsFlags() []cli.Flag {
 			Value:   "./data/seeds/po_snapshots",
 			EnvVars: []string{"PO_SNAPSHOTS_DIR"},
 		},
+		&cli.StringFlag{
+			Name:    "po-snapshots-file",
+			Usage:   "Optional CSV filename or path (absolute or relative to po-snapshots-dir) to process; defaults to all files",
+			EnvVars: []string{"PO_SNAPSHOTS_FILE"},
+		},
 		&cli.BoolFlag{
 			Name:    "reset-analytics",
 			Usage:   "Truncate analytics tables before seeding",
@@ -517,6 +522,11 @@ func main() {
 						Usage:   "Directory containing PO snapshot CSV files",
 						Value:   "./data/seeds/po_snapshots",
 						EnvVars: []string{"PO_SNAPSHOTS_DIR"},
+					},
+					&cli.StringFlag{
+						Name:    "po-snapshots-file",
+						Usage:   "Optional CSV filename or path (absolute or relative to po-snapshots-dir) to process; defaults to all files",
+						EnvVars: []string{"PO_SNAPSHOTS_FILE"},
 					},
 					&cli.BoolFlag{
 						Name:    "reset-analytics",
