@@ -16,7 +16,10 @@ import (
 )
 
 const (
-	stockHealthSummaryKeyPrefix = "stock_health:summary"
+	// Bump version to v2 so we don't reuse old summary cache entries
+	// that were created before kategori_brand and other filters were
+	// included in the cache key hash.
+	stockHealthSummaryKeyPrefix = "stock_health:summary:v2"
 	stockHealthScanBatchSize    = 100
 )
 
