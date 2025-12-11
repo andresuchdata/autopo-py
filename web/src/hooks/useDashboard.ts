@@ -1,9 +1,9 @@
 // In useDashboard.ts
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStockData, type LabeledOption } from './useStockData';
-import { stockHealthService } from '@/services/stockHealthService';
 import { poService } from '@/services/api';
-import { useSkuOptions, type SkuOption } from './useSkuOptions';
+import { stockHealthService } from '@/services/stockHealthService';
+import { useSkuOptions } from './useSkuOptions';
 
 export interface DashboardFiltersState {
   brandIds: number[];
@@ -165,23 +165,15 @@ export function useDashboard() {
 
   const loadInitialData = useCallback(async () => {
     try {
-      const { latestDate } = await stockHealthService.getAvailableDatesWithLatest();
-
       const initialFilters = await ensureDefaultStoreSelection();
-
-      if (latestDate) {
-        setSelectedDate(latestDate);
-        await refresh(latestDate, {
-          brandIds: initialFilters.brandIds,
-          storeIds: initialFilters.storeIds,
-          skuCodes: initialFilters.skuCodes,
-          kategoriBrands: initialFilters.kategoriBrand,
-        });
-      }
+      const today = new Date().toISOString().split('T')[0];
+      const initialDate = availableDates[0] ?? today;
+      setSelectedDate(initialDate);
+      await refresh(initialDate, initialFilters);
     } catch (err) {
       console.error('Failed to load initial data:', err);
     }
-  }, [ensureDefaultStoreSelection, refresh]);
+  }, [availableDates, ensureDefaultStoreSelection, refresh]);
 
   useEffect(() => {
     if (!selectedDate) {

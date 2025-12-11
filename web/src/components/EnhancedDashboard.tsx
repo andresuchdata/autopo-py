@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from 'react';
+import { cn } from "@/lib/utils";
 import { ConditionKey, type ChartData } from '@/services/dashboardService';
 import { type StockHealthItemsResponse } from '@/services/stockHealthService';
 import { useDashboard } from '@/hooks/useDashboard';
@@ -136,20 +137,7 @@ export function EnhancedDashboard() {
   const storeBreakdown = data?.storeBreakdown ?? [];
   const overstockBreakdown = data?.overstockBreakdown ?? EMPTY_OVERSTOCK_BREAKDOWN;
 
-  // Show loading state if initial load and no data
-  if (loading && !data) {
-    return (
-      <div className="flex flex-col justify-center items-center h-[80vh] gap-4">
-        <div className="relative">
-          <div className="h-16 w-16 rounded-full border-4 border-muted border-t-primary animate-spin" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Package className="h-6 w-6 text-primary/40" />
-          </div>
-        </div>
-        <p className="text-muted-foreground animate-pulse font-medium">Loading inventory data...</p>
-      </div>
-    );
-  }
+  const isInitialLoading = loading && !data;
 
   if (error) {
     return <div className="text-destructive p-6 border border-destructive/20 rounded-xl bg-destructive/10 max-w-2xl mx-auto mt-20 text-center font-medium">Error: {error}</div>;
@@ -182,23 +170,33 @@ export function EnhancedDashboard() {
         )}
       </div>
 
-      <DashboardFilters
-        filters={filters}
-        onFilterChange={onFiltersChange}
-        brandOptions={brandOptions}
-        storeOptions={storeOptions}
-        kategoriBrandOptions={kategoriBrandOptions}
-        selectedDate={selectedDate}
-        availableDates={availableDates}
-        onDateChange={onDateChange}
-        skuOptions={skuOptions}
-        onSkuSearch={onSkuSearch}
-        skuSearchLoading={skuSearchLoading}
-        onSkuLoadMore={onSkuLoadMore}
-        skuHasMoreOptions={skuHasMoreOptions}
-        skuLoadMoreLoading={skuLoadMoreLoading}
-        resolveSkuOption={resolveSkuOption}
-      />
+      {isInitialLoading && (
+        <div className="flex w-full justify-center items-center gap-2 text-xs text-muted-foreground mb-2">
+          <div className="h-3 w-3 rounded-full border-2 border-muted border-t-primary animate-spin" />
+          <span>Loading inventory data...</span>
+        </div>
+      )}
+
+      <div className={cn(isInitialLoading && "pointer-events-none opacity-60 select-none")}
+      >
+        <DashboardFilters
+          filters={filters}
+          onFilterChange={onFiltersChange}
+          brandOptions={brandOptions}
+          storeOptions={storeOptions}
+          kategoriBrandOptions={kategoriBrandOptions}
+          selectedDate={selectedDate}
+          availableDates={availableDates}
+          onDateChange={onDateChange}
+          skuOptions={skuOptions}
+          onSkuSearch={onSkuSearch}
+          skuSearchLoading={skuSearchLoading}
+          onSkuLoadMore={onSkuLoadMore}
+          skuHasMoreOptions={skuHasMoreOptions}
+          skuLoadMoreLoading={skuLoadMoreLoading}
+          resolveSkuOption={resolveSkuOption}
+        />
+      </div>
 
       <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <section>
