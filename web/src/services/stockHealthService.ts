@@ -42,10 +42,6 @@ interface StockHealthSummary {
   total_value: number;
 }
 
-export interface TimeSeriesResponse {
-  [condition: string]: Array<{ date: string; count: number }>;
-}
-
 export interface ConditionBreakdownResponse {
   brand_id?: number;
   brand?: string;
@@ -59,7 +55,6 @@ export interface ConditionBreakdownResponse {
 
 export interface StockHealthDashboardResponse {
   summary: StockHealthSummary[];
-  time_series: TimeSeriesResponse;
   brand_breakdown: ConditionBreakdownResponse[];
   store_breakdown: ConditionBreakdownResponse[];
   overstock_breakdown: {
@@ -141,17 +136,7 @@ export const stockHealthService = {
     return response.data;
   },
 
-  async getTimeSeries(params: { stockDate: string; days?: number }): Promise<TimeSeriesResponse> {
-    const response = await api.get<TimeSeriesResponse>(`${ANALYTICS_BASE}/time_series`, {
-      params: {
-        stock_date: params.stockDate,
-        days: params.days ?? 30,
-      },
-    });
-    return response.data;
-  },
-
-  async getDashboard(params: { stockDate: string; brandIds?: number[]; storeIds?: number[]; skuCodes?: string[]; kategoriBrands?: string[]; days?: number }): Promise<StockHealthDashboardResponse> {
+  async getDashboard(params: { stockDate: string; brandIds?: number[]; kategoriBrands?: string[]; storeIds?: number[]; skuCodes?: string[]; days?: number }): Promise<StockHealthDashboardResponse> {
     const response = await api.get<StockHealthDashboardResponse>(`${ANALYTICS_BASE}/dashboard`, {
       params: {
         stock_date: params.stockDate,
