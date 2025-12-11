@@ -31,6 +31,7 @@ export interface DashboardFilters {
   brandIds?: number[];
   storeIds?: number[];
   skuCodes?: string[];
+  kategoriBrands?: string[];
 }
 
 export interface DashboardData {
@@ -85,7 +86,9 @@ export class DashboardService {
     const brandKey = filters?.brandIds?.join('-') || 'all';
     const storeKey = filters?.storeIds?.join('-') || 'all';
     const skuKey = filters?.skuCodes?.join('-') || 'all';
-    return `${date}-${brandKey}-${storeKey}-${skuKey}`;
+    const kategoriKey = filters?.kategoriBrands?.join('-') || 'all';
+
+    return `${date}-${brandKey}-${storeKey}-${skuKey}-${kategoriKey}`;
   }
 
   async getDashboardData(date: string, filters?: DashboardFilters): Promise<DashboardData> {
@@ -102,6 +105,7 @@ export class DashboardService {
         brandIds: filters?.brandIds,
         storeIds: filters?.storeIds,
         skuCodes: filters?.skuCodes,
+        kategoriBrands: filters?.kategoriBrands,
       });
 
       const transformed = this.transformDashboardResponse(response);

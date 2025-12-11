@@ -9,9 +9,10 @@ export interface DashboardFiltersState {
   brandIds: number[];
   storeIds: number[];
   skuCodes: string[];
+  kategoriBrand: string[];
 }
 
-const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [], skuCodes: [] };
+const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [], skuCodes: [], kategoriBrand: [] };
 const DEFAULT_STORE_NAME = 'miss glam padang';
 
 export function useDashboard() {
@@ -19,6 +20,7 @@ export function useDashboard() {
   const [filters, setFilters] = useState<DashboardFiltersState>(DEFAULT_FILTERS);
   const [masterBrandOptions, setMasterBrandOptions] = useState<LabeledOption[]>([]);
   const [masterStoreOptions, setMasterStoreOptions] = useState<LabeledOption[]>([]);
+  const [kategoriBrandOptions, setKategoriBrandOptions] = useState<string[]>([]);
   const filtersChangedRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
@@ -141,11 +143,19 @@ export function useDashboard() {
         if (storeOpts.length > 0) {
           setMasterStoreOptions(storeOpts);
         }
+
+        // Fetch kategori brand options from analytics API
+        try {
+          const kategoriList = await stockHealthService.getKategoriBrands();
+          if (isMounted && Array.isArray(kategoriList) && kategoriList.length > 0) {
+            setKategoriBrandOptions(kategoriList);
+          }
+        } catch (kategoriErr) {
+        }
       } catch (err) {
         console.error('Failed to fetch master data for dashboard filters:', err);
       }
     };
-
     fetchMasterData();
 
     return () => {
@@ -161,7 +171,12 @@ export function useDashboard() {
 
       if (latestDate) {
         setSelectedDate(latestDate);
-        await refresh(latestDate, initialFilters);
+        await refresh(latestDate, {
+          brandIds: initialFilters.brandIds,
+          storeIds: initialFilters.storeIds,
+          skuCodes: initialFilters.skuCodes,
+          kategoriBrands: initialFilters.kategoriBrand,
+        });
       }
     } catch (err) {
       console.error('Failed to load initial data:', err);
@@ -176,7 +191,12 @@ export function useDashboard() {
 
   const handleDateChange = useCallback(async (newDate: string) => {
     setSelectedDate(newDate);
-    await refresh(newDate, filters);
+    await refresh(newDate, {
+      brandIds: filters.brandIds,
+      storeIds: filters.storeIds,
+      skuCodes: filters.skuCodes,
+      kategoriBrands: filters.kategoriBrand,
+    });
   }, [filters, refresh]);
 
   const handleFilterChange = useCallback(async (nextFilters: DashboardFiltersState) => {
@@ -210,7 +230,12 @@ export function useDashboard() {
     }
 
     debounceRef.current = setTimeout(() => {
-      refresh(selectedDate, filters).catch((err) => {
+      refresh(selectedDate, {
+        brandIds: filters.brandIds,
+        storeIds: filters.storeIds,
+        skuCodes: filters.skuCodes,
+        kategoriBrands: filters.kategoriBrand,
+      }).catch((err) => {
         console.error('Failed to refresh dashboard after filter change:', err);
       });
       filtersChangedRef.current = false;
@@ -225,7 +250,13 @@ export function useDashboard() {
 
   const refreshSelected = useCallback(() => {
     if (!selectedDate) return Promise.resolve(null);
-    return refresh(selectedDate, filters);
+
+    return refresh(selectedDate, {
+      brandIds: filters.brandIds,
+      storeIds: filters.storeIds,
+      skuCodes: filters.skuCodes,
+      kategoriBrands: filters.kategoriBrand,
+    });
   }, [filters, refresh, selectedDate]);
 
   return {
@@ -237,6 +268,7 @@ export function useDashboard() {
     filters,
     brandOptions,
     storeOptions,
+    kategoriBrandOptions,
     skuOptions,
     availableDates,
     onDateChange: handleDateChange,

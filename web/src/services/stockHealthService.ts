@@ -77,6 +77,7 @@ export interface StockHealthFilterParams {
   brandIds?: number[];
   storeIds?: number[];
   skuCodes?: string[];
+  kategoriBrands?: string[];
   grouping?: SummaryGrouping;
   sortField?: StockItemsSortField;
   sortDirection?: SortDirection;
@@ -97,6 +98,9 @@ export const stockHealthService = {
         brand_ids: serializeIds(params.brandIds),
         store_ids: serializeIds(params.storeIds),
         sku_ids: serializeStrings(params.skuCodes),
+        kategori_brand: params.kategoriBrands && params.kategoriBrands.length > 0
+          ? params.kategoriBrands.map((v) => v.toUpperCase()).join(',')
+          : undefined,
         grouping: params.grouping,
         sort_field: params.sortField,
         sort_direction: params.sortDirection,
@@ -146,7 +150,7 @@ export const stockHealthService = {
     return response.data;
   },
 
-  async getDashboard(params: { stockDate: string; brandIds?: number[]; storeIds?: number[]; skuCodes?: string[]; days?: number }): Promise<StockHealthDashboardResponse> {
+  async getDashboard(params: { stockDate: string; brandIds?: number[]; storeIds?: number[]; skuCodes?: string[]; kategoriBrands?: string[]; days?: number }): Promise<StockHealthDashboardResponse> {
     const response = await api.get<StockHealthDashboardResponse>(`${ANALYTICS_BASE}/dashboard`, {
       params: {
         stock_date: params.stockDate,
@@ -154,8 +158,16 @@ export const stockHealthService = {
         brand_ids: serializeIds(params.brandIds),
         store_ids: serializeIds(params.storeIds),
         sku_ids: serializeStrings(params.skuCodes),
+        kategori_brand: params.kategoriBrands && params.kategoriBrands.length > 0
+          ? params.kategoriBrands.map((v) => v.toUpperCase()).join(',')
+          : undefined,
       },
     });
     return response.data;
+  },
+
+  async getKategoriBrands(): Promise<string[]> {
+    const response = await api.get<{ kategori_brands: string[] }>(`${ANALYTICS_BASE}/kategori_brands`);
+    return response.data?.kategori_brands ?? [];
   },
 };

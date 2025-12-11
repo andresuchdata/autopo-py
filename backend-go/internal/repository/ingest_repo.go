@@ -123,7 +123,7 @@ func (r *IngestRepository) UpsertProduct(ctx context.Context, product *domain.Pr
 func (r *IngestRepository) InsertDailyStockData(ctx context.Context, data *domain.DailyStockData) error {
 	query := `
 		INSERT INTO daily_stock_data (
-			date, store_id, product_id, stock, daily_sales, max_daily_sales,
+			date, store_id, product_id, kategori_brand, stock, daily_sales, max_daily_sales,
 			orig_daily_sales, orig_max_daily_sales, lead_time, max_lead_time,
 			min_order, is_in_padang, safety_stock, reorder_point,
 			sedang_po, is_open_po, initial_qty_po, emergency_po_qty,
@@ -133,9 +133,10 @@ func (r *IngestRepository) InsertDailyStockData(ctx context.Context, data *domai
 			target_days, target_days_cover, daily_stock_cover
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
 		)
 		ON CONFLICT (date, store_id, product_id) DO UPDATE SET
+			kategori_brand = EXCLUDED.kategori_brand,
 			stock = EXCLUDED.stock,
 			daily_sales = EXCLUDED.daily_sales,
 			max_daily_sales = EXCLUDED.max_daily_sales,
@@ -163,7 +164,7 @@ func (r *IngestRepository) InsertDailyStockData(ctx context.Context, data *domai
 			daily_stock_cover = EXCLUDED.daily_stock_cover
 	`
 	_, err := r.db.ExecContext(ctx, query,
-		data.Date, data.StoreID, data.ProductID, data.Stock, data.DailySales, data.MaxDailySales,
+		data.Date, data.StoreID, data.ProductID, data.KategoriBrand, data.Stock, data.DailySales, data.MaxDailySales,
 		data.OrigDailySales, data.OrigMaxDailySales, data.LeadTime, data.MaxLeadTime,
 		data.MinOrder, data.IsInPadang, data.SafetyStock, data.ReorderPoint,
 		data.SedangPO, data.IsOpenPO, data.InitialQtyPO, data.EmergencyPOQty,
