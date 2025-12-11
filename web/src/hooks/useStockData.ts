@@ -63,25 +63,12 @@ export function useStockData() {
   );
 
   useEffect(() => {
-    const fetchDates = async () => {
-      try {
-        const { dates } = await stockHealthService.getAvailableDatesWithLatest();
-        const normalizedDates = ensureDateCoverage(dates);
-        setAvailableDates(normalizedDates);
-
-        if (dates.length === 0 && normalizedDates.length > 0) {
-          setLastDate((prev) => prev ?? normalizedDates[0]);
-        }
-      } catch (err) {
-        console.error('Failed to fetch available dates:', err);
-        const fallbackDates = generateFallbackDates(MIN_DATE_OPTIONS);
-        setAvailableDates(fallbackDates);
-        if (fallbackDates.length > 0) {
-          setLastDate((prev) => prev ?? fallbackDates[0]);
-        }
-      }
-    };
-    fetchDates();
+    const fallbackDates = generateFallbackDates(MIN_DATE_OPTIONS);
+    const normalizedDates = ensureDateCoverage(fallbackDates);
+    setAvailableDates(normalizedDates);
+    if (normalizedDates.length > 0) {
+      setLastDate((prev) => prev ?? normalizedDates[0]);
+    }
   }, [ensureDateCoverage, generateFallbackDates]);
 
   const refresh = useCallback(async (date: string, filters?: DashboardFilters) => {
