@@ -197,6 +197,7 @@ func (s *IngestService) processRow(ctx context.Context, record []string, colMap 
 		Date:                      date,
 		StoreID:                   dbStoreID,
 		ProductID:                 dbProductID,
+		KategoriBrand:             getValue("Kategori Brand"),
 		Stock:                     getInt("stock"),
 		DailySales:                getFloat("Daily Sales"),
 		MaxDailySales:             getFloat("Max. Daily Sales"),

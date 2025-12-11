@@ -451,6 +451,22 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 		idx++
 	}
 
+	if len(filter.KategoriBrand) > 0 {
+		upperVals := make([]string, 0, len(filter.KategoriBrand))
+		for _, v := range filter.KategoriBrand {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			upperVals = append(upperVals, strings.ToUpper(v))
+		}
+		if len(upperVals) > 0 {
+			conditions = append(conditions, fmt.Sprintf("UPPER(%s.kategori_brand) = ANY($%d::text[])", alias, idx))
+			args = append(args, pq.Array(upperVals))
+			idx++
+		}
+	}
+
 	if filter.StockDate != "" {
 		conditions = append(conditions, fmt.Sprintf("%s.\"time\"::date = $%d::date", alias, idx))
 		args = append(args, filter.StockDate)
