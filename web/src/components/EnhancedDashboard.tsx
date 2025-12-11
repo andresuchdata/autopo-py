@@ -64,6 +64,7 @@ export function EnhancedDashboard() {
     filters,
     brandOptions,
     storeOptions,
+    kategoriBrandOptions,
     availableDates,
     onDateChange,
     onFiltersChange,
@@ -186,6 +187,7 @@ export function EnhancedDashboard() {
         onFilterChange={onFiltersChange}
         brandOptions={brandOptions}
         storeOptions={storeOptions}
+        kategoriBrandOptions={kategoriBrandOptions}
         selectedDate={selectedDate}
         availableDates={availableDates}
         onDateChange={onDateChange}

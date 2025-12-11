@@ -16,7 +16,10 @@ import (
 )
 
 const (
-	stockHealthSummaryKeyPrefix = "stock_health:summary"
+	// Bump version to v2 so we don't reuse old summary cache entries
+	// that were created before kategori_brand and other filters were
+	// included in the cache key hash.
+	stockHealthSummaryKeyPrefix = "stock_health:summary:v2"
 	stockHealthScanBatchSize    = 100
 )
 
@@ -139,6 +142,24 @@ func stockHealthFilterHash(filter domain.StockHealthFilter) string {
 	}
 	if len(filter.SKUIds) > 0 {
 		parts = append(parts, "sku_ids="+joinStrings(filter.SKUIds))
+	}
+
+	// Include kategori_brand values so different kategori filters don't share the same cache entry
+	if len(filter.KategoriBrand) > 0 {
+		// Normalize: trim and uppercase values, then sort for stable hashing
+		normalized := make([]string, 0, len(filter.KategoriBrand))
+		for _, v := range filter.KategoriBrand {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+
+			normalized = append(normalized, strings.ToUpper(v))
+		}
+		if len(normalized) > 0 {
+			sort.Strings(normalized)
+			parts = append(parts, "kategori_brand="+strings.Join(normalized, ","))
+		}
 	}
 
 	if filter.DailyCoverMin != nil {
