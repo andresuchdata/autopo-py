@@ -59,6 +59,7 @@ type StockHealth struct {
 	ProductName     string    `json:"product_name" db:"product_name"`
 	BrandID         int64     `json:"brand_id" db:"brand_id"`
 	BrandName       string    `json:"brand_name" db:"brand_name"`
+	KategoriBrand   string    `json:"kategori_brand" db:"kategori_brand"`
 	CurrentStock    int       `json:"current_stock" db:"current_stock"`
 	DailySales      float64   `json:"daily_sales" db:"daily_sales"`
 	DailyStockCover float64   `json:"daily_stock_cover" db:"daily_stock_cover"`
