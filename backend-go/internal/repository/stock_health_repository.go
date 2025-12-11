@@ -371,8 +371,26 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 }
 
 func (r *stockHealthRepository) GetTimeSeriesData(ctx context.Context, days int, filter domain.StockHealthFilter) (map[string][]domain.TimeSeriesData, error) {
+	if days <= 0 {
+		days = 30
+	}
+
+	// Anchor the time series window to the selected stock_date when provided,
+	// otherwise fall back to current_date. We also deliberately ignore the
+	// StockDate filter when building the clause so the series is not collapsed
+	// to a single day.
+	anchorDateExpr := "current_date"
 	args := []interface{}{days - 1}
-	filterClause, filterArgs, _ := buildFilterClause(filter, "dsd", 2, false)
+	startIdx := 2
+	if filter.StockDate != "" {
+		anchorDateExpr = "$2::date"
+		args = []interface{}{days - 1, filter.StockDate}
+		startIdx = 3
+	}
+
+	filterNoDate := filter
+	filterNoDate.StockDate = ""
+	filterClause, filterArgs, _ := buildFilterClause(filterNoDate, "dsd", startIdx, false)
 	args = append(args, filterArgs...)
 
 	query := fmt.Sprintf(`
@@ -381,10 +399,11 @@ func (r *stockHealthRepository) GetTimeSeriesData(ctx context.Context, days int,
 				dsd."time"::date AS stock_date,
 				%s AS stock_condition
 			FROM daily_stock_data dsd
-			WHERE dsd."time"::date >= (current_date - ($1::int * INTERVAL '1 day'))%s
+			WHERE dsd."time"::date >= (%s - ($1::int * INTERVAL '1 day'))
+				AND dsd."time"::date <= %s%s
 		),
 		dates AS (
-			SELECT date_trunc('day', current_date - (n * INTERVAL '1 day')) AS date
+			SELECT date_trunc('day', %s - (n * INTERVAL '1 day')) AS date
 			FROM generate_series(0, $1::int) n
 		),
 		daily_counts AS (
@@ -399,7 +418,7 @@ func (r *stockHealthRepository) GetTimeSeriesData(ctx context.Context, days int,
 		FROM dates d
 		LEFT JOIN daily_counts dc ON d.date = dc.stock_date
 		ORDER BY d.date, dc.stock_condition
-	`, stockConditionExpression("dsd"), filterClause)
+	`, stockConditionExpression("dsd"), anchorDateExpr, anchorDateExpr, filterClause, anchorDateExpr)
 
 	rows, err := r.db.QueryxContext(ctx, query, args...)
 	if err != nil {

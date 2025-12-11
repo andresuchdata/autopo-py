@@ -115,7 +115,6 @@ export class DashboardService {
   private transformDashboardResponse(response: StockHealthDashboardResponse): DashboardData {
     const normalizedResponse: StockHealthDashboardResponse = {
       summary: Array.isArray(response.summary) ? response.summary : [],
-      time_series: response.time_series ?? {},
       brand_breakdown: Array.isArray(response.brand_breakdown) ? response.brand_breakdown : [],
       store_breakdown: Array.isArray(response.store_breakdown) ? response.store_breakdown : [],
       overstock_breakdown: Array.isArray(response.overstock_breakdown) ? response.overstock_breakdown : [],
