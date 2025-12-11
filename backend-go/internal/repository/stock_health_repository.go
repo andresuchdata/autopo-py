@@ -226,6 +226,7 @@ func (r *stockHealthRepository) getSkuStockItems(ctx context.Context, filter dom
 			COALESCE(pr.name, '') AS product_name,
 			dsd.brand_id,
 			COALESCE(br.name, '') AS brand_name,
+			COALESCE(dsd.kategori_brand, '') AS kategori_brand,
 			COALESCE(dsd.stock, 0) AS current_stock,
 			COALESCE(dsd.daily_sales, 0) AS daily_sales,
 			%s AS daily_stock_cover,
@@ -282,6 +283,7 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				COALESCE(br.name, '') AS brand_name,
 				COALESCE(dsd.store_id, 0) AS store_id,
 				COALESCE(st.name, '') AS store_name,
+				COALESCE(dsd.kategori_brand, '') AS kategori_brand,
 				%s AS total_stock,
 				%s AS total_daily_sales,
 				SUM(GREATEST(COALESCE(dsd.stock, 0), 0) * COALESCE(dsd.hpp, 0)) AS total_value,
@@ -299,7 +301,8 @@ func (r *stockHealthRepository) getStoreScopedAggregatedStockItems(ctx context.C
 				dsd.brand_id,
 				br.name,
 				COALESCE(dsd.store_id, 0),
-				COALESCE(st.name, '')
+				COALESCE(st.name, ''),
+				COALESCE(dsd.kategori_brand, '')
 		)
 	`, sumStockExpr, sumSalesExpr, dailyCoverExpr, conditionExpr, filterClause)
 
@@ -449,6 +452,22 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 		conditions = append(conditions, fmt.Sprintf("%s.brand_id = ANY($%d::bigint[])", alias, idx))
 		args = append(args, pq.Array(filter.BrandIDs))
 		idx++
+	}
+
+	if len(filter.KategoriBrand) > 0 {
+		upperVals := make([]string, 0, len(filter.KategoriBrand))
+		for _, v := range filter.KategoriBrand {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			upperVals = append(upperVals, strings.ToUpper(v))
+		}
+		if len(upperVals) > 0 {
+			conditions = append(conditions, fmt.Sprintf("UPPER(%s.kategori_brand) = ANY($%d::text[])", alias, idx))
+			args = append(args, pq.Array(upperVals))
+			idx++
+		}
 	}
 
 	if filter.StockDate != "" {

@@ -32,6 +32,7 @@ interface DashboardFiltersProps {
     onFilterChange: (filters: DashboardFiltersState) => void;
     brandOptions: LabeledOption[];
     storeOptions: LabeledOption[];
+    kategoriBrandOptions: string[];
     selectedDate: string | null;
     availableDates: string[];
     onDateChange: (date: string) => void;
@@ -315,6 +316,7 @@ export function DashboardFilters({
     onFilterChange,
     brandOptions,
     storeOptions,
+    kategoriBrandOptions,
     selectedDate,
     availableDates,
     onDateChange,
@@ -339,6 +341,11 @@ export function DashboardFilters({
             .filter((opt) => opt.id !== null)
             .map((opt) => ({ id: opt.id!, label: opt.name, name: opt.name })),
         [brandOptions]
+    );
+
+    const kategoriBrandFilterOptions = useMemo<FilterOption<string>[]>(
+        () => kategoriBrandOptions.map((name) => ({ id: name, label: name, name })),
+        [kategoriBrandOptions]
     );
 
     // Convert SkuOption to FilterOption format
@@ -422,6 +429,24 @@ export function DashboardFilters({
 
                 <div className="flex flex-col gap-2">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Tag size={14} className="text-primary/70" /> Kategori Brand
+                    </Label>
+                    <GenericFilter<string>
+                        mode="multi"
+                        options={kategoriBrandFilterOptions}
+                        selected={filters.kategoriBrand}
+                        onChange={(value) => {
+                            const kategori = (value ?? []) as string[];
+                            onFilterChange({ ...filters, kategoriBrand: kategori });
+                        }}
+                        placeholder="All Kategori Brand"
+                        searchPlaceholder="Search kategori brand..."
+                        emptyMessage="No kategori brand found."
+                    />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                         <Barcode size={14} className="text-primary/70" /> SKU
                     </Label>
                     <GenericFilter<string>
@@ -454,7 +479,7 @@ export function DashboardFilters({
             <div className="flex items-end pt-1 xl:pt-0">
                 <Button
                     variant="ghost"
-                    onClick={() => onFilterChange({ brandIds: [], storeIds: [], skuCodes: [] })}
+                    onClick={() => onFilterChange({ brandIds: [], storeIds: [], skuCodes: [], kategoriBrand: [] })}
                     className="w-full xl:w-auto whitespace-nowrap text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-12"
                 >
                     <X size={16} className="mr-2" /> Clear All
