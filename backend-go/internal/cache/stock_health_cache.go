@@ -141,6 +141,24 @@ func stockHealthFilterHash(filter domain.StockHealthFilter) string {
 		parts = append(parts, "sku_ids="+joinStrings(filter.SKUIds))
 	}
 
+	// Include kategori_brand values so different kategori filters don't share the same cache entry
+	if len(filter.KategoriBrand) > 0 {
+		// Normalize: trim and uppercase values, then sort for stable hashing
+		normalized := make([]string, 0, len(filter.KategoriBrand))
+		for _, v := range filter.KategoriBrand {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+
+			normalized = append(normalized, strings.ToUpper(v))
+		}
+		if len(normalized) > 0 {
+			sort.Strings(normalized)
+			parts = append(parts, "kategori_brand="+strings.Join(normalized, ","))
+		}
+	}
+
 	if filter.DailyCoverMin != nil {
 		parts = append(parts, fmt.Sprintf("daily_cover_min=%.2f", *filter.DailyCoverMin))
 	}
