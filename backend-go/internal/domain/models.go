@@ -59,6 +59,7 @@ type StockHealth struct {
 	ProductName     string    `json:"product_name" db:"product_name"`
 	BrandID         int64     `json:"brand_id" db:"brand_id"`
 	BrandName       string    `json:"brand_name" db:"brand_name"`
+	KategoriBrand   string    `json:"kategori_brand" db:"kategori_brand"`
 	CurrentStock    int       `json:"current_stock" db:"current_stock"`
 	DailySales      float64   `json:"daily_sales" db:"daily_sales"`
 	DailyStockCover float64   `json:"daily_stock_cover" db:"daily_stock_cover"`
@@ -99,6 +100,7 @@ type StockHealthFilter struct {
 	StoreIDs       []int64  `json:"store_ids"`
 	SKUIds         []string `json:"sku_ids"`
 	BrandIDs       []int64  `json:"brand_ids"`
+	KategoriBrand  []string `json:"kategori_brand"`
 	Condition      string   `json:"condition"`
 	StockDate      string   `json:"stock_date"`
 	Page           int      `json:"page"`
@@ -169,6 +171,7 @@ type DailyStockData struct {
 	Date                      time.Time `json:"date" db:"date"`
 	StoreID                   int64     `json:"store_id" db:"store_id"`
 	ProductID                 int64     `json:"product_id" db:"product_id"`
+	KategoriBrand             string    `json:"kategori_brand" db:"kategori_brand"`
 	Stock                     int       `json:"stock" db:"stock"`
 	DailySales                float64   `json:"daily_sales" db:"daily_sales"`
 	MaxDailySales             float64   `json:"max_daily_sales" db:"max_daily_sales"`

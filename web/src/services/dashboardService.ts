@@ -31,6 +31,7 @@ export interface DashboardFilters {
   brandIds?: number[];
   storeIds?: number[];
   skuCodes?: string[];
+  kategoriBrands?: string[];
 }
 
 export interface DashboardData {
@@ -85,28 +86,22 @@ export class DashboardService {
     const brandKey = filters?.brandIds?.join('-') || 'all';
     const storeKey = filters?.storeIds?.join('-') || 'all';
     const skuKey = filters?.skuCodes?.join('-') || 'all';
-    return `${date}-${brandKey}-${storeKey}-${skuKey}`;
+    const kategoriKey = filters?.kategoriBrands?.join('-') || 'all';
+
+    return `${date}-${brandKey}-${storeKey}-${skuKey}-${kategoriKey}`;
   }
 
   async getDashboardData(date: string, filters?: DashboardFilters): Promise<DashboardData> {
-    const cacheKey = this.getCacheKey(date, filters);
-    const cachedData = this.cache.get(cacheKey);
-
-    if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL_MS) {
-      return cachedData.data;
-    }
-
     try {
       const response = await stockHealthService.getDashboard({
         stockDate: date,
         brandIds: filters?.brandIds,
         storeIds: filters?.storeIds,
         skuCodes: filters?.skuCodes,
+        kategoriBrands: filters?.kategoriBrands,
       });
 
-      const transformed = this.transformDashboardResponse(response);
-      this.cache.set(cacheKey, { data: transformed, timestamp: Date.now() });
-      return transformed;
+      return this.transformDashboardResponse(response);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       throw error;
