@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"os"
@@ -15,6 +16,7 @@ import (
 	stockhealth "github.com/andresuchdata/autopo-py/backend-go/internal/pipeline/stock_health"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/urfave/cli/v2"
+	"github.com/xuri/excelize/v2"
 )
 
 // rewrite using format StoreContribution for mapping below
@@ -122,6 +124,11 @@ func stockHealthPipelineFlags() []cli.Flag {
 			Value:   runtime.NumCPU(),
 			EnvVars: []string{"PIPELINE_WORKERS"},
 		},
+		&cli.StringFlag{
+			Name:    "supplier-file",
+			Usage:   "Path to supplier master file (CSV or XLSX). If empty, falls back to suppliers.xlsx or suppliers.csv in data/pipeline/stock_health",
+			EnvVars: []string{"STOCK_HEALTH_SUPPLIER_FILE"},
+		},
 	}
 }
 
@@ -224,14 +231,51 @@ func runStockHealthPipeline(c *cli.Context) error {
 		localFiles = filtered
 	}
 
+	// Load special SKUs that should use 60 days cover (default is 30)
+	dataRoot := filepath.Join("data", "pipeline", "stock_health")
+	specialSKUsPath := filepath.Join(dataRoot, "special_sku_60.csv")
+	specialSKUs, err := loadSpecialSKUs(specialSKUsPath)
+	if err != nil {
+		log.Printf("warning: failed to load special SKUs from %s: %v (falling back to default 30 days cover)", specialSKUsPath, err)
+		specialSKUs = map[string]bool{}
+	}
+
+	// Load supplier master data (optional). Source can be specified via flag/env,
+	// otherwise we fall back to suppliers.xlsx or suppliers.csv under dataRoot.
+	supplierFile := c.String("supplier-file")
+	if strings.TrimSpace(supplierFile) == "" {
+		// Prefer XLSX, then CSV
+		defaultXLSX := filepath.Join(dataRoot, "suppliers.xlsx")
+		defaultCSV := filepath.Join(dataRoot, "suppliers.csv")
+		if _, err := os.Stat(defaultXLSX); err == nil {
+			supplierFile = defaultXLSX
+		} else if _, err := os.Stat(defaultCSV); err == nil {
+			supplierFile = defaultCSV
+		}
+	}
+
+	var supplierData []stockhealth.SupplierData
+	if strings.TrimSpace(supplierFile) != "" {
+		loaded, err := loadSupplierData(supplierFile)
+		if err != nil {
+			log.Printf("warning: failed to load supplier data from %s: %v (continuing without supplier merge)", supplierFile, err)
+		} else {
+			supplierData = loaded
+			log.Printf("Loaded %d supplier rows from %s", len(supplierData), supplierFile)
+		}
+	} else {
+		log.Printf("No supplier file specified and no default suppliers.xlsx/csv found under %s; continuing without supplier merge", dataRoot)
+	}
+
 	// Build stock health pipeline
 	stockCfg := stockhealth.Config{
-		SpecialSKUs:        map[string]bool{},   // can be configured later
-		SupplierData:       nil,                 // TODO: wire supplier data in a later iteration
-		StoreContributions: STORE_CONTRIBUTIONS, // TODO: wire contribution data in a later iteration
+		SpecialSKUs:        specialSKUs,
+		SupplierData:       supplierData,
+		StoreContributions: STORE_CONTRIBUTIONS,
 		PadangStoreName:    "Miss Glam Padang",
 		InputDateFormat:    inputDateFormat,
 		OutputDir:          outputDir,
+		DownloadDir:        downloadDir,
 		IntermediateDir:    intermediateDir,
 		PersistMergedOnly:  true,
 		PersistDebugLayers: persistDebug,
@@ -253,4 +297,202 @@ func runStockHealthPipeline(c *cli.Context) error {
 
 	log.Println("Stock health pipeline completed successfully")
 	return nil
+}
+
+// loadSpecialSKUs reads a semicolon-delimited CSV of SKUs that require 60 days cover.
+// Expected format (with header):
+//
+//	SKU;Nama Produk;
+//	8999...;Some product;
+func loadSpecialSKUs(path string) (map[string]bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	r.Comma = ';'
+	r.TrimLeadingSpace = true
+
+	// skip header
+	if _, err := r.Read(); err != nil {
+		return nil, fmt.Errorf("failed to read header from %s: %w", path, err)
+	}
+
+	res := make(map[string]bool)
+	for {
+		record, err := r.Read()
+		if err != nil {
+			// EOF or other error; stop
+			break
+		}
+		if len(record) == 0 {
+			continue
+		}
+		sku := strings.TrimSpace(record[0])
+		if sku == "" || sku == "SKU" {
+			continue
+		}
+		res[sku] = true
+	}
+	return res, nil
+}
+
+// loadSupplierData reads supplier master data from a CSV or XLSX file.
+// Supported headers (case/space/underscore insensitive):
+//   - SKU
+//   - Brand
+//   - Nama Store / Store / Toko
+//   - Nama Supplier / Supplier
+//   - No HP / Phone / Telepon
+func loadSupplierData(path string) ([]stockhealth.SupplierData, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".csv" {
+		return loadSupplierDataCSV(path)
+	}
+	if ext == ".xlsx" {
+		return loadSupplierDataXLSX(path)
+	}
+	return nil, fmt.Errorf("unsupported supplier file extension %s (expected .csv or .xlsx)", ext)
+}
+
+func loadSupplierDataCSV(path string) ([]stockhealth.SupplierData, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	r.TrimLeadingSpace = true
+
+	header, err := r.Read()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read header from %s: %w", path, err)
+	}
+
+	idxSKU, idxBrand, idxStore, idxSupplier, idxPhone := supplierHeaderIndexes(header)
+
+	var out []stockhealth.SupplierData
+	for {
+		record, err := r.Read()
+		if err != nil {
+			break
+		}
+		get := func(idx int) string {
+			if idx < 0 || idx >= len(record) {
+				return ""
+			}
+			return strings.TrimSpace(record[idx])
+		}
+		row := stockhealth.SupplierData{
+			SKU:          get(idxSKU),
+			Brand:        get(idxBrand),
+			NamaStore:    get(idxStore),
+			NamaSupplier: get(idxSupplier),
+			NoHP:         get(idxPhone),
+		}
+		if strings.TrimSpace(row.SKU) == "" && strings.TrimSpace(row.NamaStore) == "" {
+			continue
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+func loadSupplierDataXLSX(path string) ([]stockhealth.SupplierData, error) {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open supplier xlsx %s: %w", path, err)
+	}
+	defer f.Close()
+
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, fmt.Errorf("supplier xlsx %s has no sheets", path)
+	}
+	sheet := sheets[0]
+
+	rows, err := f.Rows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read rows from supplier sheet %s: %w", sheet, err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, fmt.Errorf("supplier xlsx %s has no header row", path)
+	}
+	header, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read header from %s: %w", path, err)
+	}
+	idxSKU, idxBrand, idxStore, idxSupplier, idxPhone := supplierHeaderIndexes(header)
+
+	var out []stockhealth.SupplierData
+	for rows.Next() {
+		record, err := rows.Columns()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read row from %s: %w", path, err)
+		}
+		get := func(idx int) string {
+			if idx < 0 || idx >= len(record) {
+				return ""
+			}
+			return strings.TrimSpace(record[idx])
+		}
+		row := stockhealth.SupplierData{
+			SKU:          get(idxSKU),
+			Brand:        get(idxBrand),
+			NamaStore:    get(idxStore),
+			NamaSupplier: get(idxSupplier),
+			NoHP:         get(idxPhone),
+		}
+		if strings.TrimSpace(row.SKU) == "" && strings.TrimSpace(row.NamaStore) == "" {
+			continue
+		}
+		out = append(out, row)
+	}
+	if err := rows.Error(); err != nil {
+		return nil, fmt.Errorf("error iterating rows in %s: %w", path, err)
+	}
+	return out, nil
+}
+
+// supplierHeaderIndexes maps normalized header names to SupplierData field indexes.
+func supplierHeaderIndexes(header []string) (idxSKU, idxBrand, idxStore, idxSupplier, idxPhone int) {
+	idxSKU, idxBrand, idxStore, idxSupplier, idxPhone = -1, -1, -1, -1, -1
+	norm := func(s string) string {
+		s = strings.ToLower(strings.TrimSpace(s))
+		s = strings.ReplaceAll(s, " ", "")
+		s = strings.ReplaceAll(s, "_", "")
+		s = strings.ReplaceAll(s, ".", "")
+		return s
+	}
+	for i, h := range header {
+		key := norm(h)
+		switch key {
+		case "sku":
+			if idxSKU == -1 {
+				idxSKU = i
+			}
+		case "brand", "namabrand":
+			if idxBrand == -1 {
+				idxBrand = i
+			}
+		case "namastore", "store", "toko":
+			if idxStore == -1 {
+				idxStore = i
+			}
+		case "namasupplier", "supplier":
+			if idxSupplier == -1 {
+				idxSupplier = i
+			}
+		case "nohp", "nohp.", "phone", "telepon", "no.handphone", "nohandphone":
+			if idxPhone == -1 {
+				idxPhone = i
+			}
+		}
+	}
+	return
 }

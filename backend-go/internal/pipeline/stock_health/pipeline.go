@@ -8,15 +8,33 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
 )
 
+// padangSales holds Padang's per-SKU daily and max daily sales for a snapshot date.
+type padangSales struct {
+	Daily float64
+	Max   float64
+}
+
+// supplierKey is used to index supplier data by normalized store and brand.
+type supplierKey struct {
+	Store string
+	Brand string
+}
+
 // StockHealthPipeline implements the generic pipeline.Pipeline interface for stock health files.
 type StockHealthPipeline struct {
 	config     Config
 	calculator *InventoryCalculator
+
+	padangSalesCache   map[string]map[string]padangSales // dateKey -> SKU -> Padang sales
+	padangSalesCacheMu sync.Mutex
+
+	supplierIndex map[supplierKey]SupplierData
 }
 
 // NewStockHealthPipeline creates a new stock health pipeline instance.
@@ -27,10 +45,24 @@ func NewStockHealthPipeline(cfg Config) *StockHealthPipeline {
 	if cfg.OutputDir == "" {
 		cfg.OutputDir = filepath.Join("data", "seeds", "stock_health")
 	}
-	return &StockHealthPipeline{
-		config:     cfg,
-		calculator: NewInventoryCalculator(cfg.SpecialSKUs),
+	p := &StockHealthPipeline{
+		config:           cfg,
+		calculator:       NewInventoryCalculator(cfg.SpecialSKUs),
+		padangSalesCache: make(map[string]map[string]padangSales),
+		supplierIndex:    make(map[supplierKey]SupplierData),
 	}
+	// Build supplier index if supplier data is provided.
+	for _, s := range cfg.SupplierData {
+		key := supplierKey{
+			Store: normalizeStoreNameForSupplier(s.NamaStore),
+			Brand: strings.ToUpper(strings.TrimSpace(s.Brand)),
+		}
+		if key.Store == "" || key.Brand == "" {
+			continue
+		}
+		p.supplierIndex[key] = s
+	}
+	return p
 }
 
 // Name returns the unique identifier of this pipeline.
@@ -98,7 +130,7 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 		}
 	}
 
-	// 3) Merge with supplier data / contributions (placeholder: assumes CSV already merged)
+	// 3) Merge with supplier data / contributions
 	mergedRows := cleanedRows
 	if err := p.writeIntermediateCSV(snapshotDate, "2_cleaned_merged", inputFile, header, mergedRows); err != nil {
 		return nil, fmt.Errorf("failed to write cleaned_merged intermediate: %w", err)
@@ -106,8 +138,43 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 
 	// 4) Apply inventory metrics
 	transformed := make([]TransformedStockRow, 0, len(mergedRows))
+	padangSalesBySKU := p.getPadangSalesForDate(snapshotDate)
 	for _, raw := range mergedRows {
-		metrics := p.calculator.Calculate(&raw)
+		// Default: use store's original per-store sales
+		finalDaily := raw.OrigDailySales
+		finalMax := raw.OrigMaxDailySales
+		isInPadang := 0
+
+		// If SKU exists in Padang, scale Padang's per-SKU sales by contribution percentage
+		if padangSalesBySKU != nil {
+			if ps, ok := padangSalesBySKU[raw.SKU]; ok {
+				isInPadang = 1
+				factor := raw.Contribution / 100.0
+				finalDaily = ps.Daily * factor
+				finalMax = ps.Max * factor
+			}
+		}
+
+		// Use adjusted sales when computing inventory metrics
+		adj := raw
+		adj.DailySales = finalDaily
+		adj.MaxDailySales = finalMax
+		metrics := p.calculator.Calculate(&adj)
+
+		// Enrich with supplier data if available
+		var supplierStore, supplierName, supplierPhone string
+		if len(p.supplierIndex) > 0 {
+			key := supplierKey{
+				Store: normalizeStoreNameForSupplier(raw.Toko),
+				Brand: strings.ToUpper(strings.TrimSpace(raw.Brand)),
+			}
+			if s, ok := p.supplierIndex[key]; ok {
+				supplierStore = s.NamaStore
+				supplierName = s.NamaSupplier
+				supplierPhone = s.NoHP
+			}
+		}
+
 		row := TransformedStockRow{
 			Brand:         raw.Brand,
 			SKU:           raw.SKU,
@@ -116,14 +183,22 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 			Stock:         raw.Stock,
 			HPP:           raw.HPP,
 			Harga:         raw.Harga,
-			DailySales:    raw.DailySales,
-			MaxDailySales: raw.MaxDailySales,
+			DailySales:    finalDaily,
+			MaxDailySales: finalMax,
 			LeadTime:      raw.LeadTime,
 			MaxLeadTime:   raw.MaxLeadTime,
 			SedangPO:      raw.SedangPO,
 			MinOrder:      raw.MinOrder,
 			Contribution:  raw.Contribution,
 			Metrics:       metrics,
+			// supplier info
+			SupplierStore: supplierStore,
+			SupplierName:  supplierName,
+			SupplierPhone: supplierPhone,
+			// carry through original per-store sales; IsInPadang derived from Padang reference
+			OrigDailySales:    raw.OrigDailySales,
+			OrigMaxDailySales: raw.OrigMaxDailySales,
+			IsInPadang:        isInPadang,
 		}
 		transformed = append(transformed, row)
 	}
@@ -151,6 +226,9 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 			"harga":                         row.Harga,
 			"min_order":                     row.MinOrder,
 			"contribution_pct":              row.Contribution,
+			"supplier_store":                row.SupplierStore,
+			"supplier_name":                 row.SupplierName,
+			"supplier_phone":                row.SupplierPhone,
 			"safety_stock":                  row.Metrics.SafetyStock,
 			"reorder_point":                 row.Metrics.ReorderPoint,
 			"target_days_cover":             row.Metrics.TargetDaysCover,
@@ -305,21 +383,27 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 			return f
 		}
 
+		// parse once so we can keep both scaled and original values if needed later
+		parsedDaily := parseFloat(idxDailySales)
+		parsedMaxDaily := parseFloat(idxMaxDailySales)
+
 		row := RawStockRow{
-			Brand:         get(idxBrand),
-			SKU:           get(idxSKU),
-			Nama:          get(idxNama),
-			Toko:          get(idxToko),
-			Stock:         parseFloat(idxStock),
-			DailySales:    parseFloat(idxDailySales),
-			MaxDailySales: parseFloat(idxMaxDailySales),
-			LeadTime:      parseFloat(idxLeadTime),
-			MaxLeadTime:   parseFloat(idxMaxLeadTime),
-			SedangPO:      parseFloat(idxSedangPO),
-			HPP:           parseFloat(idxHPP),
-			Harga:         parseFloat(idxHarga),
-			MinOrder:      parseFloat(idxMinOrder),
-			Contribution:  contributionPct,
+			Brand:             get(idxBrand),
+			SKU:               get(idxSKU),
+			Nama:              get(idxNama),
+			Toko:              get(idxToko),
+			Stock:             parseFloat(idxStock),
+			DailySales:        parsedDaily,
+			MaxDailySales:     parsedMaxDaily,
+			LeadTime:          parseFloat(idxLeadTime),
+			MaxLeadTime:       parseFloat(idxMaxLeadTime),
+			SedangPO:          parseFloat(idxSedangPO),
+			HPP:               parseFloat(idxHPP),
+			Harga:             parseFloat(idxHarga),
+			MinOrder:          parseFloat(idxMinOrder),
+			Contribution:      contributionPct,
+			OrigDailySales:    parsedDaily,
+			OrigMaxDailySales: parsedMaxDaily,
 		}
 
 		rows = append(rows, row)
@@ -328,11 +412,128 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 	return rows, header, nil
 }
 
+// getPadangSKUsForDate returns the set of SKUs that appear in Padang's store file
+// for the given snapshot date. It caches results per date key to avoid repeated IO.
+func (p *StockHealthPipeline) getPadangSalesForDate(date time.Time) map[string]padangSales {
+	if p.config.DownloadDir == "" || p.config.PadangStoreName == "" {
+		return nil
+	}
+
+	// Use the input date layout to derive the date prefix used in filenames
+	layout := p.config.InputDateFormat
+	if layout == "" {
+		layout = "20060102"
+	}
+	datePrefix := date.Format(layout)
+
+	key := datePrefix
+	p.padangSalesCacheMu.Lock()
+	defer p.padangSalesCacheMu.Unlock()
+	if skus, ok := p.padangSalesCache[key]; ok {
+		return skus
+	}
+
+	// Look for Padang store raw files for this date
+	pattern := filepath.Join(p.config.DownloadDir, datePrefix+"_*Padang*.csv")
+	files, err := filepath.Glob(pattern)
+	if err != nil || len(files) == 0 {
+		// No Padang file found; cache empty map to avoid re-scanning
+		p.padangSalesCache[key] = map[string]padangSales{}
+		return p.padangSalesCache[key]
+	}
+
+	set := make(map[string]padangSales)
+	for _, path := range files {
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		reader := csv.NewReader(f)
+		reader.TrimLeadingSpace = true
+		header, err := reader.Read()
+		if err != nil {
+			f.Close()
+			continue
+		}
+
+		// Find relevant columns
+		skuIdx, dailyIdx, maxIdx := -1, -1, -1
+		for i, h := range header {
+			name := normalizeColumnName(h)
+			switch name {
+			case "sku":
+				skuIdx = i
+			case "dailysales":
+				dailyIdx = i
+			case "maxdailysales":
+				maxIdx = i
+			}
+		}
+		if skuIdx == -1 {
+			f.Close()
+			continue
+		}
+
+		for {
+			record, err := reader.Read()
+			if err != nil {
+				break
+			}
+			if skuIdx >= len(record) {
+				continue
+			}
+			sku := strings.TrimSpace(record[skuIdx])
+			if sku == "" {
+				continue
+			}
+
+			parse := func(idx int) float64 {
+				if idx < 0 || idx >= len(record) {
+					return 0
+				}
+				v := strings.TrimSpace(record[idx])
+				if v == "" {
+					return 0
+				}
+				v = strings.ReplaceAll(v, ",", "")
+				f, _ := strconv.ParseFloat(v, 64)
+				return f
+			}
+
+			set[sku] = padangSales{
+				Daily: parse(dailyIdx),
+				Max:   parse(maxIdx),
+			}
+		}
+		f.Close()
+	}
+
+	p.padangSalesCache[key] = set
+	return set
+}
+
 var columnNameSanitizer = strings.NewReplacer(" ", "", "_", "", ".", "", "-", "", "/", "")
 
 func normalizeColumnName(name string) string {
 	name = strings.TrimSpace(strings.ToLower(name))
 	return columnNameSanitizer.Replace(name)
+}
+
+// normalizeStoreNameForSupplier normalizes store names from both stock files
+// and supplier master so they can be joined reliably.
+func normalizeStoreNameForSupplier(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	// Reuse getStoreNameFromFilename-style normalization where possible by
+	// uppercasing and trimming common prefixes like "Miss Glam".
+	upper := strings.ToUpper(name)
+	parts := strings.Fields(upper)
+	if len(parts) >= 3 && parts[0] == "MISS" && parts[1] == "GLAM" {
+		return strings.TrimSpace(strings.Join(parts[2:], " "))
+	}
+	return strings.TrimSpace(upper)
 }
 
 func (p *StockHealthPipeline) writeIntermediateCSV(date time.Time, stage string, inputFile string, header []string, rows []RawStockRow) error {
@@ -441,6 +642,10 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 		"harga",
 		"min_order",
 		"contribution_pct",
+		"sales_contribution",
+		"is_in_padang",
+		"orig_daily_sales",
+		"orig_max_daily_sales",
 		"safety_stock",
 		"reorder_point",
 		"target_days_cover",
@@ -453,6 +658,9 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 		"final_updated_regular_po_qty",
 		"emergency_po_cost",
 		"final_updated_regular_po_cost",
+		"supplier_store",
+		"supplier_name",
+		"supplier_phone",
 	}
 
 	if err := w.Write(headers); err != nil {
@@ -460,6 +668,7 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 	}
 
 	for _, r := range rows {
+		salesContribution := r.DailySales * r.Harga
 		rec := []string{
 			date.Format("2006-01-02"),
 			r.Brand,
@@ -467,8 +676,8 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 			r.Nama,
 			r.Toko,
 			fmt.Sprintf("%v", r.Stock),
-			fmt.Sprintf("%v", r.DailySales),
-			fmt.Sprintf("%v", r.MaxDailySales),
+			formatIDFloat(r.DailySales, 2),
+			formatIDFloat(r.MaxDailySales, 2),
 			fmt.Sprintf("%v", r.LeadTime),
 			fmt.Sprintf("%v", r.MaxLeadTime),
 			fmt.Sprintf("%v", r.SedangPO),
@@ -476,11 +685,15 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 			fmt.Sprintf("%v", r.Harga),
 			fmt.Sprintf("%v", r.MinOrder),
 			fmt.Sprintf("%v", r.Contribution),
+			formatIDFloat(salesContribution, 2),
+			fmt.Sprintf("%v", r.IsInPadang),
+			formatIDFloat(r.OrigDailySales, 2),
+			formatIDFloat(r.OrigMaxDailySales, 2),
 			fmt.Sprintf("%v", r.Metrics.SafetyStock),
 			fmt.Sprintf("%v", r.Metrics.ReorderPoint),
 			fmt.Sprintf("%v", r.Metrics.TargetDaysCover),
 			fmt.Sprintf("%v", r.Metrics.QtyForTargetDaysCover),
-			fmt.Sprintf("%v", r.Metrics.CurrentDaysStockCover),
+			formatIDFloat(r.Metrics.CurrentDaysStockCover, 2),
 			fmt.Sprintf("%v", r.Metrics.IsOpenPO),
 			fmt.Sprintf("%v", r.Metrics.InitialQtyPO),
 			fmt.Sprintf("%v", r.Metrics.EmergencyPOQty),
@@ -488,6 +701,9 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 			fmt.Sprintf("%v", r.Metrics.FinalUpdatedRegularPOQty),
 			fmt.Sprintf("%v", r.Metrics.EmergencyPOCost),
 			fmt.Sprintf("%v", r.Metrics.FinalUpdatedRegularPOCost),
+			r.SupplierStore,
+			r.SupplierName,
+			r.SupplierPhone,
 		}
 		if err := w.Write(rec); err != nil {
 			return err

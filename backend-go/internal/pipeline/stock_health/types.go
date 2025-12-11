@@ -18,6 +18,10 @@ type RawStockRow struct {
 	MinOrder      float64 // Minimum order quantity
 	Toko          string  // Store name
 	Contribution  float64 // Store contribution percentage
+
+	// Original per-store sales before any contribution-based scaling
+	OrigDailySales    float64
+	OrigMaxDailySales float64
 }
 
 // InventoryMetrics holds calculated inventory metrics
@@ -67,8 +71,13 @@ type TransformedStockRow struct {
 
 	// Supplier info (merged later)
 	SupplierStore string // Nama Store from supplier data
-	SupplierName  string // Nama Supplier
+	SupplierName  string // Supplier name
 	SupplierPhone string // No HP
+
+	// Original per-store sales and Padang presence flag
+	OrigDailySales    float64
+	OrigMaxDailySales float64
+	IsInPadang        int
 }
 
 // SupplierData represents supplier information
@@ -94,6 +103,7 @@ type Config struct {
 	PadangStoreName    string // Reference store name (usually "Miss Glam Padang")
 	InputDateFormat    string // Date format in input filenames
 	OutputDir          string // Directory for output CSVs
+	DownloadDir        string // Directory where raw per-store files are located
 
 	// Hybrid intermediate persistence configuration
 	// IntermediateDir is the root directory for per-file intermediate outputs
