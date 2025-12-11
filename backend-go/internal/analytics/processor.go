@@ -172,6 +172,7 @@ type stockHealthRecord struct {
 	productID         int
 	brandID           sql.NullInt64
 	sku               string
+	kategoriBrand     string
 	stock             int
 	dailySales        float64
 	maxDailySales     float64
@@ -204,6 +205,7 @@ type rawStockHealthRow struct {
 	storeName         string
 	sku               string
 	brandName         string
+	kategoriBrand     string
 	stock             int
 	dailySales        float64
 	maxDailySales     float64
@@ -326,6 +328,10 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		}
 
 		brandName := strings.TrimSpace(record[colMap["brand"]])
+		kategoriBrand := ""
+		if idx, ok := colMap["Kategori Brand"]; ok && idx < len(record) {
+			kategoriBrand = strings.TrimSpace(record[idx])
+		}
 		storeName := strings.TrimSpace(record[colMap["store"]])
 		if storeName == "" {
 			return fmt.Errorf("record missing store name")
@@ -354,6 +360,7 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			storeName:         storeName,
 			sku:               sku,
 			brandName:         brandName,
+			kategoriBrand:     kategoriBrand,
 			stock:             stock,
 			dailySales:        dailySales,
 			maxDailySales:     maxDailySales,
@@ -407,6 +414,7 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			productID:         productID,
 			brandID:           brandID,
 			sku:               raw.sku,
+			kategoriBrand:     raw.kategoriBrand,
 			stock:             raw.stock,
 			dailySales:        raw.dailySales,
 			maxDailySales:     raw.maxDailySales,
@@ -1151,6 +1159,7 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 			product_id INTEGER NOT NULL,
 			brand_id INTEGER,
 			sku VARCHAR(255) NOT NULL,
+			kategori_brand VARCHAR(255),
 			stock INTEGER,
 			daily_sales DOUBLE PRECISION,
 			max_daily_sales DOUBLE PRECISION,
@@ -1170,13 +1179,13 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 
 	insertStmt := fmt.Sprintf(`
 		INSERT INTO daily_stock_data (
-			time, store_id, product_id, brand_id, sku,
+			time, store_id, product_id, brand_id, sku, kategori_brand,
 			stock, daily_sales, max_daily_sales,
 			orig_daily_sales, orig_max_daily_sales,
 			daily_stock_cover, hpp
 		)
 		SELECT
-			time, store_id, product_id, brand_id, sku,
+			time, store_id, product_id, brand_id, sku, kategori_brand,
 			stock, daily_sales, max_daily_sales,
 			orig_daily_sales, orig_max_daily_sales,
 			daily_stock_cover, hpp
@@ -1184,6 +1193,7 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 		ON CONFLICT (time, store_id, sku, COALESCE(brand_id, -1))
 		DO UPDATE SET
 			product_id = EXCLUDED.product_id,
+			kategori_brand = EXCLUDED.kategori_brand,
 			stock = EXCLUDED.stock,
 			daily_sales = EXCLUDED.daily_sales,
 			max_daily_sales = EXCLUDED.max_daily_sales,
@@ -1221,9 +1231,9 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 		argPos := 1
 
 		for _, rec := range batch {
-			valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
 				argPos, argPos+1, argPos+2, argPos+3, argPos+4, argPos+5,
-				argPos+6, argPos+7, argPos+8, argPos+9, argPos+10, argPos+11))
+				argPos+6, argPos+7, argPos+8, argPos+9, argPos+10, argPos+11, argPos+12))
 
 			var brandIDVal interface{}
 			if rec.brandID.Valid {
@@ -1238,6 +1248,7 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 				rec.productID,
 				brandIDVal,
 				rec.sku,
+				rec.kategoriBrand,
 				rec.stock,
 				rec.dailySales,
 				rec.maxDailySales,
@@ -1246,12 +1257,12 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 				rec.dailyStockCover,
 				rec.hpp,
 			)
-			argPos += 12
+			argPos += 13
 		}
 
 		insertStmt := fmt.Sprintf(`
 			INSERT INTO %s (
-				time, store_id, product_id, brand_id, sku,
+				time, store_id, product_id, brand_id, sku, kategori_brand,
 				stock, daily_sales, max_daily_sales,
 				orig_daily_sales, orig_max_daily_sales,
 				daily_stock_cover, hpp

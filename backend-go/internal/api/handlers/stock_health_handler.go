@@ -36,6 +36,29 @@ func (h *StockHealthHandler) parseFilter(c *gin.Context) domain.StockHealthFilte
 		filter.Condition = condition
 	}
 
+	// Support multiple kategori_brand values via repeated params or comma-separated string
+	rawKategori := c.QueryArray("kategori_brand")
+	if len(rawKategori) == 0 {
+		if single := strings.TrimSpace(c.Query("kategori_brand")); single != "" {
+			rawKategori = strings.Split(single, ",")
+		}
+	}
+	if len(rawKategori) > 0 {
+		seen := make(map[string]struct{})
+		for _, v := range rawKategori {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			upper := strings.ToUpper(v)
+			if _, ok := seen[upper]; ok {
+				continue
+			}
+			seen[upper] = struct{}{}
+			filter.KategoriBrand = append(filter.KategoriBrand, upper)
+		}
+	}
+
 	if stockDate := strings.TrimSpace(c.Query("stock_date")); stockDate != "" {
 		filter.StockDate = stockDate
 	}
@@ -168,4 +191,25 @@ func (h *StockHealthHandler) GetAvailableDates(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"dates": dates})
+}
+
+func (h *StockHealthHandler) GetKategoriBrands(c *gin.Context) {
+	kategoriBrands := []string{
+		"BRAND VIRAL",
+		"BEAUTY MATURE",
+		"ACCESSORIES",
+		"BEAUTY TRENDING",
+		"MEN",
+		"SWALAYAN BEAUTY",
+		"SWALAYAN UMUM",
+		"DELISTING",
+		"GRACE AND GLOW",
+		"GA",
+		"KMART IMPOR",
+		"KMART LOKAL",
+		"FASHION",
+		"LUXURY",
+	}
+
+	c.JSON(http.StatusOK, gin.H{"kategori_brands": kategoriBrands})
 }

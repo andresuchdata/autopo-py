@@ -27,6 +27,7 @@ interface StockItem {
     sku_code: string;
     sku_name: string;
     brand_name: string;
+    kategori_brand?: string;
     current_stock: number;
     daily_sales: number;
     daily_stock_cover: number;
@@ -76,6 +77,7 @@ export function StockItemsDialog({
         sku_code: item.sku_code,
         sku_name: item.product_name,
         brand_name: item.brand_name,
+        kategori_brand: item.kategori_brand,
         current_stock: item.current_stock,
         daily_sales: item.daily_sales,
         daily_stock_cover: item.daily_stock_cover,
@@ -223,6 +225,7 @@ export function StockItemsDialog({
                 'SKU Code',
                 'SKU Name',
                 'Brand',
+                'Kategori Brand',
                 'Current Stock',
                 'Daily Sales',
                 'Daily Stock Cover',
@@ -244,6 +247,7 @@ export function StockItemsDialog({
                 item.sku_code,
                 item.sku_name,
                 item.brand_name,
+                item.kategori_brand ?? '',
                 item.current_stock,
                 item.daily_sales,
                 item.daily_stock_cover.toFixed(2),
@@ -291,7 +295,7 @@ export function StockItemsDialog({
             render: (item: StockItem) => formatDecimal(item.current_stock),
         };
 
-    const columnCount = 7 + (activeGrouping === 'value' ? 2 : 0);
+    const columnCount = 8 + (activeGrouping === 'value' ? 2 : 0);
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -338,6 +342,7 @@ export function StockItemsDialog({
                                 <SortableHeader label="SKU Code" field="sku_code" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="SKU Name" field="sku_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="Brand" field="brand_name" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+                                <TableHead>Kategori Brand</TableHead>
                                 <SortableHeader label="Qty" field="current_stock" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
                                 <SortableHeader label="Daily Sales" field="daily_sales" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
                                 <SortableHeader label="Daily Stock Cover" field="daily_stock_cover" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
@@ -365,6 +370,7 @@ export function StockItemsDialog({
                                         <TableCell className="font-mono text-xs">{item.sku_code}</TableCell>
                                         <TableCell className="max-w-[300px] truncate" title={item.sku_name}>{item.sku_name}</TableCell>
                                         <TableCell className="max-w-[300px] truncate" title={item.brand_name}>{item.brand_name}</TableCell>
+                                        <TableCell className="max-w-[260px] truncate" title={item.kategori_brand ?? ''}>{item.kategori_brand ?? '-'}</TableCell>
                                         <TableCell className="text-right font-mono">{item.current_stock}</TableCell>
                                         <TableCell className="text-right font-mono">{item.daily_sales}</TableCell>
                                         <TableCell className="text-right font-mono">{formatDecimal(item.daily_stock_cover)}</TableCell>
