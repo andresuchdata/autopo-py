@@ -39,7 +39,14 @@ func (h *StockHealthHandler) parseFilter(c *gin.Context) domain.StockHealthFilte
 	// Support multiple kategori_brand values via repeated params or comma-separated string
 	rawKategori := c.QueryArray("kategori_brand")
 	if len(rawKategori) == 0 {
+		// Backwards/forwards compatibility: some clients send kategori_brands
+		rawKategori = c.QueryArray("kategori_brands")
+	}
+
+	if len(rawKategori) == 0 {
 		if single := strings.TrimSpace(c.Query("kategori_brand")); single != "" {
+			rawKategori = strings.Split(single, ",")
+		} else if single := strings.TrimSpace(c.Query("kategori_brands")); single != "" {
 			rawKategori = strings.Split(single, ",")
 		}
 	}

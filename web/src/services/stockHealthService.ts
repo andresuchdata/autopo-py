@@ -71,7 +71,6 @@ export interface StockHealthFilterParams {
   pageSize?: number;
   condition?: string;
   brandIds?: number[];
-  kategoriBrand?: string[];
   storeIds?: number[];
   skuCodes?: string[];
   kategoriBrands?: string[];
@@ -93,7 +92,7 @@ export const stockHealthService = {
         page_size: params.pageSize ?? 2000,
         condition: params.condition,
         brand_ids: serializeIds(params.brandIds),
-        kategori_brands: serializeStrings(params.kategoriBrands),
+        kategori_brand: serializeStrings(params.kategoriBrands),
         store_ids: serializeIds(params.storeIds),
         sku_ids: serializeStrings(params.skuCodes),
         grouping: params.grouping,

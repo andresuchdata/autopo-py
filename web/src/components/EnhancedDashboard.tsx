@@ -11,7 +11,7 @@ import { DashboardCharts } from './dashboard/DashboardCharts';
 import { StockItemsDialog } from './dashboard/StockItemsDialog';
 import { OverstockSubgroupCards } from './dashboard/OverstockSubgroupCards';
 import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from '@/types/stockHealth';
-import { Package, RefreshCw, LayoutDashboard } from "lucide-react";
+import { RefreshCw, LayoutDashboard } from "lucide-react";
 
 const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
 const OVERSTOCK_CATEGORIES = ['ringan', 'sedang', 'berat'] as const;
@@ -64,7 +64,6 @@ export function EnhancedDashboard() {
     lastUpdated,
     filters,
     brandOptions,
-    kategoriBrandOptions,
     storeOptions,
     kategoriBrandOptions,
     availableDates,
@@ -186,7 +185,6 @@ export function EnhancedDashboard() {
           brandOptions={brandOptions}
           kategoriBrandOptions={kategoriBrandOptions}
           storeOptions={storeOptions}
-          kategoriBrandOptions={kategoriBrandOptions}
           selectedDate={selectedDate}
           availableDates={availableDates}
           onDateChange={onDateChange}

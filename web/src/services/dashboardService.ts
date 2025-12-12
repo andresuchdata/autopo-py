@@ -29,7 +29,7 @@ export interface DashboardOverstockSummary {
 
 export interface DashboardFilters {
   brandIds?: number[];
-  kategoriBrand?: string[];
+  kategoriBrands?: string[];
   storeIds?: number[];
   skuCodes?: string[];
 }
@@ -96,7 +96,7 @@ export class DashboardService {
       const response = await stockHealthService.getDashboard({
         stockDate: date,
         brandIds: filters?.brandIds,
-        kategoriBrand: filters?.kategoriBrands,
+        kategoriBrands: filters?.kategoriBrands,
         storeIds: filters?.storeIds,
         skuCodes: filters?.skuCodes,
       });
