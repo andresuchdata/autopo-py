@@ -1,18 +1,18 @@
 // In useDashboard.ts
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStockData, type LabeledOption } from './useStockData';
-import { stockHealthService } from '@/services/stockHealthService';
 import { poService } from '@/services/api';
-import { useSkuOptions, type SkuOption } from './useSkuOptions';
+import { stockHealthService } from '@/services/stockHealthService';
+import { useSkuOptions } from './useSkuOptions';
 
 export interface DashboardFiltersState {
   brandIds: number[];
+  kategoriBrands: string[];
   storeIds: number[];
   skuCodes: string[];
-  kategoriBrand: string[];
 }
 
-const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [], skuCodes: [], kategoriBrand: [] };
+const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], kategoriBrands: [], storeIds: [], skuCodes: [] };
 const DEFAULT_STORE_NAME = 'miss glam padang';
 
 export function useDashboard() {
@@ -130,7 +130,11 @@ export function useDashboard() {
 
     const fetchMasterData = async () => {
       try {
-        const [brandsRes, storesRes] = await Promise.all([poService.getBrands(), poService.getStores()]);
+        const [brandsRes, storesRes, kategoriRes] = await Promise.all([
+          poService.getBrands(),
+          poService.getStores(),
+          stockHealthService.getKategoriBrands(),
+        ]);
 
         if (!isMounted) return;
 
@@ -165,23 +169,15 @@ export function useDashboard() {
 
   const loadInitialData = useCallback(async () => {
     try {
-      const { latestDate } = await stockHealthService.getAvailableDatesWithLatest();
-
       const initialFilters = await ensureDefaultStoreSelection();
-
-      if (latestDate) {
-        setSelectedDate(latestDate);
-        await refresh(latestDate, {
-          brandIds: initialFilters.brandIds,
-          storeIds: initialFilters.storeIds,
-          skuCodes: initialFilters.skuCodes,
-          kategoriBrands: initialFilters.kategoriBrand,
-        });
-      }
+      const today = new Date().toISOString().split('T')[0];
+      const initialDate = availableDates[0] ?? today;
+      setSelectedDate(initialDate);
+      await refresh(initialDate, initialFilters);
     } catch (err) {
       console.error('Failed to load initial data:', err);
     }
-  }, [ensureDefaultStoreSelection, refresh]);
+  }, [availableDates, ensureDefaultStoreSelection, refresh]);
 
   useEffect(() => {
     if (!selectedDate) {
@@ -195,7 +191,7 @@ export function useDashboard() {
       brandIds: filters.brandIds,
       storeIds: filters.storeIds,
       skuCodes: filters.skuCodes,
-      kategoriBrands: filters.kategoriBrand,
+      kategoriBrands: filters.kategoriBrands,
     });
   }, [filters, refresh]);
 
@@ -234,7 +230,7 @@ export function useDashboard() {
         brandIds: filters.brandIds,
         storeIds: filters.storeIds,
         skuCodes: filters.skuCodes,
-        kategoriBrands: filters.kategoriBrand,
+        kategoriBrands: filters.kategoriBrands,
       }).catch((err) => {
         console.error('Failed to refresh dashboard after filter change:', err);
       });
@@ -255,7 +251,7 @@ export function useDashboard() {
       brandIds: filters.brandIds,
       storeIds: filters.storeIds,
       skuCodes: filters.skuCodes,
-      kategoriBrands: filters.kategoriBrand,
+      kategoriBrands: filters.kategoriBrands,
     });
   }, [filters, refresh, selectedDate]);
 

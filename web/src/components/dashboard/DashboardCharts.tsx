@@ -135,8 +135,8 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                     <CardTitle className="text-sm font-semibold text-center uppercase tracking-wider text-muted-foreground">{title}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 min-h-[320px] flex flex-col items-center gap-4">
-                    <div className="w-full h-[220px]">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="w-full h-[220px] min-h-[220px] min-w-0">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
                             <PieChart>
                                 <Pie
                                     data={data}
