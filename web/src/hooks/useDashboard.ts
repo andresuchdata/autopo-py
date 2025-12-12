@@ -7,12 +7,12 @@ import { useSkuOptions } from './useSkuOptions';
 
 export interface DashboardFiltersState {
   brandIds: number[];
-  kategoriBrand: string[];
+  kategoriBrands: string[];
   storeIds: number[];
   skuCodes: string[];
 }
 
-const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], kategoriBrand: [], storeIds: [], skuCodes: [] };
+const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], kategoriBrands: [], storeIds: [], skuCodes: [] };
 const DEFAULT_STORE_NAME = 'miss glam padang';
 
 export function useDashboard() {
@@ -191,7 +191,7 @@ export function useDashboard() {
       brandIds: filters.brandIds,
       storeIds: filters.storeIds,
       skuCodes: filters.skuCodes,
-      kategoriBrands: filters.kategoriBrand,
+      kategoriBrands: filters.kategoriBrands,
     });
   }, [filters, refresh]);
 
@@ -230,7 +230,7 @@ export function useDashboard() {
         brandIds: filters.brandIds,
         storeIds: filters.storeIds,
         skuCodes: filters.skuCodes,
-        kategoriBrands: filters.kategoriBrand,
+        kategoriBrands: filters.kategoriBrands,
       }).catch((err) => {
         console.error('Failed to refresh dashboard after filter change:', err);
       });
@@ -251,7 +251,7 @@ export function useDashboard() {
       brandIds: filters.brandIds,
       storeIds: filters.storeIds,
       skuCodes: filters.skuCodes,
-      kategoriBrands: filters.kategoriBrand,
+      kategoriBrands: filters.kategoriBrands,
     });
   }, [filters, refresh, selectedDate]);
 
