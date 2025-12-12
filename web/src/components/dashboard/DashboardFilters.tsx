@@ -466,10 +466,10 @@ export function DashboardFilters({
                     <GenericFilter<string>
                         mode="multi"
                         options={kategoriBrandFilterOptions}
-                        selected={filters.kategoriBrand}
+                        selected={filters.kategoriBrands}
                         onChange={(value) => {
                             const kategori = (value ?? []) as string[];
-                            onFilterChange({ ...filters, kategoriBrand: kategori });
+                            onFilterChange({ ...filters, kategoriBrands: kategori });
                         }}
                         placeholder="All Kategori Brand"
                         searchPlaceholder="Search kategori brand..."
@@ -517,7 +517,7 @@ export function DashboardFilters({
                             brandIds: [],
                             storeIds: [],
                             skuCodes: [],
-                            kategoriBrand: [],
+                            kategoriBrands: [],
                         })
                     }
                     className="w-full xl:w-auto whitespace-nowrap text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-12"
