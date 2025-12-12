@@ -29,9 +29,9 @@ export interface DashboardOverstockSummary {
 
 export interface DashboardFilters {
   brandIds?: number[];
+  kategoriBrand?: string[];
   storeIds?: number[];
   skuCodes?: string[];
-  kategoriBrands?: string[];
 }
 
 export interface DashboardData {
@@ -96,9 +96,9 @@ export class DashboardService {
       const response = await stockHealthService.getDashboard({
         stockDate: date,
         brandIds: filters?.brandIds,
+        kategoriBrand: filters?.kategoriBrands,
         storeIds: filters?.storeIds,
         skuCodes: filters?.skuCodes,
-        kategoriBrands: filters?.kategoriBrands,
       });
 
       return this.transformDashboardResponse(response);

@@ -71,6 +71,7 @@ export interface StockHealthFilterParams {
   pageSize?: number;
   condition?: string;
   brandIds?: number[];
+  kategoriBrand?: string[];
   storeIds?: number[];
   skuCodes?: string[];
   kategoriBrands?: string[];
@@ -92,11 +93,9 @@ export const stockHealthService = {
         page_size: params.pageSize ?? 2000,
         condition: params.condition,
         brand_ids: serializeIds(params.brandIds),
+        kategori_brands: serializeStrings(params.kategoriBrands),
         store_ids: serializeIds(params.storeIds),
         sku_ids: serializeStrings(params.skuCodes),
-        kategori_brand: params.kategoriBrands && params.kategoriBrands.length > 0
-          ? params.kategoriBrands.map((v) => v.toUpperCase()).join(',')
-          : undefined,
         grouping: params.grouping,
         sort_field: params.sortField,
         sort_direction: params.sortDirection,
@@ -142,11 +141,9 @@ export const stockHealthService = {
         stock_date: params.stockDate,
         days: params.days ?? 30,
         brand_ids: serializeIds(params.brandIds),
+        kategori_brand: serializeStrings(params.kategoriBrands),
         store_ids: serializeIds(params.storeIds),
         sku_ids: serializeStrings(params.skuCodes),
-        kategori_brand: params.kategoriBrands && params.kategoriBrands.length > 0
-          ? params.kategoriBrands.map((v) => v.toUpperCase()).join(',')
-          : undefined,
       },
     });
     return response.data;

@@ -130,7 +130,11 @@ export function useDashboard() {
 
     const fetchMasterData = async () => {
       try {
-        const [brandsRes, storesRes] = await Promise.all([poService.getBrands(), poService.getStores()]);
+        const [brandsRes, storesRes, kategoriRes] = await Promise.all([
+          poService.getBrands(),
+          poService.getStores(),
+          stockHealthService.getKategoriBrands(),
+        ]);
 
         if (!isMounted) return;
 
@@ -260,7 +264,7 @@ export function useDashboard() {
     filters,
     brandOptions,
     storeOptions,
-    kategoriBrandOptions: [],
+    kategoriBrandOptions,
     skuOptions,
     availableDates,
     onDateChange: handleDateChange,

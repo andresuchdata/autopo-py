@@ -118,6 +118,7 @@ export function useStockData() {
         page: params.page,
         pageSize: params.pageSize,
         brandIds: lastFilters?.brandIds,
+        kategoriBrand: lastFilters?.kategoriBrand,
         storeIds: lastFilters?.storeIds,
         skuCodes: lastFilters?.skuCodes,
         kategoriBrands: lastFilters?.kategoriBrands,

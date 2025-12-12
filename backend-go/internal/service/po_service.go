@@ -203,7 +203,7 @@ func (s *POService) GetSuppliers(ctx context.Context, search string, limit, offs
 
 // GetSkus returns a list of SKUs matching the optional search term and brand filter with pagination
 func (s *POService) GetSkus(ctx context.Context, search string, limit, offset int, brandIDs []int64) ([]*domain.Product, error) {
-	return s.repo.GetSkus(ctx, search, limit, offset, brandIDs)
+	return s.repo.GetSkus(ctx, search, limit, offset, brandIDs, nil)
 }
 
 // GetDashboardSummary returns the aggregated dashboard data
