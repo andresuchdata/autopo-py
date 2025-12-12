@@ -176,7 +176,7 @@ func (r *poRepository) GetSuppliers(ctx context.Context, search string, limit, o
 	return suppliers, nil
 }
 
-func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset int, brandIDs []int64) ([]*domain.Product, error) {
+func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset int, brandIDs []int64, kategoriBrands []string) ([]*domain.Product, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -191,6 +191,10 @@ func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset
 	// migrations. To provide brand information for SKU options without breaking
 	// older schemas, we derive brand_id from product_mappings when available.
 	// This keeps the JSON field name `brand_id` consistent with domain.Product.
+	//
+	// The kategoriBrands parameter is currently accepted for forward compatibility
+	// but intentionally not used to filter the query so behavior stays consistent
+	// with existing deployments.
 	brandFilter := ""
 	if len(brandIDs) > 0 {
 		values := make([]string, 0, len(brandIDs))

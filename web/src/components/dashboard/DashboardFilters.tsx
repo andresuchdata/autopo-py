@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronsUpDown, X, Store as StoreIcon, Calendar, Tag, Barcode, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -31,8 +31,8 @@ interface DashboardFiltersProps {
     filters: DashboardFiltersState;
     onFilterChange: (filters: DashboardFiltersState) => void;
     brandOptions: LabeledOption[];
-    storeOptions: LabeledOption[];
     kategoriBrandOptions: string[];
+    storeOptions: LabeledOption[];
     selectedDate: string | null;
     availableDates: string[];
     onDateChange: (date: string) => void;
@@ -72,6 +72,7 @@ type GenericFilterConfig<T extends string | number> = {
     pinnedHeading?: string;
     width?: string;
     minHeight?: string;
+    maxInlineSelected?: number;
 };
 
 function GenericFilter<T extends string | number>({
@@ -93,10 +94,14 @@ function GenericFilter<T extends string | number>({
     pinnedHeading = "Selected Items",
     width = "w-[280px]",
     minHeight,
+    maxInlineSelected = 2,
 }: GenericFilterConfig<T>) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
     const listRef = useRef<HTMLDivElement | null>(null);
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const DEFAULT_RENDER_BATCH = 200;
+    const [visibleCount, setVisibleCount] = useState(DEFAULT_RENDER_BATCH);
 
     const selectedArray = useMemo(() => {
         if (selected === null) return [];
@@ -105,8 +110,29 @@ function GenericFilter<T extends string | number>({
 
     const handleSearchChange = (value: string) => {
         setSearch(value);
-        onSearch?.(value);
+        setVisibleCount(DEFAULT_RENDER_BATCH);
+
+        if (!onSearch) {
+            return;
+        }
+
+        if (searchDebounceRef.current) {
+            clearTimeout(searchDebounceRef.current);
+        }
+
+        searchDebounceRef.current = setTimeout(() => {
+            onSearch(value);
+        }, 250);
     };
+
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+
+        // Reset progressive rendering each time popover opens.
+        setVisibleCount(DEFAULT_RENDER_BATCH);
+    }, [open]);
 
     const optionMap = useMemo(() => {
         const map = new Map<T, FilterOption<T>>();
@@ -166,16 +192,22 @@ function GenericFilter<T extends string | number>({
 
     const handleListScroll = useCallback(
         (event: React.UIEvent<HTMLDivElement>) => {
+            const target = event.currentTarget;
+            const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+
+            // Progressive rendering to avoid mapping huge option arrays at once.
+            if (distanceToBottom < 200) {
+                setVisibleCount((current) => Math.min(current + DEFAULT_RENDER_BATCH, availableOptions.length));
+            }
+
             if (!hasMore || isLoading || isLoadingMore || !onLoadMore) {
                 return;
             }
-            const target = event.currentTarget;
-            const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
             if (distanceToBottom < 48) {
                 onLoadMore();
             }
         },
-        [hasMore, isLoading, isLoadingMore, onLoadMore]
+        [DEFAULT_RENDER_BATCH, availableOptions.length, hasMore, isLoading, isLoadingMore, onLoadMore]
     );
 
     const renderTriggerContent = () => {
@@ -191,7 +223,7 @@ function GenericFilter<T extends string | number>({
         return (
             <div className="flex flex-wrap gap-1 items-center flex-1 min-w-0 text-left">
                 {selectedArray.length === 0 && <span className="text-muted-foreground">{placeholder}</span>}
-                {selectedArray.length > 0 && selectedArray.length <= 2 && (
+                {selectedArray.length > 0 && selectedArray.length <= maxInlineSelected && (
                     selectedLabels.map((label, idx) => (
                         <span
                             key={`${label}-${idx}`}
@@ -276,7 +308,7 @@ function GenericFilter<T extends string | number>({
                             </CommandGroup>
                         )}
                         <CommandGroup className="text-muted-foreground">
-                            {availableOptions.map((option) => {
+                            {availableOptions.slice(0, visibleCount).map((option) => {
                                 const isSelected = selectedArray.includes(option.id);
                                 return (
                                     <CommandItem key={String(option.id)} onSelect={() => handleSelect(option.id)}>
@@ -315,8 +347,8 @@ export function DashboardFilters({
     filters,
     onFilterChange,
     brandOptions,
-    storeOptions,
     kategoriBrandOptions,
+    storeOptions,
     selectedDate,
     availableDates,
     onDateChange,
@@ -434,14 +466,15 @@ export function DashboardFilters({
                     <GenericFilter<string>
                         mode="multi"
                         options={kategoriBrandFilterOptions}
-                        selected={filters.kategoriBrand}
+                        selected={filters.kategoriBrands}
                         onChange={(value) => {
                             const kategori = (value ?? []) as string[];
-                            onFilterChange({ ...filters, kategoriBrand: kategori });
+                            onFilterChange({ ...filters, kategoriBrands: kategori });
                         }}
                         placeholder="All Kategori Brand"
                         searchPlaceholder="Search kategori brand..."
                         emptyMessage="No kategori brand found."
+                        maxInlineSelected={10}
                     />
                 </div>
 
@@ -479,7 +512,14 @@ export function DashboardFilters({
             <div className="flex items-end pt-1 xl:pt-0">
                 <Button
                     variant="ghost"
-                    onClick={() => onFilterChange({ brandIds: [], storeIds: [], skuCodes: [], kategoriBrand: [] })}
+                    onClick={() =>
+                        onFilterChange({
+                            brandIds: [],
+                            storeIds: [],
+                            skuCodes: [],
+                            kategoriBrands: [],
+                        })
+                    }
                     className="w-full xl:w-auto whitespace-nowrap text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-12"
                 >
                     <X size={16} className="mr-2" /> Clear All
@@ -488,4 +528,3 @@ export function DashboardFilters({
         </div>
     );
 }
-

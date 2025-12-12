@@ -69,13 +69,11 @@ func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter 
 		summary = make([]domain.StockHealthSummary, 0)
 	}
 
-	timeSeries, err := s.GetTimeSeries(ctx, days, filter)
-	if err != nil {
-		return nil, err
-	}
-	if timeSeries == nil {
-		timeSeries = make(map[string][]domain.TimeSeriesData)
-	}
+	// Temporarily disable time series computation for the dashboard summary
+	// endpoint. The dashboard currently uses per-date snapshot data only,
+	// so we return an empty time series map here while keeping the underlying
+	// queries and service methods intact for future use.
+	timeSeries := make(map[string][]domain.TimeSeriesData)
 
 	brandBreakdown, err := s.repo.GetBrandBreakdown(ctx, filter)
 	if err != nil {

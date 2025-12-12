@@ -39,10 +39,44 @@ func (h *StockHealthHandler) parseFilter(c *gin.Context) domain.StockHealthFilte
 	// Support multiple kategori_brand values via repeated params or comma-separated string
 	rawKategori := c.QueryArray("kategori_brand")
 	if len(rawKategori) == 0 {
+		// Backwards/forwards compatibility: some clients send kategori_brands
+		rawKategori = c.QueryArray("kategori_brands")
+	}
+
+	if len(rawKategori) == 0 {
 		if single := strings.TrimSpace(c.Query("kategori_brand")); single != "" {
+			rawKategori = strings.Split(single, ",")
+		} else if single := strings.TrimSpace(c.Query("kategori_brands")); single != "" {
 			rawKategori = strings.Split(single, ",")
 		}
 	}
+
+	// If kategori values come from QueryArray but contain comma-separated lists,
+	// flatten them so both styles are supported:
+	//   ?kategori_brand=A&kategori_brand=B
+	//   ?kategori_brand=A,B
+	if len(rawKategori) > 0 {
+		flattened := make([]string, 0, len(rawKategori))
+		for _, v := range rawKategori {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			if strings.Contains(v, ",") {
+				parts := strings.Split(v, ",")
+				for _, p := range parts {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						flattened = append(flattened, p)
+					}
+				}
+				continue
+			}
+			flattened = append(flattened, v)
+		}
+		rawKategori = flattened
+	}
+
 	if len(rawKategori) > 0 {
 		seen := make(map[string]struct{})
 		for _, v := range rawKategori {
@@ -193,23 +227,25 @@ func (h *StockHealthHandler) GetAvailableDates(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"dates": dates})
 }
 
+// GetKategoriBrands returns the list of supported kategori_brand values
 func (h *StockHealthHandler) GetKategoriBrands(c *gin.Context) {
-	kategoriBrands := []string{
-		"BRAND VIRAL",
-		"BEAUTY MATURE",
-		"ACCESSORIES",
-		"BEAUTY TRENDING",
-		"MEN",
-		"SWALAYAN BEAUTY",
-		"SWALAYAN UMUM",
-		"DELISTING",
-		"GRACE AND GLOW",
-		"GA",
-		"KMART IMPOR",
-		"KMART LOKAL",
-		"FASHION",
-		"LUXURY",
-	}
-
-	c.JSON(http.StatusOK, gin.H{"kategori_brands": kategoriBrands})
+	c.JSON(http.StatusOK, gin.H{
+		"kategori_brands": []string{
+			"BRAND VIRAL",
+			"BEAUTY MATURE",
+			"ACCESSORIES",
+			"BEAUTY TRENDING",
+			"",
+			"MEN",
+			"SWALAYAN BEAUTY",
+			"SWALAYAN UMUM",
+			"DELISTING",
+			"GRACE AND GLOW",
+			"GA",
+			"KMART IMPOR",
+			"KMART LOKAL",
+			"FASHION",
+			"LUXURY",
+		},
+	})
 }
