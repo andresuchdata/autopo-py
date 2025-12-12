@@ -171,6 +171,24 @@ function GenericFilter<T extends string | number>({
         return options.filter((option) => !selectedArray.includes(option.id));
     }, [options, selectedArray]);
 
+    const filteredAvailableOptions = useMemo(() => {
+        if (onSearch) {
+            return availableOptions;
+        }
+
+        const normalizedSearch = search.trim().toLowerCase();
+        if (!normalizedSearch) {
+            return availableOptions;
+        }
+
+        return availableOptions.filter((option) => {
+            const label = option.label.toLowerCase();
+            const name = option.name?.toLowerCase() ?? "";
+            const id = String(option.id).toLowerCase();
+            return label.includes(normalizedSearch) || name.includes(normalizedSearch) || id.includes(normalizedSearch);
+        });
+    }, [availableOptions, onSearch, search]);
+
     const handleSelect = (id: T) => {
         if (mode === 'single') {
             onChange(id);
@@ -197,7 +215,7 @@ function GenericFilter<T extends string | number>({
 
             // Progressive rendering to avoid mapping huge option arrays at once.
             if (distanceToBottom < 200) {
-                setVisibleCount((current) => Math.min(current + DEFAULT_RENDER_BATCH, availableOptions.length));
+                setVisibleCount((current) => Math.min(current + DEFAULT_RENDER_BATCH, filteredAvailableOptions.length));
             }
 
             if (!hasMore || isLoading || isLoadingMore || !onLoadMore) {
@@ -207,7 +225,7 @@ function GenericFilter<T extends string | number>({
                 onLoadMore();
             }
         },
-        [DEFAULT_RENDER_BATCH, availableOptions.length, hasMore, isLoading, isLoadingMore, onLoadMore]
+        [DEFAULT_RENDER_BATCH, filteredAvailableOptions.length, hasMore, isLoading, isLoadingMore, onLoadMore]
     );
 
     const renderTriggerContent = () => {
@@ -308,7 +326,7 @@ function GenericFilter<T extends string | number>({
                             </CommandGroup>
                         )}
                         <CommandGroup className="text-muted-foreground">
-                            {availableOptions.slice(0, visibleCount).map((option) => {
+                            {filteredAvailableOptions.slice(0, visibleCount).map((option) => {
                                 const isSelected = selectedArray.includes(option.id);
                                 return (
                                     <CommandItem key={String(option.id)} onSelect={() => handleSelect(option.id)}>
@@ -440,25 +458,6 @@ export function DashboardFilters({
                         </SelectContent>
                     </Select>
                 </div>
-
-                <div className="flex flex-col gap-2">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Tag size={14} className="text-primary/70" /> Brand
-                    </Label>
-                    <GenericFilter<number>
-                        mode="multi"
-                        options={brandFilterOptions}
-                        selected={filters.brandIds}
-                        onChange={(value) => {
-                            const ids = (value ?? []) as number[];
-                            onFilterChange({ ...filters, brandIds: ids, skuCodes: [] });
-                        }}
-                        placeholder="All Brands"
-                        searchPlaceholder="Search brand..."
-                        emptyMessage="No brand found."
-                    />
-                </div>
-
                 <div className="flex flex-col gap-2">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                         <Tag size={14} className="text-primary/70" /> Kategori Brand
@@ -477,7 +476,23 @@ export function DashboardFilters({
                         maxInlineSelected={10}
                     />
                 </div>
-
+                <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Tag size={14} className="text-primary/70" /> Brand
+                    </Label>
+                    <GenericFilter<number>
+                        mode="multi"
+                        options={brandFilterOptions}
+                        selected={filters.brandIds}
+                        onChange={(value) => {
+                            const ids = (value ?? []) as number[];
+                            onFilterChange({ ...filters, brandIds: ids, skuCodes: [] });
+                        }}
+                        placeholder="All Brands"
+                        searchPlaceholder="Search brand..."
+                        emptyMessage="No brand found."
+                    />
+                </div>
                 <div className="flex flex-col gap-2">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                         <Barcode size={14} className="text-primary/70" /> SKU
