@@ -201,23 +201,34 @@ func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset
 		for _, id := range brandIDs {
 			values = append(values, fmt.Sprintf("%d", id))
 		}
-		brandFilter = " AND pm.brand_id IN (" + strings.Join(values, ",") + ")"
+		idList := strings.Join(values, ",")
+		brandFilter = fmt.Sprintf(` AND (
+			EXISTS (SELECT 1 FROM product_mappings pm WHERE pm.product_id = p.id AND pm.brand_id IN (%s))
+			OR EXISTS (
+				SELECT 1 FROM purchase_order_items poi
+				JOIN purchase_orders po ON po.id = poi.po_id
+				WHERE poi.product_id = p.id AND po.brand_id IN (%s)
+			)
+		)`, idList, idList)
 	}
 
 	query := fmt.Sprintf(`
-		SELECT DISTINCT ON (p.id)
+		SELECT DISTINCT
 			p.id,
 			p.sku,
 			p.name,
-			COALESCE(pm.brand_id, 0) AS brand_id,
+			COALESCE(
+				(SELECT pm.brand_id FROM product_mappings pm WHERE pm.product_id = p.id LIMIT 1),
+				(SELECT po.brand_id FROM purchase_order_items poi JOIN purchase_orders po ON po.id = poi.po_id WHERE poi.product_id = p.id LIMIT 1),
+				0
+			) AS brand_id,
 			COALESCE(p.hpp, 0) AS hpp,
 			COALESCE(p.price, 0) AS price,
 			p.created_at,
 			p.updated_at
 		FROM products p
-		LEFT JOIN product_mappings pm ON pm.product_id = p.id
 		WHERE ($1 = '' OR p.sku ILIKE '%%' || $1 || '%%' OR p.name ILIKE '%%' || $1 || '%%')%s
-		ORDER BY p.id, p.sku ASC
+		ORDER BY p.sku ASC
 		LIMIT $2 OFFSET $3
 	`, brandFilter)
 
