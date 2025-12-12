@@ -1,16 +1,21 @@
 package stock_health
 
-import "math"
+import (
+	"math"
+	"strings"
+)
 
 // InventoryCalculator calculates inventory metrics based on the logic from main.ipynb
 type InventoryCalculator struct {
-	specialSKUs map[string]bool
+	specialSKUs   map[string]bool
+	top100ByStore map[string]map[string]bool
 }
 
 // NewInventoryCalculator creates a new inventory calculator
-func NewInventoryCalculator(specialSKUs map[string]bool) *InventoryCalculator {
+func NewInventoryCalculator(specialSKUs map[string]bool, top100ByStore map[string]map[string]bool) *InventoryCalculator {
 	return &InventoryCalculator{
-		specialSKUs: specialSKUs,
+		specialSKUs:   specialSKUs,
+		top100ByStore: top100ByStore,
 	}
 }
 
@@ -60,17 +65,30 @@ func (ic *InventoryCalculator) Calculate(row *RawStockRow) InventoryMetrics {
 		metrics.InitialQtyPO = 0
 	}
 
-	// 8. Emergency PO quantity
-	emergencyQty := (row.MaxLeadTime - metrics.CurrentDaysStockCover) * row.DailySales
-	if row.SedangPO > 0 {
-		metrics.EmergencyPOQty = int(math.Max(0, emergencyQty))
+	// 8. Emergency PO quantity (only for top-100 SKUs per store)
+	isTop100 := false
+	storeKey := normalizeStoreNameForSupplier(row.Toko)
+	if storeKey != "" && ic.top100ByStore != nil {
+		if skuSet, ok := ic.top100ByStore[storeKey]; ok {
+			if skuSet[strings.TrimSpace(row.SKU)] {
+				isTop100 = true
+			}
+		}
+	}
+
+	if isTop100 {
+		emergencyQty := (row.MaxLeadTime - metrics.CurrentDaysStockCover) * row.DailySales
+		if row.SedangPO > 0 {
+			metrics.EmergencyPOQty = int(math.Max(0, emergencyQty))
+		} else {
+			metrics.EmergencyPOQty = int(math.Max(0, math.Ceil(emergencyQty)))
+		}
 	} else {
-		metrics.EmergencyPOQty = int(math.Max(0, math.Ceil(emergencyQty)))
+		metrics.EmergencyPOQty = 0
 	}
 
 	// 9. Updated regular PO quantity
-	updatedRegular := metrics.InitialQtyPO - metrics.EmergencyPOQty
-	metrics.UpdatedRegularPOQty = int(math.Max(0, float64(updatedRegular)))
+	metrics.UpdatedRegularPOQty = metrics.InitialQtyPO
 
 	// 10. Final updated regular PO quantity (enforce minimum order)
 	if metrics.UpdatedRegularPOQty > 0 && float64(metrics.UpdatedRegularPOQty) < row.MinOrder {

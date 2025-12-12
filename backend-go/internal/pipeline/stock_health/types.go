@@ -104,6 +104,7 @@ type Config struct {
 	InputDateFormat    string // Date format in input filenames
 	OutputDir          string // Directory for output CSVs
 	DownloadDir        string // Directory where raw per-store files are located
+	Top100SKUDir       string // Directory containing per-store top 100 SKU files (xlsx/csv)
 
 	// Hybrid intermediate persistence configuration
 	// IntermediateDir is the root directory for per-file intermediate outputs

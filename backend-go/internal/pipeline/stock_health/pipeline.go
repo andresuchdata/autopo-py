@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
+	"github.com/xuri/excelize/v2"
 )
 
 // padangSales holds Padang's per-SKU daily and max daily sales for a snapshot date.
@@ -45,9 +46,14 @@ func NewStockHealthPipeline(cfg Config) *StockHealthPipeline {
 	if cfg.OutputDir == "" {
 		cfg.OutputDir = filepath.Join("data", "seeds", "stock_health")
 	}
+	if cfg.Top100SKUDir == "" {
+		cfg.Top100SKUDir = filepath.Join("data", "pipeline", "stock_health", "top_100_sku")
+	}
+
+	top100ByStore := loadTop100SKUsByStore(cfg.Top100SKUDir, cfg.InputDateFormat)
 	p := &StockHealthPipeline{
 		config:           cfg,
-		calculator:       NewInventoryCalculator(cfg.SpecialSKUs),
+		calculator:       NewInventoryCalculator(cfg.SpecialSKUs, top100ByStore),
 		padangSalesCache: make(map[string]map[string]padangSales),
 		supplierIndex:    make(map[supplierKey]SupplierData),
 	}
@@ -63,6 +69,176 @@ func NewStockHealthPipeline(cfg Config) *StockHealthPipeline {
 		p.supplierIndex[key] = s
 	}
 	return p
+}
+
+func loadTop100SKUsByStore(dir string, inputDateFormat string) map[string]map[string]bool {
+	res := make(map[string]map[string]bool)
+	if strings.TrimSpace(dir) == "" {
+		return res
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return res
+	}
+	// We derive store key from filename using the same convention as the notebook.
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		ext := strings.ToLower(filepath.Ext(name))
+		if ext != ".xlsx" && ext != ".csv" {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		storeKey := getStoreNameFromGenericFilename(path, inputDateFormat)
+		if storeKey == "" {
+			continue
+		}
+		var skus []string
+		if ext == ".xlsx" {
+			skus = readTop100FromXLSX(path)
+		} else {
+			skus = readTop100FromCSV(path)
+		}
+		if len(skus) == 0 {
+			continue
+		}
+		set := make(map[string]bool)
+		for _, sku := range skus {
+			sku = strings.TrimSpace(sku)
+			if sku == "" {
+				continue
+			}
+			set[sku] = true
+		}
+		if len(set) > 0 {
+			res[storeKey] = set
+		}
+	}
+	return res
+}
+
+func getStoreNameFromGenericFilename(path string, inputDateFormat string) string {
+	base := filepath.Base(path)
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+	// Strip leading date prefix if it matches the configured layout followed by '_'
+	layout := inputDateFormat
+	if layout == "" {
+		layout = "20060102"
+	}
+	if len(name) > len(layout)+1 && name[len(layout)] == '_' {
+		if _, err := time.Parse(layout, name[:len(layout)]); err == nil {
+			name = name[len(layout)+1:]
+		}
+	}
+	parts := strings.Fields(name)
+	if len(parts) >= 3 && strings.EqualFold(parts[1], "miss") && strings.EqualFold(parts[2], "glam") {
+		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[3:], " ")))
+	}
+	if len(parts) >= 2 && strings.EqualFold(parts[0], "miss") && strings.EqualFold(parts[1], "glam") {
+		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[2:], " ")))
+	}
+	if len(parts) > 1 {
+		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[1:], " ")))
+	}
+	if len(parts) == 1 {
+		return strings.ToUpper(strings.TrimSpace(parts[0]))
+	}
+	return ""
+}
+
+func readTop100FromXLSX(path string) []string {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return nil
+	}
+	sheet := sheets[0]
+	rows, err := f.Rows(sheet)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	// Read header to locate SKU column
+	if !rows.Next() {
+		return nil
+	}
+	header, err := rows.Columns()
+	if err != nil {
+		return nil
+	}
+	skuIdx := 0
+	for i, h := range header {
+		if normalizeColumnName(h) == "sku" {
+			skuIdx = i
+			break
+		}
+	}
+
+	var out []string
+	for rows.Next() {
+		record, err := rows.Columns()
+		if err != nil {
+			break
+		}
+		if skuIdx >= len(record) {
+			continue
+		}
+		sku := strings.TrimSpace(record[skuIdx])
+		if sku == "" {
+			continue
+		}
+		out = append(out, sku)
+		if len(out) >= 100 {
+			break
+		}
+	}
+	return out
+}
+
+func readTop100FromCSV(path string) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	r := csv.NewReader(f)
+	r.TrimLeadingSpace = true
+	header, err := r.Read()
+	if err != nil {
+		return nil
+	}
+	skuIdx := 0
+	for i, h := range header {
+		if normalizeColumnName(h) == "sku" {
+			skuIdx = i
+			break
+		}
+	}
+	var out []string
+	for {
+		rec, err := r.Read()
+		if err != nil {
+			break
+		}
+		if skuIdx >= len(rec) {
+			continue
+		}
+		sku := strings.TrimSpace(rec[skuIdx])
+		if sku == "" {
+			continue
+		}
+		out = append(out, sku)
+		if len(out) >= 100 {
+			break
+		}
+	}
+	return out
 }
 
 // Name returns the unique identifier of this pipeline.
