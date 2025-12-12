@@ -129,6 +129,11 @@ func stockHealthPipelineFlags() []cli.Flag {
 			Usage:   "Path to supplier master file (CSV or XLSX). If empty, falls back to suppliers.xlsx or suppliers.csv in data/pipeline/stock_health",
 			EnvVars: []string{"STOCK_HEALTH_SUPPLIER_FILE"},
 		},
+		&cli.StringFlag{
+			Name:    "top100-sku-dir",
+			Usage:   "Directory containing per-store top 100 SKU files (xlsx/csv). If empty, defaults to data/pipeline/stock_health/top_100_sku",
+			EnvVars: []string{"STOCK_HEALTH_TOP100_SKU_DIR"},
+		},
 	}
 }
 
@@ -231,14 +236,20 @@ func runStockHealthPipeline(c *cli.Context) error {
 		localFiles = filtered
 	}
 
-	// Load special SKUs that should use 60 days cover (default is 30)
+	// Load special SKUs that are top 100 per store
 	dataRoot := filepath.Join("data", "pipeline", "stock_health")
-	specialSKUsPath := filepath.Join(dataRoot, "special_sku_60.csv")
-	specialSKUs, err := loadSpecialSKUs(specialSKUsPath)
-	if err != nil {
-		log.Printf("warning: failed to load special SKUs from %s: %v (falling back to default 30 days cover)", specialSKUsPath, err)
-		specialSKUs = map[string]bool{}
+	top100Dir := c.String("top100-sku-dir")
+	if strings.TrimSpace(top100Dir) == "" {
+		top100Dir = filepath.Join(dataRoot, "top_100_sku")
 	}
+
+	// Load special SKUs that should use 60 days cover (default is 30)
+	// specialSKUsPath := filepath.Join(dataRoot, "special_sku_60.csv")
+	// specialSKUs, err := loadSpecialSKUs(specialSKUsPath)
+	// if err != nil {
+	// 	log.Printf("warning: failed to load special SKUs from %s: %v (falling back to default 30 days cover)", specialSKUsPath, err)
+	// 	specialSKUs = map[string]bool{}
+	// }
 
 	// Load supplier master data (optional). Source can be specified via flag/env,
 	// otherwise we fall back to suppliers.xlsx or suppliers.csv under dataRoot.
@@ -269,13 +280,13 @@ func runStockHealthPipeline(c *cli.Context) error {
 
 	// Build stock health pipeline
 	stockCfg := stockhealth.Config{
-		SpecialSKUs:        specialSKUs,
 		SupplierData:       supplierData,
 		StoreContributions: STORE_CONTRIBUTIONS,
 		PadangStoreName:    "Miss Glam Padang",
 		InputDateFormat:    inputDateFormat,
 		OutputDir:          outputDir,
 		DownloadDir:        downloadDir,
+		Top100SKUDir:       top100Dir,
 		IntermediateDir:    intermediateDir,
 		PersistMergedOnly:  true,
 		PersistDebugLayers: persistDebug,
@@ -297,46 +308,6 @@ func runStockHealthPipeline(c *cli.Context) error {
 
 	log.Println("Stock health pipeline completed successfully")
 	return nil
-}
-
-// loadSpecialSKUs reads a semicolon-delimited CSV of SKUs that require 60 days cover.
-// Expected format (with header):
-//
-//	SKU;Nama Produk;
-//	8999...;Some product;
-func loadSpecialSKUs(path string) (map[string]bool, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-	r.Comma = ';'
-	r.TrimLeadingSpace = true
-
-	// skip header
-	if _, err := r.Read(); err != nil {
-		return nil, fmt.Errorf("failed to read header from %s: %w", path, err)
-	}
-
-	res := make(map[string]bool)
-	for {
-		record, err := r.Read()
-		if err != nil {
-			// EOF or other error; stop
-			break
-		}
-		if len(record) == 0 {
-			continue
-		}
-		sku := strings.TrimSpace(record[0])
-		if sku == "" || sku == "SKU" {
-			continue
-		}
-		res[sku] = true
-	}
-	return res, nil
 }
 
 // loadSupplierData reads supplier master data from a CSV or XLSX file.
