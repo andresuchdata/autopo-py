@@ -482,8 +482,9 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 			}
 			upperVals = append(upperVals, strings.ToUpper(v))
 		}
+
 		if len(upperVals) > 0 {
-			conditions = append(conditions, fmt.Sprintf("UPPER(%s.kategori_brand) = ANY($%d::text[])", alias, idx))
+			conditions = append(conditions, fmt.Sprintf("UPPER(TRIM(%s.kategori_brand)) = ANY($%d::text[])", alias, idx))
 			args = append(args, pq.Array(upperVals))
 			idx++
 		}

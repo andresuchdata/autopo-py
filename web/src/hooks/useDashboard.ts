@@ -7,12 +7,12 @@ import { useSkuOptions } from './useSkuOptions';
 
 export interface DashboardFiltersState {
   brandIds: number[];
+  kategoriBrand: string[];
   storeIds: number[];
   skuCodes: string[];
-  kategoriBrand: string[];
 }
 
-const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], storeIds: [], skuCodes: [], kategoriBrand: [] };
+const DEFAULT_FILTERS: DashboardFiltersState = { brandIds: [], kategoriBrand: [], storeIds: [], skuCodes: [] };
 const DEFAULT_STORE_NAME = 'miss glam padang';
 
 export function useDashboard() {
@@ -260,7 +260,7 @@ export function useDashboard() {
     filters,
     brandOptions,
     storeOptions,
-    kategoriBrandOptions,
+    kategoriBrandOptions: [],
     skuOptions,
     availableDates,
     onDateChange: handleDateChange,

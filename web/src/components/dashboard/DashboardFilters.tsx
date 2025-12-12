@@ -31,8 +31,8 @@ interface DashboardFiltersProps {
     filters: DashboardFiltersState;
     onFilterChange: (filters: DashboardFiltersState) => void;
     brandOptions: LabeledOption[];
-    storeOptions: LabeledOption[];
     kategoriBrandOptions: string[];
+    storeOptions: LabeledOption[];
     selectedDate: string | null;
     availableDates: string[];
     onDateChange: (date: string) => void;
@@ -72,6 +72,7 @@ type GenericFilterConfig<T extends string | number> = {
     pinnedHeading?: string;
     width?: string;
     minHeight?: string;
+    maxInlineSelected?: number;
 };
 
 function GenericFilter<T extends string | number>({
@@ -93,6 +94,7 @@ function GenericFilter<T extends string | number>({
     pinnedHeading = "Selected Items",
     width = "w-[280px]",
     minHeight,
+    maxInlineSelected = 2,
 }: GenericFilterConfig<T>) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -191,7 +193,7 @@ function GenericFilter<T extends string | number>({
         return (
             <div className="flex flex-wrap gap-1 items-center flex-1 min-w-0 text-left">
                 {selectedArray.length === 0 && <span className="text-muted-foreground">{placeholder}</span>}
-                {selectedArray.length > 0 && selectedArray.length <= 2 && (
+                {selectedArray.length > 0 && selectedArray.length <= maxInlineSelected && (
                     selectedLabels.map((label, idx) => (
                         <span
                             key={`${label}-${idx}`}
@@ -315,8 +317,8 @@ export function DashboardFilters({
     filters,
     onFilterChange,
     brandOptions,
-    storeOptions,
     kategoriBrandOptions,
+    storeOptions,
     selectedDate,
     availableDates,
     onDateChange,
@@ -442,6 +444,7 @@ export function DashboardFilters({
                         placeholder="All Kategori Brand"
                         searchPlaceholder="Search kategori brand..."
                         emptyMessage="No kategori brand found."
+                        maxInlineSelected={10}
                     />
                 </div>
 
@@ -479,7 +482,14 @@ export function DashboardFilters({
             <div className="flex items-end pt-1 xl:pt-0">
                 <Button
                     variant="ghost"
-                    onClick={() => onFilterChange({ brandIds: [], storeIds: [], skuCodes: [], kategoriBrand: [] })}
+                    onClick={() =>
+                        onFilterChange({
+                            brandIds: [],
+                            storeIds: [],
+                            skuCodes: [],
+                            kategoriBrand: [],
+                        })
+                    }
                     className="w-full xl:w-auto whitespace-nowrap text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-12"
                 >
                     <X size={16} className="mr-2" /> Clear All
@@ -488,4 +498,3 @@ export function DashboardFilters({
         </div>
     );
 }
-
