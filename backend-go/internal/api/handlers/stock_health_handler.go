@@ -193,23 +193,25 @@ func (h *StockHealthHandler) GetAvailableDates(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"dates": dates})
 }
 
+// GetKategoriBrands returns the list of supported kategori_brand values
 func (h *StockHealthHandler) GetKategoriBrands(c *gin.Context) {
-	kategoriBrands := []string{
-		"BRAND VIRAL",
-		"BEAUTY MATURE",
-		"ACCESSORIES",
-		"BEAUTY TRENDING",
-		"MEN",
-		"SWALAYAN BEAUTY",
-		"SWALAYAN UMUM",
-		"DELISTING",
-		"GRACE AND GLOW",
-		"GA",
-		"KMART IMPOR",
-		"KMART LOKAL",
-		"FASHION",
-		"LUXURY",
-	}
-
-	c.JSON(http.StatusOK, gin.H{"kategori_brands": kategoriBrands})
+	c.JSON(http.StatusOK, gin.H{
+		"kategori_brands": []string{
+			"BRAND VIRAL",
+			"BEAUTY MATURE",
+			"ACCESSORIES",
+			"BEAUTY TRENDING",
+			"",
+			"MEN",
+			"SWALAYAN BEAUTY",
+			"SWALAYAN UMUM",
+			"DELISTING",
+			"GRACE AND GLOW",
+			"GA",
+			"KMART IMPOR",
+			"KMART LOKAL",
+			"FASHION",
+			"LUXURY",
+		},
+	})
 }
