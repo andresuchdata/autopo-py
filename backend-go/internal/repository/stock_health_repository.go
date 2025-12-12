@@ -484,7 +484,9 @@ func buildFilterClause(filter domain.StockHealthFilter, alias string, startIdx i
 		}
 
 		if len(upperVals) > 0 {
-			conditions = append(conditions, fmt.Sprintf("UPPER(TRIM(%s.kategori_brand)) = ANY($%d::text[])", alias, idx))
+			// Normalize whitespace (including non-breaking spaces) to make filtering resilient
+			normalizedKategoriExpr := fmt.Sprintf("regexp_replace(upper(trim(replace(%s.kategori_brand, chr(160), ' '))), '\\s+', ' ', 'g')", alias)
+			conditions = append(conditions, fmt.Sprintf("%s = ANY($%d::text[])", normalizedKategoriExpr, idx))
 			args = append(args, pq.Array(upperVals))
 			idx++
 		}
