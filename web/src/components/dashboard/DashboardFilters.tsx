@@ -181,11 +181,30 @@ function GenericFilter<T extends string | number>({
             return availableOptions;
         }
 
-        return availableOptions.filter((option) => {
+        const filtered = availableOptions.filter((option) => {
             const label = option.label.toLowerCase();
             const name = option.name?.toLowerCase() ?? "";
             const id = String(option.id).toLowerCase();
             return label.includes(normalizedSearch) || name.includes(normalizedSearch) || id.includes(normalizedSearch);
+        });
+
+        return filtered.sort((a, b) => {
+            const aLabel = a.label.toLowerCase();
+            const bLabel = b.label.toLowerCase();
+            const aName = a.name?.toLowerCase() ?? "";
+            const bName = b.name?.toLowerCase() ?? "";
+            
+            const aLabelStarts = aLabel.startsWith(normalizedSearch);
+            const bLabelStarts = bLabel.startsWith(normalizedSearch);
+            const aNameStarts = aName.startsWith(normalizedSearch);
+            const bNameStarts = bName.startsWith(normalizedSearch);
+            
+            if (aLabelStarts && !bLabelStarts) return -1;
+            if (!aLabelStarts && bLabelStarts) return 1;
+            if (aNameStarts && !bNameStarts) return -1;
+            if (!aNameStarts && bNameStarts) return 1;
+            
+            return aLabel.localeCompare(bLabel);
         });
     }, [availableOptions, onSearch, search]);
 
