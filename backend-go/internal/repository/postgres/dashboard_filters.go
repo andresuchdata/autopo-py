@@ -92,6 +92,7 @@ func normalizeAlias(alias string) string {
 func buildDerivedStatusCase(alias string) string {
 	normalized := normalizeAlias(alias)
 	return fmt.Sprintf(`CASE
+			WHEN s.status = 2 THEN 2
 	        WHEN %[1]spo_received_at IS NOT NULL THEN 3
 	        WHEN %[1]spo_arrived_at IS NOT NULL THEN 5
 	        WHEN %[1]spo_approved_at IS NOT NULL THEN 1
@@ -104,6 +105,7 @@ func buildDerivedStatusCase(alias string) string {
 func buildDerivedStatusTimestampCase(alias, fallbackColumn string) string {
 	normalized := normalizeAlias(alias)
 	fallback := fallbackColumn
+
 	switch {
 	case fallback == "":
 		fallback = fmt.Sprintf("%stime", normalized)
@@ -112,7 +114,7 @@ func buildDerivedStatusTimestampCase(alias, fallbackColumn string) string {
 	}
 
 	return fmt.Sprintf(`CASE
-        WHEN %[1]sstatus = 2 THEN %[2]s
+        WHEN %[1]sstatus = 2 THEN %[1]spo_approved_at
         WHEN %[1]spo_received_at IS NOT NULL THEN %[1]spo_received_at
         WHEN %[1]spo_arrived_at IS NOT NULL THEN %[1]spo_arrived_at
         WHEN %[1]spo_approved_at IS NOT NULL THEN %[1]spo_approved_at

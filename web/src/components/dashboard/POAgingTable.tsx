@@ -178,6 +178,7 @@ export const POAgingTable: React.FC<POAgingTableProps> = ({ initialItems }) => {
                             <SelectItem value="Released">Released</SelectItem>
                             <SelectItem value="Sent">Sent</SelectItem>
                             <SelectItem value="Approved">Approved</SelectItem>
+                            <SelectItem value="Declined">Declined</SelectItem>
                             <SelectItem value="Arrived">Arrived</SelectItem>
                             <SelectItem value="Received">Received</SelectItem>
                         </SelectContent>
