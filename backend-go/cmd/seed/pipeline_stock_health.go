@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/drive"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
@@ -277,6 +278,8 @@ func runStockHealthPipeline(c *cli.Context) error {
 		localFiles = filtered
 	}
 
+	log.Printf("Downloaded %d files from Google Drive", len(localFiles))
+
 	// Load special SKUs that are top 100 per store
 	dataRoot := filepath.Join("data", "pipeline", "stock_health")
 	top100Dir := c.String("top100-sku-dir")
@@ -344,6 +347,25 @@ func runStockHealthPipeline(c *cli.Context) error {
 	pipelineImpl, err := stockhealth.NewStockHealthPipeline(stockCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create stock health pipeline: %w", err)
+	}
+
+	// Upload raw files to cloud storage if enabled
+	if stockCfg.CloudStorageEnabled && snapshotDate != "" {
+		log.Printf("Uploading %d raw files to cloud storage...", len(localFiles))
+		parsedDate, err := time.Parse(inputDateFormat, snapshotDate)
+		if err != nil {
+			log.Printf("warning: failed to parse snapshot date %s: %v (skipping raw upload)", snapshotDate, err)
+		} else {
+			uploadedCount := 0
+			for _, localPath := range localFiles {
+				if _, err := pipelineImpl.UploadRawFile(ctx, parsedDate, localPath); err != nil {
+					log.Printf("warning: failed to upload raw file %s: %v", localPath, err)
+				} else {
+					uploadedCount++
+				}
+			}
+			log.Printf("Successfully uploaded %d/%d raw files to cloud storage", uploadedCount, len(localFiles))
+		}
 	}
 
 	// Configure generic pipeline config

@@ -109,7 +109,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://missglam:secret@db:5432/missglam?sslmode=disable
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-autopo}?sslmode=disable
       GOOGLE_DRIVE_CREDENTIALS_JSON: "${GOOGLE_DRIVE_CREDENTIALS_JSON}"
       STOCK_HEALTH_DRIVE_FOLDER_ID: "${STOCK_HEALTH_DRIVE_FOLDER_ID}"
       STOCK_HEALTH_SNAPSHOT_DATE: "${STOCK_HEALTH_SNAPSHOT_DATE:-}"

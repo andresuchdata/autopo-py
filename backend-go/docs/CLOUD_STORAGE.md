@@ -96,10 +96,11 @@ When `CLOUD_STORAGE_ENABLED=false` (default), the pipeline operates normally usi
 ### Cloud Storage Mode
 
 When `CLOUD_STORAGE_ENABLED=true`:
-1. **Raw files** are still downloaded from Google Drive to local temp directory
-2. **Intermediate CSVs** are uploaded to `{bucket}/stock_health/intermediate/...`
-3. **Final aggregated CSV** is uploaded to `{bucket}/stock_health/output/{YYYY}/{MM}/{DD}/`
-4. Local directories (`STOCK_HEALTH_DOWNLOAD_DIR`, etc.) are still used for temporary processing
+1. **Raw files** are downloaded from Google Drive to local temp directory
+2. **Raw files** are uploaded to `{bucket}/stock_health/raw/{YYYY}/{MM}/{DD}/` (backup)
+3. **Intermediate CSVs** are uploaded to `{bucket}/stock_health/intermediate/...`
+4. **Final aggregated CSV** is uploaded to `{bucket}/stock_health/output/{YYYY}/{MM}/{DD}/`
+5. Local directories (`STOCK_HEALTH_DOWNLOAD_DIR`, etc.) are still used for temporary processing
 
 ### Hybrid Mode
 
