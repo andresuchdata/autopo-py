@@ -1326,7 +1326,7 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 			initial_qty_po, emergency_po_qty, updated_regular_po_qty,
 			final_updated_regular_po_qty, emergency_po_cost,
 			final_updated_regular_po_cost, contribution_pct,
-			sales_contribution, target_days_cover, daily_stock_cover
+			sales_contribution, target_days_cover, current_days_stock_cover
 		)
 		SELECT
 			time, store_id, product_id, brand_id, sku, kategori_brand,
@@ -1364,6 +1364,7 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 			contribution_pct = EXCLUDED.contribution_pct,
 			sales_contribution = EXCLUDED.sales_contribution,
 			target_days_cover = EXCLUDED.target_days_cover,
+			current_days_stock_cover = EXCLUDED.current_days_stock_cover,
 			updated_at = NOW()
 	`, quotedTable)
 
