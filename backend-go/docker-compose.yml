@@ -105,6 +105,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgres://missglam:secret@db:5432/missglam?sslmode=disable
       GOOGLE_DRIVE_CREDENTIALS_JSON: "${GOOGLE_DRIVE_CREDENTIALS_JSON}"
@@ -123,8 +126,10 @@ services:
       CLOUD_STORAGE_SECRET_KEY: "${CLOUD_STORAGE_SECRET_KEY}"
       CLOUD_STORAGE_USE_SSL: "${CLOUD_STORAGE_USE_SSL:-true}"
       CLOUD_STORAGE_PREFIX: "${CLOUD_STORAGE_PREFIX:-}"
-    command: >
-      /app/bin/seed pipeline-stock-health
+    networks:
+      - autopo-network
+    entrypoint: []
+    command: /app/bin/seed pipeline-stock-health
 
 networks:
   autopo-network:
