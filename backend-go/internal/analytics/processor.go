@@ -167,19 +167,34 @@ func (p *AnalyticsProcessor) poTimeLayouts() []string {
 const analyticsBatchSize = 1000
 
 type stockHealthRecord struct {
-	snapshotTime      time.Time
-	storeID           int
-	productID         int
-	brandID           sql.NullInt64
-	sku               string
-	kategoriBrand     string
-	stock             int
-	dailySales        float64
-	maxDailySales     float64
-	origDailySales    float64
-	origMaxDailySales float64
-	dailyStockCover   float64
-	hpp               float64
+	snapshotTime              time.Time
+	storeID                   int
+	productID                 int
+	brandID                   sql.NullInt64
+	sku                       string
+	kategoriBrand             string
+	stock                     int
+	dailySales                float64
+	maxDailySales             float64
+	dailyStockCover           float64
+	hpp                       float64
+	leadTime                  int
+	maxLeadTime               int
+	minOrder                  int
+	sedangPO                  int
+	safetyStock               int
+	reorderPoint              int
+	isOpenPO                  bool
+	initialQtyPO              int
+	emergencyPOQty            int
+	updatedRegularPOQty       int
+	finalUpdatedRegularPOQty  int
+	emergencyPOCost           float64
+	finalUpdatedRegularPOCost float64
+	contributionPct           float64
+	salesContribution         float64
+	targetDaysCover           int
+	currentDaysStockCover     float64
 }
 
 type rawPOSnapshotRow struct {
@@ -202,17 +217,33 @@ type rawPOSnapshotRow struct {
 }
 
 type rawStockHealthRow struct {
-	storeName         string
-	sku               string
-	brandName         string
-	kategoriBrand     string
-	stock             int
-	dailySales        float64
-	maxDailySales     float64
-	origDailySales    float64
-	origMaxDailySales float64
-	dailyStockCover   float64
-	hpp               float64
+	storeName                 string
+	sku                       string
+	brandName                 string
+	kategoriBrand             string
+	stock                     int
+	dailySales                float64
+	maxDailySales             float64
+	dailyStockCover           float64
+	hpp                       float64
+	leadTime                  int
+	maxLeadTime               int
+	minOrder                  int
+	sedangPO                  int
+	safetyStock               int
+	reorderPoint              int
+	isOpenPO                  bool
+	initialQtyPO              int
+	emergencyPOQty            int
+	updatedRegularPOQty       int
+	finalUpdatedRegularPOQty  int
+	emergencyPOCost           float64
+	finalUpdatedRegularPOCost float64
+	contributionPct           float64
+	salesContribution         float64
+	targetDaysCover           int
+	qtyForTargetDaysCover     int
+	currentDaysStockCover     float64
 }
 
 type poSnapshotRecord struct {
@@ -335,35 +366,62 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		}
 		rowNumber++
 
-		sku := strings.TrimSpace(record[colMap["sku"]])
+		getValue := func(colName string) string {
+			if idx, ok := colMap[normalizeColumnName(colName)]; ok && idx < len(record) {
+				return strings.TrimSpace(record[idx])
+			}
+			return ""
+		}
+
+		getInt := func(colName string) int {
+			val := getValue(colName)
+			if val == "" {
+				return 0
+			}
+			val = strings.ReplaceAll(val, ",", "")
+			parsed, _ := strconv.Atoi(val)
+			return parsed
+		}
+
+		getFloat := func(colName string) float64 {
+			val := getValue(colName)
+			if val == "" {
+				return 0
+			}
+			val = strings.ReplaceAll(val, ",", "")
+			parsed, _ := strconv.ParseFloat(val, 64)
+			return parsed
+		}
+
+		getBool := func(colName string) bool {
+			val := getValue(colName)
+			return val == "1" || val == "true" || val == "True" || val == "TRUE"
+		}
+
+		sku := getValue("sku")
 		if sku == "" {
 			skippedRows++
 			log.Printf("warning: skipping row %d in %s: empty SKU", rowNumber+1, filepath.Base(filePath))
 			continue
 		}
 
-		hppValue := parseOptionalFloat(record, colMap, "hpp")
+		hppValue := getFloat("hpp")
 		if hppValue > 0 {
 			if _, exists := skuHPP[sku]; !exists {
 				skuHPP[sku] = hppValue
 			}
 		}
 
-		brandName := strings.TrimSpace(record[colMap["brand"]])
-		kategoriBrand := ""
-		if idx, ok := colMap["Kategori Brand"]; ok && idx < len(record) {
-			kategoriBrand = strings.TrimSpace(record[idx])
-		}
-		storeName := strings.TrimSpace(record[colMap["store"]])
+		brandName := getValue("brand")
+		kategoriBrand := getValue("kategori_brand")
+		storeName := getValue("store")
 		if storeName == "" {
 			return fmt.Errorf("record missing store name")
 		}
 
-		stock := parseOptionalInt(record[colMap["stock"]])
-		dailySales := parseOptionalFloat(record, colMap, "Daily Sales")
-		maxDailySales := parseOptionalFloat(record, colMap, "Max. Daily Sales")
-		origDailySales := parseOptionalFloat(record, colMap, "Orig Daily Sales")
-		origMaxDailySales := parseOptionalFloat(record, colMap, "Orig Max. Daily Sales")
+		stock := getInt("stock")
+		dailySales := getFloat("daily_sales")
+		maxDailySales := getFloat("max_daily_sales")
 
 		var dailyStockCover float64
 		if dailySales > 0 {
@@ -379,17 +437,33 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		}
 
 		rawRows = append(rawRows, rawStockHealthRow{
-			storeName:         storeName,
-			sku:               sku,
-			brandName:         brandName,
-			kategoriBrand:     kategoriBrand,
-			stock:             stock,
-			dailySales:        dailySales,
-			maxDailySales:     maxDailySales,
-			origDailySales:    origDailySales,
-			origMaxDailySales: origMaxDailySales,
-			dailyStockCover:   dailyStockCover,
-			hpp:               hppValue,
+			storeName:                 storeName,
+			sku:                       sku,
+			brandName:                 brandName,
+			kategoriBrand:             kategoriBrand,
+			stock:                     stock,
+			dailySales:                dailySales,
+			maxDailySales:             maxDailySales,
+			dailyStockCover:           dailyStockCover,
+			hpp:                       hppValue,
+			leadTime:                  getInt("lead_time"),
+			maxLeadTime:               getInt("max_lead_time"),
+			minOrder:                  getInt("min_order"),
+			sedangPO:                  getInt("sedang_po"),
+			safetyStock:               getInt("safety_stock"),
+			reorderPoint:              getInt("reorder_point"),
+			isOpenPO:                  getBool("is_open_po"),
+			initialQtyPO:              getInt("initial_qty_po"),
+			emergencyPOQty:            getInt("emergency_po_qty"),
+			updatedRegularPOQty:       getInt("updated_regular_po_qty"),
+			finalUpdatedRegularPOQty:  getInt("final_updated_regular_po_qty"),
+			emergencyPOCost:           getFloat("emergency_po_cost"),
+			finalUpdatedRegularPOCost: getFloat("final_updated_regular_po_cost"),
+			contributionPct:           getFloat("contribution_pct"),
+			salesContribution:         getFloat("sales_contribution"),
+			targetDaysCover:           getInt("target_days_cover"),
+			qtyForTargetDaysCover:     getInt("qty_for_target_days_cover"),
+			currentDaysStockCover:     getFloat("current_days_stock_cover"),
 		})
 	}
 
@@ -431,19 +505,34 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		}
 
 		rec := stockHealthRecord{
-			snapshotTime:      snapshotTime,
-			storeID:           storeID,
-			productID:         productID,
-			brandID:           brandID,
-			sku:               raw.sku,
-			kategoriBrand:     raw.kategoriBrand,
-			stock:             raw.stock,
-			dailySales:        raw.dailySales,
-			maxDailySales:     raw.maxDailySales,
-			origDailySales:    raw.origDailySales,
-			origMaxDailySales: raw.origMaxDailySales,
-			dailyStockCover:   raw.dailyStockCover,
-			hpp:               raw.hpp,
+			snapshotTime:              snapshotTime,
+			storeID:                   storeID,
+			productID:                 productID,
+			brandID:                   brandID,
+			sku:                       raw.sku,
+			kategoriBrand:             raw.kategoriBrand,
+			stock:                     raw.stock,
+			dailySales:                raw.dailySales,
+			maxDailySales:             raw.maxDailySales,
+			dailyStockCover:           raw.dailyStockCover,
+			hpp:                       raw.hpp,
+			leadTime:                  raw.leadTime,
+			maxLeadTime:               raw.maxLeadTime,
+			minOrder:                  raw.minOrder,
+			sedangPO:                  raw.sedangPO,
+			safetyStock:               raw.safetyStock,
+			reorderPoint:              raw.reorderPoint,
+			isOpenPO:                  raw.isOpenPO,
+			initialQtyPO:              raw.initialQtyPO,
+			emergencyPOQty:            raw.emergencyPOQty,
+			updatedRegularPOQty:       raw.updatedRegularPOQty,
+			finalUpdatedRegularPOQty:  raw.finalUpdatedRegularPOQty,
+			emergencyPOCost:           raw.emergencyPOCost,
+			finalUpdatedRegularPOCost: raw.finalUpdatedRegularPOCost,
+			contributionPct:           raw.contributionPct,
+			salesContribution:         raw.salesContribution,
+			targetDaysCover:           raw.targetDaysCover,
+			currentDaysStockCover:     raw.currentDaysStockCover,
 		}
 
 		key := makeStockHealthKey(rec)
@@ -887,6 +976,15 @@ func truncateString(s string, max int) string {
 	return s[:max]
 }
 
+func normalizeColumnName(name string) string {
+	// Normalize to lowercase and remove spaces, dots, underscores
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = strings.ReplaceAll(name, " ", "")
+	name = strings.ReplaceAll(name, "_", "")
+	name = strings.ReplaceAll(name, ".", "")
+	return name
+}
+
 func parseOptionalFloat(record []string, colMap map[string]int, column string) float64 {
 	idx, ok := colMap[column]
 	if !ok || idx >= len(record) {
@@ -1189,10 +1287,25 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 			stock INTEGER,
 			daily_sales DOUBLE PRECISION,
 			max_daily_sales DOUBLE PRECISION,
-			orig_daily_sales DOUBLE PRECISION,
-			orig_max_daily_sales DOUBLE PRECISION,
 			daily_stock_cover DOUBLE PRECISION,
-			hpp DOUBLE PRECISION
+			hpp DOUBLE PRECISION,
+			lead_time INTEGER,
+			max_lead_time INTEGER,
+			min_order INTEGER,
+			sedang_po INTEGER,
+			safety_stock INTEGER,
+			reorder_point INTEGER,
+			is_open_po BOOLEAN,
+			initial_qty_po INTEGER,
+			emergency_po_qty INTEGER,
+			updated_regular_po_qty INTEGER,
+			final_updated_regular_po_qty INTEGER,
+			emergency_po_cost DOUBLE PRECISION,
+			final_updated_regular_po_cost DOUBLE PRECISION,
+			contribution_pct DOUBLE PRECISION,
+			sales_contribution DOUBLE PRECISION,
+			target_days_cover INTEGER,
+			current_days_stock_cover DOUBLE PRECISION
 		) ON COMMIT DROP
 	`, quotedTable)
 	if _, err := tx.ExecContext(ctx, createStmt); err != nil {
@@ -1207,14 +1320,24 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 		INSERT INTO daily_stock_data (
 			time, store_id, product_id, brand_id, sku, kategori_brand,
 			stock, daily_sales, max_daily_sales,
-			orig_daily_sales, orig_max_daily_sales,
-			daily_stock_cover, hpp
+			daily_stock_cover, hpp,
+			lead_time, max_lead_time, min_order, sedang_po,
+			safety_stock, reorder_point, is_open_po,
+			initial_qty_po, emergency_po_qty, updated_regular_po_qty,
+			final_updated_regular_po_qty, emergency_po_cost,
+			final_updated_regular_po_cost, contribution_pct,
+			sales_contribution, target_days_cover, daily_stock_cover
 		)
 		SELECT
 			time, store_id, product_id, brand_id, sku, kategori_brand,
 			stock, daily_sales, max_daily_sales,
-			orig_daily_sales, orig_max_daily_sales,
-			daily_stock_cover, hpp
+			daily_stock_cover, hpp,
+			lead_time, max_lead_time, min_order, sedang_po,
+			safety_stock, reorder_point, is_open_po,
+			initial_qty_po, emergency_po_qty, updated_regular_po_qty,
+			final_updated_regular_po_qty, emergency_po_cost,
+			final_updated_regular_po_cost, contribution_pct,
+			sales_contribution, target_days_cover, current_days_stock_cover
 		FROM %s
 		ON CONFLICT (time, store_id, sku, COALESCE(brand_id, -1))
 		DO UPDATE SET
@@ -1223,10 +1346,24 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 			stock = EXCLUDED.stock,
 			daily_sales = EXCLUDED.daily_sales,
 			max_daily_sales = EXCLUDED.max_daily_sales,
-			orig_daily_sales = EXCLUDED.orig_daily_sales,
-			orig_max_daily_sales = EXCLUDED.orig_max_daily_sales,
 			daily_stock_cover = EXCLUDED.daily_stock_cover,
 			hpp = EXCLUDED.hpp,
+			lead_time = EXCLUDED.lead_time,
+			max_lead_time = EXCLUDED.max_lead_time,
+			min_order = EXCLUDED.min_order,
+			sedang_po = EXCLUDED.sedang_po,
+			safety_stock = EXCLUDED.safety_stock,
+			reorder_point = EXCLUDED.reorder_point,
+			is_open_po = EXCLUDED.is_open_po,
+			initial_qty_po = EXCLUDED.initial_qty_po,
+			emergency_po_qty = EXCLUDED.emergency_po_qty,
+			updated_regular_po_qty = EXCLUDED.updated_regular_po_qty,
+			final_updated_regular_po_qty = EXCLUDED.final_updated_regular_po_qty,
+			emergency_po_cost = EXCLUDED.emergency_po_cost,
+			final_updated_regular_po_cost = EXCLUDED.final_updated_regular_po_cost,
+			contribution_pct = EXCLUDED.contribution_pct,
+			sales_contribution = EXCLUDED.sales_contribution,
+			target_days_cover = EXCLUDED.target_days_cover,
 			updated_at = NOW()
 	`, quotedTable)
 
@@ -1240,9 +1377,9 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string, records []stockHealthRecord) error {
 	quotedTable := pq.QuoteIdentifier(tableName)
 
-	// Postgres has a limit of 65535 parameters. With 12 columns, we can insert ~5400 rows at once.
-	// Use a conservative batch size of 5000 rows.
-	const batchSize = 5000
+	// Postgres has a limit of 65535 parameters. With 28 columns, we can insert ~2300 rows at once.
+	// Use a conservative batch size of 2000 rows.
+	const batchSize = 2000
 
 	for i := 0; i < len(records); i += batchSize {
 		end := i + batchSize
@@ -1257,9 +1394,12 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 		argPos := 1
 
 		for _, rec := range batch {
-			valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
 				argPos, argPos+1, argPos+2, argPos+3, argPos+4, argPos+5,
-				argPos+6, argPos+7, argPos+8, argPos+9, argPos+10, argPos+11, argPos+12))
+				argPos+6, argPos+7, argPos+8, argPos+9, argPos+10, argPos+11,
+				argPos+12, argPos+13, argPos+14, argPos+15, argPos+16, argPos+17,
+				argPos+18, argPos+19, argPos+20, argPos+21, argPos+22, argPos+23,
+				argPos+24, argPos+25, argPos+26, argPos+27))
 
 			var brandIDVal interface{}
 			if rec.brandID.Valid {
@@ -1278,20 +1418,40 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 				rec.stock,
 				rec.dailySales,
 				rec.maxDailySales,
-				rec.origDailySales,
-				rec.origMaxDailySales,
 				rec.dailyStockCover,
 				rec.hpp,
+				rec.leadTime,
+				rec.maxLeadTime,
+				rec.minOrder,
+				rec.sedangPO,
+				rec.safetyStock,
+				rec.reorderPoint,
+				rec.isOpenPO,
+				rec.initialQtyPO,
+				rec.emergencyPOQty,
+				rec.updatedRegularPOQty,
+				rec.finalUpdatedRegularPOQty,
+				rec.emergencyPOCost,
+				rec.finalUpdatedRegularPOCost,
+				rec.contributionPct,
+				rec.salesContribution,
+				rec.targetDaysCover,
+				rec.currentDaysStockCover,
 			)
-			argPos += 13
+			argPos += 28
 		}
 
 		insertStmt := fmt.Sprintf(`
 			INSERT INTO %s (
 				time, store_id, product_id, brand_id, sku, kategori_brand,
 				stock, daily_sales, max_daily_sales,
-				orig_daily_sales, orig_max_daily_sales,
-				daily_stock_cover, hpp
+				daily_stock_cover, hpp,
+				lead_time, max_lead_time, min_order, sedang_po,
+				safety_stock, reorder_point, is_open_po,
+				initial_qty_po, emergency_po_qty, updated_regular_po_qty,
+				final_updated_regular_po_qty, emergency_po_cost,
+				final_updated_regular_po_cost, contribution_pct,
+				sales_contribution, target_days_cover, current_days_stock_cover
 			) VALUES %s
 		`, quotedTable, strings.Join(valueStrings, ", "))
 
