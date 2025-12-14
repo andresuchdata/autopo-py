@@ -325,7 +325,21 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	}
 	defer file.Close()
 
-	reader := csv.NewReader(file)
+	// Auto-detect delimiter ("," vs ";") based on the header line
+	bufReader := bufio.NewReader(file)
+	firstLine, err := bufReader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("failed to read CSV header line: %w", err)
+	}
+	sep := ','
+	if strings.Count(firstLine, ";") > strings.Count(firstLine, ",") {
+		sep = ';'
+	}
+
+	restReader := io.MultiReader(strings.NewReader(firstLine), bufReader)
+	reader := csv.NewReader(restReader)
+	reader.Comma = sep
+
 	header, err := reader.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read CSV header: %w", err)
@@ -389,7 +403,17 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			if val == "" {
 				return 0
 			}
-			val = strings.ReplaceAll(val, ",", "")
+			// Handle both comma as decimal separator (0,51) and thousand separator (1,000.50)
+			// If there's a period after the comma, it's thousand separator: remove commas
+			// If no period or period before comma, comma is decimal separator: replace with period
+			if strings.Contains(val, ".") && strings.Index(val, ".") > strings.Index(val, ",") {
+				// Format: 1,000.50 - comma is thousand separator
+				val = strings.ReplaceAll(val, ",", "")
+			} else if strings.Contains(val, ",") {
+				// Format: 0,51 or 1.000,50 - comma is decimal separator
+				val = strings.ReplaceAll(val, ".", "")  // Remove thousand separator
+				val = strings.ReplaceAll(val, ",", ".") // Replace decimal separator
+			}
 			parsed, _ := strconv.ParseFloat(val, 64)
 			return parsed
 		}
