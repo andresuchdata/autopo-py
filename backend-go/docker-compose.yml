@@ -92,6 +92,18 @@ services:
       - DB_SSLMODE=disable
       - SEED_DATA_DIR=/app/data/seeds
       - DATABASE_URL=${DATABASE_URL}
+      - USE_SEVALLA=${USE_SEVALLA:-false}
+      - SEVALLA_ENDPOINT=${SEVALLA_ENDPOINT}
+      - SEVALLA_BUCKET=${SEVALLA_BUCKET}
+      - SEVALLA_ACCESS_KEY=${SEVALLA_ACCESS_KEY}
+      - SEVALLA_SECRET_KEY=${SEVALLA_SECRET_KEY}
+      - SEVALLA_REGION=${SEVALLA_REGION:-us-east-1}
+      - SEVALLA_USE_SSL=${SEVALLA_USE_SSL:-true}
+      - SEVALLA_DOWNLOAD_DIR=${SEVALLA_DOWNLOAD_DIR:-/app/data/tmp/sevalla}
+      - SEVALLA_STOCK_PREFIX=${SEVALLA_STOCK_PREFIX}
+      - SEVALLA_PO_PREFIX=${SEVALLA_PO_PREFIX}
+      - STOCK_HEALTH_FILE=${STOCK_HEALTH_FILE}
+      - PO_SNAPSHOTS_FILE=${PO_SNAPSHOTS_FILE}
     volumes:
       - ./data/seeds:/app/data/seeds
     command: /app/bin/seed --db-url "${DATABASE_URL}"

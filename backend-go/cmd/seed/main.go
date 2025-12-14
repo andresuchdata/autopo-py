@@ -200,6 +200,58 @@ func analyticsFlags() []cli.Flag {
 			Value:   runtime.NumCPU(),
 			EnvVars: []string{"ANALYTICS_WORKERS"},
 		},
+		&cli.BoolFlag{
+			Name:    "use-sevalla",
+			Usage:   "Download seed files from Sevalla (S3-compatible) storage",
+			EnvVars: []string{"USE_SEVALLA"},
+		},
+		&cli.StringFlag{
+			Name:    "sevalla-endpoint",
+			Usage:   "Sevalla endpoint (e.g. https://storage.example.com)",
+			EnvVars: []string{"SEVALLA_ENDPOINT"},
+		},
+		&cli.StringFlag{
+			Name:    "sevalla-bucket",
+			Usage:   "Sevalla bucket name",
+			EnvVars: []string{"SEVALLA_BUCKET"},
+		},
+		&cli.StringFlag{
+			Name:    "sevalla-access-key",
+			Usage:   "Sevalla access key ID",
+			EnvVars: []string{"SEVALLA_ACCESS_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "sevalla-secret-key",
+			Usage:   "Sevalla secret access key",
+			EnvVars: []string{"SEVALLA_SECRET_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "sevalla-region",
+			Usage:   "Sevalla region (defaults to us-east-1 if empty)",
+			EnvVars: []string{"SEVALLA_REGION"},
+		},
+		&cli.BoolFlag{
+			Name:    "sevalla-use-ssl",
+			Usage:   "Use SSL when connecting to Sevalla",
+			Value:   true,
+			EnvVars: []string{"SEVALLA_USE_SSL"},
+		},
+		&cli.StringFlag{
+			Name:    "sevalla-download-dir",
+			Usage:   "Local directory to store temporary downloads from Sevalla",
+			Value:   "./data/tmp/sevalla",
+			EnvVars: []string{"SEVALLA_DOWNLOAD_DIR"},
+		},
+		&cli.StringFlag{
+			Name:    "sevalla-stock-prefix",
+			Usage:   "Object prefix in Sevalla for stock health files (e.g. analytics/stock_health)",
+			EnvVars: []string{"SEVALLA_STOCK_PREFIX"},
+		},
+		&cli.StringFlag{
+			Name:    "sevalla-po-prefix",
+			Usage:   "Object prefix in Sevalla for PO snapshot files",
+			EnvVars: []string{"SEVALLA_PO_PREFIX"},
+		},
 	}
 }
 

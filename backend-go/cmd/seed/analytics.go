@@ -31,6 +31,9 @@ func SeedAnalyticsData(c *cli.Context) error {
 	stockHealthOnly := c.Bool("stock-health-only")
 	poSnapshotsOnly := c.Bool("po-snapshots-only")
 	resetAnalytics := c.Bool("reset-analytics")
+	useSevalla := c.Bool("use-sevalla")
+	sevallaStockPrefix := c.String("sevalla-stock-prefix")
+	sevallaPOPrefix := c.String("sevalla-po-prefix")
 
 	// If both flags are true, it's a conflict
 	if stockHealthOnly && poSnapshotsOnly {
@@ -86,6 +89,15 @@ func SeedAnalyticsData(c *cli.Context) error {
 		log.Printf("Successfully reset tables: %v", tableNames)
 	}
 
+	var downloader *sevallaDownloader
+	if useSevalla {
+		var err error
+		downloader, err = newSevallaDownloader(c)
+		if err != nil {
+			return fmt.Errorf("failed to initialize Sevalla downloader: %w", err)
+		}
+	}
+
 	// Initialize the analytics processor with locale-based config only.
 	// For seeding, rely on ANALYTICS_LOCALE to keep behavior consistent
 	// with the standalone analytics command.
@@ -96,13 +108,27 @@ func SeedAnalyticsData(c *cli.Context) error {
 	tasks := make([]analyticsTask, 0, 2)
 
 	if processStockHealth {
-		stockFiles, err := resolveStockHealthFiles(stockHealthDir, stockHealthFile)
+		var (
+			stockFiles    []string
+			stockTaskDir  string
+			err           error
+			useSevallaFor = downloader != nil && sevallaStockPrefix != ""
+		)
+
+		if useSevallaFor {
+			stockFiles, err = downloader.downloadStockHealth(c.Context, sevallaStockPrefix, stockHealthFile)
+			stockTaskDir = downloader.stockDir
+		} else {
+			stockFiles, err = resolveStockHealthFiles(stockHealthDir, stockHealthFile)
+			stockTaskDir = stockHealthDir
+		}
 		if err != nil {
 			return fmt.Errorf("error preparing stock health files: %w", err)
 		}
+
 		tasks = append(tasks, analyticsTask{
 			name:       "stock health",
-			dir:        stockHealthDir,
+			dir:        stockTaskDir,
 			files:      stockFiles,
 			maxWorkers: 1,
 			handler: func(ctx context.Context, path string) error {
@@ -116,13 +142,26 @@ func SeedAnalyticsData(c *cli.Context) error {
 	}
 
 	if processPOSnapshots {
-		poFiles, err := collectCSVFiles(poSnapshotsDir)
+		var (
+			poFiles      []string
+			poTaskDir    string
+			err          error
+			useSevallaPO = downloader != nil && sevallaPOPrefix != ""
+		)
+
+		if useSevallaPO {
+			poFiles, err = downloader.downloadPOSnapshots(c.Context, sevallaPOPrefix, c.String("po-snapshots-file"))
+			poTaskDir = downloader.poDir
+		} else {
+			poFiles, err = collectCSVFiles(poSnapshotsDir)
+			poTaskDir = poSnapshotsDir
+		}
 		if err != nil {
 			return fmt.Errorf("error walking PO snapshots directory: %w", err)
 		}
 		tasks = append(tasks, analyticsTask{
 			name:  "PO snapshot",
-			dir:   poSnapshotsDir,
+			dir:   poTaskDir,
 			files: poFiles,
 			handler: func(ctx context.Context, path string) error {
 				log.Printf("Processing PO snapshot file: %s", path)
