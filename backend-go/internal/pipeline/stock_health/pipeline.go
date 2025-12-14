@@ -1,6 +1,7 @@
 package stock_health
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/csv"
@@ -608,6 +609,19 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 	reader := csv.NewReader(file)
 	reader.TrimLeadingSpace = true
 
+	// Auto-detect delimiter from first line if needed, but for now assuming standard or semi-colon
+	// Just in case, check first line
+	fileForCheck, err := os.Open(path)
+	if err == nil {
+		bufReader := bufio.NewReader(fileForCheck)
+		firstLine, _ := bufReader.ReadString('\n')
+		fileForCheck.Close()
+
+		if strings.Count(firstLine, ";") > strings.Count(firstLine, ",") {
+			reader.Comma = ';'
+		}
+	}
+
 	header, err := reader.Read()
 	if err != nil {
 		return nil, nil, err
@@ -668,7 +682,50 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 			if v == "" {
 				return 0
 			}
-			v = strings.ReplaceAll(v, ",", "")
+
+			// Detect format:
+			// ID/EU: 1.234,56 or 0,56 or 10.000
+			// US: 1,234.56 or 0.56 or 10,000
+
+			hasComma := strings.Contains(v, ",")
+			hasDot := strings.Contains(v, ".")
+
+			if hasComma && hasDot {
+				lastDot := strings.LastIndex(v, ".")
+				lastComma := strings.LastIndex(v, ",")
+				if lastDot < lastComma {
+					// 1.234,56 -> ID format: remove dots, replace comma with dot
+					v = strings.ReplaceAll(v, ".", "")
+					v = strings.ReplaceAll(v, ",", ".")
+				} else {
+					// 1,234.56 -> US format: remove commas
+					v = strings.ReplaceAll(v, ",", "")
+				}
+			} else if hasComma {
+				// Only comma (0,56) -> ID decimal
+				v = strings.ReplaceAll(v, ",", ".")
+			} else if hasDot {
+				// Only dot (10.000 or 0.5)
+				// Heuristic: if strictly blocks of 3 digits after dot, treat as thousand separator
+				parts := strings.Split(v, ".")
+				isThousand := true
+				if len(parts) > 1 {
+					for i := 1; i < len(parts); i++ {
+						if len(parts[i]) != 3 {
+							isThousand = false
+							break
+						}
+					}
+				} else {
+					isThousand = false
+				}
+
+				if isThousand {
+					v = strings.ReplaceAll(v, ".", "")
+				}
+				// else: treat as decimal (0.5), do nothing
+			}
+
 			f, _ := strconv.ParseFloat(v, 64)
 			return f
 		}

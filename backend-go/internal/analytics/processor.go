@@ -403,17 +403,50 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			if val == "" {
 				return 0
 			}
-			// Handle both comma as decimal separator (0,51) and thousand separator (1,000.50)
-			// If there's a period after the comma, it's thousand separator: remove commas
-			// If no period or period before comma, comma is decimal separator: replace with period
-			if strings.Contains(val, ".") && strings.Index(val, ".") > strings.Index(val, ",") {
-				// Format: 1,000.50 - comma is thousand separator
-				val = strings.ReplaceAll(val, ",", "")
-			} else if strings.Contains(val, ",") {
-				// Format: 0,51 or 1.000,50 - comma is decimal separator
-				val = strings.ReplaceAll(val, ".", "")  // Remove thousand separator
-				val = strings.ReplaceAll(val, ",", ".") // Replace decimal separator
+
+			// Detect format:
+			// ID/EU: 1.234,56 or 0,56 or 10.000
+			// US: 1,234.56 or 0.56 or 10,000
+
+			hasComma := strings.Contains(val, ",")
+			hasDot := strings.Contains(val, ".")
+
+			if hasComma && hasDot {
+				lastDot := strings.LastIndex(val, ".")
+				lastComma := strings.LastIndex(val, ",")
+				if lastDot < lastComma {
+					// 1.234,56 -> ID format: remove dots, replace comma with dot
+					val = strings.ReplaceAll(val, ".", "")
+					val = strings.ReplaceAll(val, ",", ".")
+				} else {
+					// 1,234.56 -> US format: remove commas
+					val = strings.ReplaceAll(val, ",", "")
+				}
+			} else if hasComma {
+				// Only comma (0,56) -> ID decimal
+				val = strings.ReplaceAll(val, ",", ".")
+			} else if hasDot {
+				// Only dot (10.000 or 0.5)
+				// Heuristic: if strictly blocks of 3 digits after dot, treat as thousand separator
+				parts := strings.Split(val, ".")
+				isThousand := true
+				if len(parts) > 1 {
+					for i := 1; i < len(parts); i++ {
+						if len(parts[i]) != 3 {
+							isThousand = false
+							break
+						}
+					}
+				} else {
+					isThousand = false
+				}
+
+				if isThousand {
+					val = strings.ReplaceAll(val, ".", "")
+				}
+				// else: treat as decimal (0.5), do nothing
 			}
+
 			parsed, _ := strconv.ParseFloat(val, 64)
 			return parsed
 		}
