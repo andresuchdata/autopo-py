@@ -259,14 +259,30 @@ type poSnapshotKey struct {
 func (p *AnalyticsProcessor) ProcessFile(ctx context.Context, filePath string) error {
 	log.Printf("Processing file: %s, directory: %s", filePath, filepath.Base(filepath.Dir(filePath)))
 
-	switch filepath.Base(filepath.Dir(filePath)) {
+	switch detectPipelineType(filePath) {
 	case "stock_health":
 		return p.processStockHealthFile(ctx, filePath)
 	case "po_snapshots":
 		return p.processPOSnapshotFile(ctx, filePath)
 	default:
-		return fmt.Errorf("unknown file type in directory: %s", filepath.Dir(filePath))
+		return fmt.Errorf("unknown file type in directory hierarchy: %s", filepath.Dir(filePath))
 	}
+}
+
+func detectPipelineType(path string) string {
+	dir := filepath.Dir(path)
+	for dir != "." && dir != string(filepath.Separator) {
+		base := filepath.Base(dir)
+		if base == "stock_health" || base == "po_snapshots" {
+			return base
+		}
+		next := filepath.Dir(dir)
+		if next == dir {
+			break
+		}
+		dir = next
+	}
+	return ""
 }
 
 // processStockHealthFile ingests stock health CSV data in batches with deduplication
@@ -306,6 +322,9 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	brandNames := make(map[string]string)
 	skuHPP := make(map[string]float64)
 
+	var skippedRows int
+	var rowNumber int
+
 	for {
 		record, err := reader.Read()
 		if err != nil {
@@ -314,9 +333,12 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			}
 			return fmt.Errorf("error reading record: %w", err)
 		}
+		rowNumber++
 
 		sku := strings.TrimSpace(record[colMap["sku"]])
 		if sku == "" {
+			skippedRows++
+			log.Printf("warning: skipping row %d in %s: empty SKU", rowNumber+1, filepath.Base(filePath))
 			continue
 		}
 
@@ -441,7 +463,11 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Printf("Successfully processed %d stock health records from %s", len(records), filePath)
+	if skippedRows > 0 {
+		log.Printf("Successfully processed %d stock health records from %s (%d rows skipped)", len(records), filePath, skippedRows)
+	} else {
+		log.Printf("Successfully processed %d stock health records from %s", len(records), filePath)
+	}
 	return nil
 }
 
