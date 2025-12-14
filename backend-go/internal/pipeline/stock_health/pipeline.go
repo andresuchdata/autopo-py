@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -432,6 +433,12 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 		return nil, fmt.Errorf("failed to read/clean file %s: %w", inputFile, err)
 	}
 
+	log.Printf("[DEBUG PIPELINE] File: %s, Read %d rows", filepath.Base(inputFile), len(cleanedRows))
+	if len(cleanedRows) > 0 {
+		log.Printf("[DEBUG PIPELINE] First row - SKU: %s, DailySales: %f, MaxDailySales: %f, HPP: %f",
+			cleanedRows[0].SKU, cleanedRows[0].DailySales, cleanedRows[0].MaxDailySales, cleanedRows[0].HPP)
+	}
+
 	if p.config.PersistDebugLayers {
 		if err := p.writeIntermediateCSV(snapshotDate, "1_cleaned_base", inputFile, header, cleanedRows); err != nil {
 			return nil, fmt.Errorf("failed to write cleaned_base intermediate: %w", err)
@@ -500,7 +507,15 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 
 	// 5) Map to generic TransformedRow format expected by StreamingAggregator/analytics
 	result := make([]pipeline.TransformedRow, 0, len(transformed))
-	for _, row := range transformed {
+	log.Printf("[DEBUG PIPELINE] Mapping %d transformed rows to TransformedRow format", len(transformed))
+	if len(transformed) > 0 {
+		log.Printf("[DEBUG PIPELINE] First transformed row - SKU: %s, DailySales: %f, MaxDailySales: %f, HPP: %f",
+			transformed[0].SKU, transformed[0].DailySales, transformed[0].MaxDailySales, transformed[0].HPP)
+	}
+	for i, row := range transformed {
+		if i <= 10 {
+			log.Printf("[DEBUG PIPELINE] Mapping row %d - DailySales: %f, MaxDailySales: %f", i, row.DailySales, row.MaxDailySales)
+		}
 		data := map[string]interface{}{
 			"date":                          snapshotDate.Format("2006-01-02"),
 			"brand":                         row.Brand,
