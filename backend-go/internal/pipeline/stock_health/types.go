@@ -102,8 +102,8 @@ type Config struct {
 	StoreContributions map[string]float64
 	PadangStoreName    string // Reference store name (usually "Miss Glam Padang")
 	InputDateFormat    string // Date format in input filenames
-	OutputDir          string // Directory for output CSVs
-	DownloadDir        string // Directory where raw per-store files are located
+	OutputDir          string // NOT USED when cloud storage is enabled
+	DownloadDir        string // NOT USED when cloud storage is enabled
 	Top100SKUDir       string // Directory containing per-store top 100 SKU files (xlsx/csv)
 
 	// Hybrid intermediate persistence configuration
@@ -112,9 +112,19 @@ type Config struct {
 	//   1_cleaned_base/     - cleaned pre-join table (only if PersistDebugLayers is true)
 	//   2_cleaned_merged/   - cleaned+merged table (always written when PersistMergedOnly is true)
 	//   3_with_metrics/     - table with calculated inventory metrics
-	IntermediateDir    string
+	IntermediateDir    string // NOT USED when cloud storage is enabled
 	PersistMergedOnly  bool
 	PersistDebugLayers bool
+
+	// CloudStorage toggles remote IO for raw/intermediate/output artifacts.
+	CloudStorageEnabled bool
+	CloudBucket         string
+	CloudEndpoint       string
+	CloudRegion         string
+	CloudAccessKey      string
+	CloudSecretKey      string
+	CloudUseSSL         bool
+	CloudPrefix         string
 }
 
 // ProcessingSummary holds summary statistics for a processed file

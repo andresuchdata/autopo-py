@@ -1,10 +1,12 @@
 package stock_health
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/storage"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -36,10 +39,54 @@ type StockHealthPipeline struct {
 	padangSalesCacheMu sync.Mutex
 
 	supplierIndex map[supplierKey]SupplierData
+
+	storageClient storage.ObjectStorage
+	cloudLayout   *cloudLayout
+	tempDir       string
+}
+
+type cloudLayout struct {
+	taskName string
+}
+
+func newCloudLayout(task string) *cloudLayout {
+	return &cloudLayout{taskName: strings.Trim(task, "/")}
+}
+
+func (l *cloudLayout) path(parts ...string) string {
+	segments := []string{l.taskName}
+	segments = append(segments, parts...)
+	return path.Join(segments...)
+}
+
+func (l *cloudLayout) dateParts(date time.Time) []string {
+	return []string{
+		fmt.Sprintf("%04d", date.Year()),
+		fmt.Sprintf("%02d", int(date.Month())),
+		fmt.Sprintf("%02d", date.Day()),
+	}
+}
+
+func (l *cloudLayout) rawKey(date time.Time, fileName string) string {
+	parts := append([]string{"raw"}, l.dateParts(date)...)
+	parts = append(parts, fileName)
+	return l.path(parts...)
+}
+
+func (l *cloudLayout) intermediateKey(stage string, date time.Time, fileName string) string {
+	parts := append([]string{"intermediate", stage}, l.dateParts(date)...)
+	parts = append(parts, fileName)
+	return l.path(parts...)
+}
+
+func (l *cloudLayout) outputKey(date time.Time, fileName string) string {
+	parts := append([]string{"output"}, l.dateParts(date)...)
+	parts = append(parts, fileName)
+	return l.path(parts...)
 }
 
 // NewStockHealthPipeline creates a new stock health pipeline instance.
-func NewStockHealthPipeline(cfg Config) *StockHealthPipeline {
+func NewStockHealthPipeline(cfg Config) (*StockHealthPipeline, error) {
 	if cfg.IntermediateDir == "" {
 		cfg.IntermediateDir = filepath.Join("data", "intermediate", "stock_health")
 	}
@@ -68,8 +115,92 @@ func NewStockHealthPipeline(cfg Config) *StockHealthPipeline {
 		}
 		p.supplierIndex[key] = s
 	}
-	return p
+
+	if cfg.CloudStorageEnabled {
+		client, err := storage.NewS3Client(storage.Config{
+			Endpoint:  cfg.CloudEndpoint,
+			AccessKey: cfg.CloudAccessKey,
+			SecretKey: cfg.CloudSecretKey,
+			Bucket:    cfg.CloudBucket,
+			Region:    cfg.CloudRegion,
+			UseSSL:    cfg.CloudUseSSL,
+			Prefix:    strings.Trim(cfg.CloudPrefix, "/"),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize cloud storage client: %w", err)
+		}
+		tempDir, err := os.MkdirTemp("", "stock-health-cloud")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temp dir for cloud downloads: %w", err)
+		}
+		p.storageClient = client
+		p.cloudLayout = newCloudLayout(p.Name())
+		p.tempDir = tempDir
+	}
+
+	return p, nil
 }
+
+func (p *StockHealthPipeline) ensureTempDir() error {
+	if p.tempDir != "" {
+		return nil
+	}
+	dir, err := os.MkdirTemp("", "stock-health-pipeline")
+	if err != nil {
+		return err
+	}
+	p.tempDir = dir
+	return nil
+}
+
+func (p *StockHealthPipeline) UploadRawFile(ctx context.Context, snapshotDate time.Time, localPath string) (string, error) {
+	if p.storageClient == nil || p.cloudLayout == nil {
+		return localPath, nil
+	}
+	data, err := os.ReadFile(localPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read %s for upload: %w", localPath, err)
+	}
+	key := p.cloudLayout.rawKey(snapshotDate, filepath.Base(localPath))
+	if err := p.storageClient.UploadObject(ctx, key, data); err != nil {
+		return "", fmt.Errorf("failed to upload raw file %s: %w", key, err)
+	}
+	return key, nil
+}
+
+func (p *StockHealthPipeline) FetchInputFile(ctx context.Context, remotePath string) (string, func(), error) {
+	if p.storageClient == nil {
+		return remotePath, nil, nil
+	}
+	if err := p.ensureTempDir(); err != nil {
+		return "", nil, err
+	}
+	localPath := filepath.Join(p.tempDir, fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(remotePath)))
+	if err := p.storageClient.DownloadObject(ctx, remotePath, localPath); err != nil {
+		return "", nil, fmt.Errorf("failed to download %s: %w", remotePath, err)
+	}
+	cleanup := func() {
+		_ = os.Remove(localPath)
+	}
+	return localPath, cleanup, nil
+}
+
+func (p *StockHealthPipeline) UploadAggregatedOutput(ctx context.Context, snapshotDate time.Time, localPath string) error {
+	if p.storageClient == nil || p.cloudLayout == nil {
+		return nil
+	}
+	data, err := os.ReadFile(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to read aggregated output %s: %w", localPath, err)
+	}
+	key := p.cloudLayout.outputKey(snapshotDate, filepath.Base(localPath))
+	if err := p.storageClient.UploadObject(ctx, key, data); err != nil {
+		return fmt.Errorf("failed to upload aggregated output %s: %w", key, err)
+	}
+	return nil
+}
+
+var _ pipeline.CloudPipeline = (*StockHealthPipeline)(nil)
 
 func loadTop100SKUsByStore(dir string, inputDateFormat string) map[string]map[string]bool {
 	res := make(map[string]map[string]bool)
@@ -712,30 +843,11 @@ func normalizeStoreNameForSupplier(name string) string {
 	return strings.TrimSpace(upper)
 }
 
-func (p *StockHealthPipeline) writeIntermediateCSV(date time.Time, stage string, inputFile string, header []string, rows []RawStockRow) error {
-	if p.config.IntermediateDir == "" {
-		return nil
-	}
-
-	baseDir := filepath.Join(p.config.IntermediateDir, stage, date.Format("20060102"))
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return err
-	}
-
-	fileName := filepath.Base(inputFile)
-	path := filepath.Join(baseDir, fileName)
-
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	w := csv.NewWriter(f)
-	defer w.Flush()
-
-	if err := w.Write(header); err != nil {
-		return err
+func serializeRawStockRows(header []string, rows []RawStockRow) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
+	if err := writer.Write(header); err != nil {
+		return nil, err
 	}
 
 	for _, r := range rows {
@@ -772,9 +884,45 @@ func (p *StockHealthPipeline) writeIntermediateCSV(date time.Time, stage string,
 				record[i] = fmt.Sprintf("%v", r.Contribution)
 			}
 		}
-		if err := w.Write(record); err != nil {
-			return err
+		if err := writer.Write(record); err != nil {
+			return nil, err
 		}
+	}
+
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (p *StockHealthPipeline) writeIntermediateCSV(date time.Time, stage string, inputFile string, header []string, rows []RawStockRow) error {
+	fileName := filepath.Base(inputFile)
+	data, err := serializeRawStockRows(header, rows)
+	if err != nil {
+		return fmt.Errorf("failed to serialize rows: %w", err)
+	}
+
+	if p.storageClient != nil && p.cloudLayout != nil {
+		key := p.cloudLayout.intermediateKey(stage, date, fileName)
+		if err := p.storageClient.UploadObject(context.Background(), key, data); err != nil {
+			return fmt.Errorf("failed to upload intermediate %s: %w", key, err)
+		}
+		return nil
+	}
+
+	if p.config.IntermediateDir == "" {
+		return nil
+	}
+
+	baseDir := filepath.Join(p.config.IntermediateDir, stage, date.Format("20060102"))
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		return err
+	}
+
+	path := filepath.Join(baseDir, fileName)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return err
 	}
 
 	return nil

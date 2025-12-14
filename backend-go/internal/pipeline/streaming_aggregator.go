@@ -115,9 +115,17 @@ func (sa *StreamingAggregator) flushLocked(ctx context.Context) error {
 
 	log.Printf("[%s] Wrote %d rows to %s", sa.pipeline.Name(), len(allRows), csvPath)
 
+	uploadPath := csvPath
+	if cp, ok := sa.pipeline.(CloudPipeline); ok {
+		if err := cp.UploadAggregatedOutput(ctx, sa.date, csvPath); err != nil {
+			return fmt.Errorf("failed to upload aggregated output: %w", err)
+		}
+		uploadPath = csvPath
+	}
+
 	// Trigger seed callback (calls analytics.ProcessFile)
 	if sa.flushCallback != nil {
-		if err := sa.flushCallback(ctx, csvPath); err != nil {
+		if err := sa.flushCallback(ctx, uploadPath); err != nil {
 			return fmt.Errorf("flush callback failed: %w", err)
 		}
 	}

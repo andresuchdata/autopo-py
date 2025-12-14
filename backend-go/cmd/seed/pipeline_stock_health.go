@@ -118,6 +118,47 @@ func stockHealthPipelineFlags() []cli.Flag {
 			Usage:   "Skip Drive download and use existing files in download-dir",
 			EnvVars: []string{"STOCK_HEALTH_REUSE_LOCAL"},
 		},
+		&cli.BoolFlag{
+			Name:    "cloud-storage-enabled",
+			Usage:   "Store pipeline raw/intermediate/output data in S3-compatible storage",
+			EnvVars: []string{"CLOUD_STORAGE_ENABLED"},
+		},
+		&cli.StringFlag{
+			Name:    "cloud-storage-endpoint",
+			Usage:   "S3-compatible storage endpoint (e.g. https://storage.example.com)",
+			EnvVars: []string{"CLOUD_STORAGE_ENDPOINT"},
+		},
+		&cli.StringFlag{
+			Name:    "cloud-storage-bucket",
+			Usage:   "Bucket name for pipeline data",
+			EnvVars: []string{"CLOUD_STORAGE_BUCKET"},
+		},
+		&cli.StringFlag{
+			Name:    "cloud-storage-region",
+			Usage:   "Bucket region (defaults to us-east-1)",
+			EnvVars: []string{"CLOUD_STORAGE_REGION"},
+		},
+		&cli.StringFlag{
+			Name:    "cloud-storage-access-key",
+			Usage:   "Access key ID for the storage endpoint",
+			EnvVars: []string{"CLOUD_STORAGE_ACCESS_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "cloud-storage-secret-key",
+			Usage:   "Secret access key for the storage endpoint",
+			EnvVars: []string{"CLOUD_STORAGE_SECRET_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "cloud-storage-prefix",
+			Usage:   "Prefix inside the bucket for pipeline data (optional)",
+			EnvVars: []string{"CLOUD_STORAGE_PREFIX"},
+		},
+		&cli.BoolFlag{
+			Name:    "cloud-storage-use-ssl",
+			Usage:   "Use HTTPS when connecting to cloud storage",
+			Value:   true,
+			EnvVars: []string{"CLOUD_STORAGE_USE_SSL"},
+		},
 		&cli.IntFlag{
 			Name:    "pipeline-workers",
 			Usage:   "Number of concurrent workers for stock health pipeline",
@@ -280,19 +321,30 @@ func runStockHealthPipeline(c *cli.Context) error {
 
 	// Build stock health pipeline
 	stockCfg := stockhealth.Config{
-		SupplierData:       supplierData,
-		StoreContributions: STORE_CONTRIBUTIONS,
-		PadangStoreName:    "Miss Glam Padang",
-		InputDateFormat:    inputDateFormat,
-		OutputDir:          outputDir,
-		DownloadDir:        downloadDir,
-		Top100SKUDir:       top100Dir,
-		IntermediateDir:    intermediateDir,
-		PersistMergedOnly:  true,
-		PersistDebugLayers: persistDebug,
+		SupplierData:        supplierData,
+		StoreContributions:  STORE_CONTRIBUTIONS,
+		PadangStoreName:     "Miss Glam Padang",
+		InputDateFormat:     inputDateFormat,
+		OutputDir:           outputDir,
+		DownloadDir:         downloadDir,
+		Top100SKUDir:        top100Dir,
+		IntermediateDir:     intermediateDir,
+		PersistMergedOnly:   true,
+		PersistDebugLayers:  persistDebug,
+		CloudStorageEnabled: c.Bool("cloud-storage-enabled"),
+		CloudBucket:         c.String("cloud-storage-bucket"),
+		CloudEndpoint:       c.String("cloud-storage-endpoint"),
+		CloudRegion:         c.String("cloud-storage-region"),
+		CloudAccessKey:      c.String("cloud-storage-access-key"),
+		CloudSecretKey:      c.String("cloud-storage-secret-key"),
+		CloudUseSSL:         c.Bool("cloud-storage-use-ssl"),
+		CloudPrefix:         c.String("cloud-storage-prefix"),
 	}
 
-	pipelineImpl := stockhealth.NewStockHealthPipeline(stockCfg)
+	pipelineImpl, err := stockhealth.NewStockHealthPipeline(stockCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create stock health pipeline: %w", err)
+	}
 
 	// Configure generic pipeline config
 	pCfg := pipeline.DefaultPipelineConfig(pipelineImpl.Name())

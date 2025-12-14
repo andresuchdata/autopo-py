@@ -19,7 +19,6 @@ type Worker struct {
 	db         *sql.DB
 	aggregator *StreamingAggregator
 	processor  *analytics.AnalyticsProcessor
-	mu         sync.Mutex
 }
 
 // NewWorker creates a new pipeline worker
@@ -171,6 +170,20 @@ func (w *Worker) processFilesParallel(ctx context.Context, run *PipelineRun, job
 func (w *Worker) processFile(ctx context.Context, run *PipelineRun, job *FileJob) error {
 	startTime := time.Now()
 
+	inputPath := job.FilePath
+	cleanup := func() {}
+	if cp, ok := w.pipeline.(CloudPipeline); ok {
+		localPath, closer, err := cp.FetchInputFile(ctx, job.FilePath)
+		if err != nil {
+			return w.markJobFailed(ctx, job, fmt.Errorf("failed to fetch remote input %s: %w", job.FilePath, err))
+		}
+		inputPath = localPath
+		if closer != nil {
+			cleanup = closer
+		}
+	}
+	defer cleanup()
+
 	// Update job status to processing
 	job.Status = FileStatusProcessing
 	if err := w.repo.UpdateFileJob(ctx, job); err != nil {
@@ -180,12 +193,12 @@ func (w *Worker) processFile(ctx context.Context, run *PipelineRun, job *FileJob
 	log.Printf("[%s] Processing file: %s", w.pipeline.Name(), job.FilePath)
 
 	// Validate file
-	if err := w.pipeline.Validate(job.FilePath); err != nil {
+	if err := w.pipeline.Validate(inputPath); err != nil {
 		return w.markJobFailed(ctx, job, fmt.Errorf("validation failed: %w", err))
 	}
 
 	// Transform file
-	rows, err := w.pipeline.Transform(ctx, job.FilePath)
+	rows, err := w.pipeline.Transform(ctx, inputPath)
 	if err != nil {
 		return w.markJobFailed(ctx, job, fmt.Errorf("transformation failed: %w", err))
 	}
