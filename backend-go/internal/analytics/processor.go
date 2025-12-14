@@ -350,6 +350,16 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		colMap[col] = i
 	}
 
+	log.Printf("[DEBUG] CSV file: %s", filepath.Base(filePath))
+	log.Printf("[DEBUG] CSV headers (%d): %v", len(header), header)
+	log.Printf("[DEBUG] Normalized column map keys: %v", func() []string {
+		keys := make([]string, 0, len(colMap))
+		for k := range colMap {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+
 	snapshotTime, err := parseSnapshotTimeFromFilename(filePath)
 	if err != nil {
 		log.Printf("warning: defaulting stock snapshot time for %s: %v", filePath, err)
@@ -481,6 +491,12 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		dailySales := getFloat("daily_sales")
 		maxDailySales := getFloat("max_daily_sales")
 
+		// Debug: log first few rows to verify parsing
+		if rowNumber < 3 {
+			log.Printf("[DEBUG] Row %d - SKU: %s, raw daily_sales: '%s', parsed: %f, raw max_daily_sales: '%s', parsed: %f",
+				rowNumber+1, sku, getValue("daily_sales"), dailySales, getValue("max_daily_sales"), maxDailySales)
+		}
+
 		var dailyStockCover float64
 		if dailySales > 0 {
 			dailyStockCover = float64(stock) / dailySales
@@ -543,7 +559,11 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 
 	records := make([]stockHealthRecord, 0, len(rawRows))
 	seen := make(map[stockHealthKey]int)
-	for _, raw := range rawRows {
+	log.Printf("[DEBUG] Building %d stockHealthRecords from rawRows", len(rawRows))
+	for i, raw := range rawRows {
+		if i < 3 {
+			log.Printf("[DEBUG] RawRow %d - SKU: %s, dailySales: %f, maxDailySales: %f", i, raw.sku, raw.dailySales, raw.maxDailySales)
+		}
 		storeID, ok := storeIDs[strings.ToLower(raw.storeName)]
 		if !ok {
 			return fmt.Errorf("store %s not resolved", raw.storeName)
@@ -592,6 +612,11 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			targetDays:                raw.targetDays,
 			targetDaysCover:           raw.targetDaysCover,
 			currentDaysStockCover:     raw.currentDaysStockCover,
+		}
+
+		if i < 3 {
+			log.Printf("[DEBUG] StockHealthRecord %d - SKU: %s, dailySales: %f, maxDailySales: %f, hpp: %f",
+				i, rec.sku, rec.dailySales, rec.maxDailySales, rec.hpp)
 		}
 
 		key := makeStockHealthKey(rec)
