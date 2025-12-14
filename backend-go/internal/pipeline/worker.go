@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -172,14 +173,17 @@ func (w *Worker) processFile(ctx context.Context, run *PipelineRun, job *FileJob
 
 	inputPath := job.FilePath
 	cleanup := func() {}
-	if cp, ok := w.pipeline.(CloudPipeline); ok {
-		localPath, closer, err := cp.FetchInputFile(ctx, job.FilePath)
-		if err != nil {
-			return w.markJobFailed(ctx, job, fmt.Errorf("failed to fetch remote input %s: %w", job.FilePath, err))
-		}
-		inputPath = localPath
-		if closer != nil {
-			cleanup = closer
+	// Only fetch from cloud storage if the local file doesn't exist
+	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
+		if cp, ok := w.pipeline.(CloudPipeline); ok {
+			localPath, closer, err := cp.FetchInputFile(ctx, job.FilePath)
+			if err != nil {
+				return w.markJobFailed(ctx, job, fmt.Errorf("failed to fetch remote input %s: %w", job.FilePath, err))
+			}
+			inputPath = localPath
+			if closer != nil {
+				cleanup = closer
+			}
 		}
 	}
 	defer cleanup()

@@ -69,7 +69,8 @@ func (d *Downloader) DownloadFolderCSV(ctx context.Context, opts DownloadOptions
 		}
 
 		if opts.SnapshotDate != "" {
-			if len(dateStr) < len(opts.SnapshotDate) || !strings.HasPrefix(dateStr, opts.SnapshotDate) {
+			// Exact match for snapshot xdate to avoid matching folders like "20251213_backup"
+			if dateStr != opts.SnapshotDate {
 				continue
 			}
 		}
