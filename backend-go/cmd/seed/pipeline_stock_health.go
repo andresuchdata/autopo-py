@@ -287,14 +287,6 @@ func runStockHealthPipeline(c *cli.Context) error {
 		top100Dir = filepath.Join(dataRoot, "top_100_sku")
 	}
 
-	// Load special SKUs that should use 60 days cover (default is 30)
-	// specialSKUsPath := filepath.Join(dataRoot, "special_sku_60.csv")
-	// specialSKUs, err := loadSpecialSKUs(specialSKUsPath)
-	// if err != nil {
-	// 	log.Printf("warning: failed to load special SKUs from %s: %v (falling back to default 30 days cover)", specialSKUsPath, err)
-	// 	specialSKUs = map[string]bool{}
-	// }
-
 	// Load supplier master data (optional). Source can be specified via flag/env,
 	// otherwise we fall back to suppliers.xlsx or suppliers.csv under dataRoot.
 	supplierFile := c.String("supplier-file")

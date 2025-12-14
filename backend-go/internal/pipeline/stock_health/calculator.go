@@ -32,11 +32,8 @@ func (ic *InventoryCalculator) Calculate(row *RawStockRow) InventoryMetrics {
 	reorderPoint := (row.DailySales * row.LeadTime) + float64(metrics.SafetyStock)
 	metrics.ReorderPoint = int(math.Ceil(math.Max(0, reorderPoint)))
 
-	// 3. Target days cover (30 or 60 days based on special SKUs)
+	// 3. Target days cover (30)
 	metrics.TargetDaysCover = 30
-	if ic.specialSKUs[row.SKU] {
-		metrics.TargetDaysCover = 60
-	}
 
 	// 4. Quantity for target days cover
 	qtyForTarget := row.DailySales * float64(metrics.TargetDaysCover)
