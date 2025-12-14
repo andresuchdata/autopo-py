@@ -1451,7 +1451,7 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 				initial_qty_po, emergency_po_qty, updated_regular_po_qty,
 				final_updated_regular_po_qty, emergency_po_cost,
 				final_updated_regular_po_cost, contribution_pct,
-				sales_contribution, target_days_cover
+				sales_contribution, target_days_cover, target_days
 			) VALUES %s
 		`, quotedTable, strings.Join(valueStrings, ", "))
 
