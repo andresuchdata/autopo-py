@@ -347,7 +347,7 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 
 	colMap := make(map[string]int)
 	for i, col := range header {
-		colMap[col] = i
+		colMap[normalizeColumnName(col)] = i
 	}
 
 	log.Printf("[DEBUG] CSV file: %s", filepath.Base(filePath))
@@ -490,12 +490,6 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		stock := getInt("stock")
 		dailySales := getFloat("daily_sales")
 		maxDailySales := getFloat("max_daily_sales")
-
-		// Debug: log first few rows to verify parsing
-		if rowNumber < 3 {
-			log.Printf("[DEBUG] Row %d - SKU: %s, raw daily_sales: '%s', parsed: %f, raw max_daily_sales: '%s', parsed: %f",
-				rowNumber+1, sku, getValue("daily_sales"), dailySales, getValue("max_daily_sales"), maxDailySales)
-		}
 
 		var dailyStockCover float64
 		if dailySales > 0 {
