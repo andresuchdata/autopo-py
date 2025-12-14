@@ -165,13 +165,22 @@ func (sa *StreamingAggregator) writeCSV(path string, rows []TransformedRow) erro
 	}
 
 	// Write data rows
-	for _, row := range rows {
+	for idx, row := range rows {
 		record := make([]string, len(headers))
 		for i, header := range headers {
 			if val, ok := row.Data[header]; ok {
 				record[i] = fmt.Sprintf("%v", val)
 			}
 		}
+
+		// Debug first few rows
+		if idx < 5 {
+			dailySalesVal := row.Data["daily_sales"]
+			maxDailySalesVal := row.Data["max_daily_sales"]
+			log.Printf("[DEBUG AGGREGATOR] Row %d - daily_sales in map: %v (type: %T), max_daily_sales: %v (type: %T)",
+				idx, dailySalesVal, dailySalesVal, maxDailySalesVal, maxDailySalesVal)
+		}
+
 		if err := writer.Write(record); err != nil {
 			return err
 		}
