@@ -193,6 +193,7 @@ type stockHealthRecord struct {
 	finalUpdatedRegularPOCost float64
 	contributionPct           float64
 	salesContribution         float64
+	targetDays                int
 	targetDaysCover           int
 	currentDaysStockCover     float64
 }
@@ -241,8 +242,8 @@ type rawStockHealthRow struct {
 	finalUpdatedRegularPOCost float64
 	contributionPct           float64
 	salesContribution         float64
+	targetDays                int
 	targetDaysCover           int
-	qtyForTargetDaysCover     int
 	currentDaysStockCover     float64
 }
 
@@ -461,8 +462,8 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			finalUpdatedRegularPOCost: getFloat("final_updated_regular_po_cost"),
 			contributionPct:           getFloat("contribution_pct"),
 			salesContribution:         getFloat("sales_contribution"),
-			targetDaysCover:           getInt("target_days_cover"),
-			qtyForTargetDaysCover:     getInt("qty_for_target_days_cover"),
+			targetDays:                getInt("target_days_cover"),
+			targetDaysCover:           getInt("qty_for_target_days_cover"),
 			currentDaysStockCover:     getFloat("current_days_stock_cover"),
 		})
 	}
@@ -531,6 +532,7 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			finalUpdatedRegularPOCost: raw.finalUpdatedRegularPOCost,
 			contributionPct:           raw.contributionPct,
 			salesContribution:         raw.salesContribution,
+			targetDays:                raw.targetDays,
 			targetDaysCover:           raw.targetDaysCover,
 			currentDaysStockCover:     raw.currentDaysStockCover,
 		}
@@ -1305,7 +1307,7 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 			contribution_pct DOUBLE PRECISION,
 			sales_contribution DOUBLE PRECISION,
 			target_days_cover INTEGER,
-			current_days_stock_cover DOUBLE PRECISION
+			target_days INTEGER
 		) ON COMMIT DROP
 	`, quotedTable)
 	if _, err := tx.ExecContext(ctx, createStmt); err != nil {
@@ -1318,31 +1320,28 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 
 	insertStmt := fmt.Sprintf(`
 		INSERT INTO daily_stock_data (
-			time, store_id, product_id, brand_id, sku, kategori_brand,
-			stock, daily_sales, max_daily_sales,
-			daily_stock_cover, hpp,
+			time, store_id, product_id, brand_id, sku,
+			stock, daily_sales, max_daily_sales, daily_stock_cover, hpp,
 			lead_time, max_lead_time, min_order, sedang_po,
 			safety_stock, reorder_point, is_open_po,
 			initial_qty_po, emergency_po_qty, updated_regular_po_qty,
 			final_updated_regular_po_qty, emergency_po_cost,
 			final_updated_regular_po_cost, contribution_pct,
-			sales_contribution, target_days_cover, current_days_stock_cover
+			sales_contribution, target_days_cover, target_days
 		)
 		SELECT
-			time, store_id, product_id, brand_id, sku, kategori_brand,
-			stock, daily_sales, max_daily_sales,
-			daily_stock_cover, hpp,
+			time, store_id, product_id, brand_id, sku,
+			stock, daily_sales, max_daily_sales, daily_stock_cover, hpp,
 			lead_time, max_lead_time, min_order, sedang_po,
 			safety_stock, reorder_point, is_open_po,
 			initial_qty_po, emergency_po_qty, updated_regular_po_qty,
 			final_updated_regular_po_qty, emergency_po_cost,
 			final_updated_regular_po_cost, contribution_pct,
-			sales_contribution, target_days_cover, current_days_stock_cover
+			sales_contribution, target_days_cover, target_days
 		FROM %s
 		ON CONFLICT (time, store_id, sku, COALESCE(brand_id, -1))
 		DO UPDATE SET
 			product_id = EXCLUDED.product_id,
-			kategori_brand = EXCLUDED.kategori_brand,
 			stock = EXCLUDED.stock,
 			daily_sales = EXCLUDED.daily_sales,
 			max_daily_sales = EXCLUDED.max_daily_sales,
@@ -1364,7 +1363,7 @@ func (p *AnalyticsProcessor) insertStockHealthRecords(ctx context.Context, tx *s
 			contribution_pct = EXCLUDED.contribution_pct,
 			sales_contribution = EXCLUDED.sales_contribution,
 			target_days_cover = EXCLUDED.target_days_cover,
-			current_days_stock_cover = EXCLUDED.current_days_stock_cover,
+			target_days = EXCLUDED.target_days,
 			updated_at = NOW()
 	`, quotedTable)
 
@@ -1437,7 +1436,7 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 				rec.contributionPct,
 				rec.salesContribution,
 				rec.targetDaysCover,
-				rec.currentDaysStockCover,
+				rec.targetDays,
 			)
 			argPos += 28
 		}
@@ -1452,7 +1451,7 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 				initial_qty_po, emergency_po_qty, updated_regular_po_qty,
 				final_updated_regular_po_qty, emergency_po_cost,
 				final_updated_regular_po_cost, contribution_pct,
-				sales_contribution, target_days_cover, current_days_stock_cover
+				sales_contribution, target_days_cover
 			) VALUES %s
 		`, quotedTable, strings.Join(valueStrings, ", "))
 
