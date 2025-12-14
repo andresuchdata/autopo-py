@@ -666,6 +666,9 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 	idxDailySales := colIndex("daily_sales", "daily sales")
 	idxMaxDailySales := colIndex("max_daily_sales", "max. daily sales", "max daily sales")
 	idxLeadTime := colIndex("lead_time", "lead time")
+
+	log.Printf("[DEBUG PIPELINE] Column indices - DailySales: %d, MaxDailySales: %d, Stock: %d",
+		idxDailySales, idxMaxDailySales, colIndex("stock", "stok"))
 	idxMaxLeadTime := colIndex("max_lead_time", "max. lead time", "max lead time")
 	idxSedangPO := colIndex("sedang_po", "sedang po")
 	idxHPP := colIndex("hpp")

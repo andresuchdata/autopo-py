@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -153,11 +154,12 @@ func (sa *StreamingAggregator) writeCSV(path string, rows []TransformedRow) erro
 		return nil
 	}
 
-	// Extract headers from first row
+	// Extract headers from first row and sort them for consistent ordering
 	var headers []string
 	for key := range rows[0].Data {
 		headers = append(headers, key)
 	}
+	sort.Strings(headers)
 
 	// Write header
 	if err := writer.Write(headers); err != nil {
