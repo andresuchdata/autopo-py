@@ -439,34 +439,18 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 
 	// 3) Merge with supplier data / contributions
 	mergedRows := cleanedRows
-	if err := p.writeIntermediateCSV(snapshotDate, "2_cleaned_merged", inputFile, header, mergedRows); err != nil {
-		return nil, fmt.Errorf("failed to write cleaned_merged intermediate: %w", err)
+	// Skip uploading 2_cleaned_merged to cloud storage (only write locally if enabled)
+	if p.config.IntermediateDir != "" && p.storageClient == nil {
+		if err := p.writeIntermediateCSV(snapshotDate, "2_cleaned_merged", inputFile, header, mergedRows); err != nil {
+			return nil, fmt.Errorf("failed to write cleaned_merged intermediate: %w", err)
+		}
 	}
 
 	// 4) Apply inventory metrics
 	transformed := make([]TransformedStockRow, 0, len(mergedRows))
-	padangSalesBySKU := p.getPadangSalesForDate(snapshotDate)
 	for _, raw := range mergedRows {
-		// Default: use store's original per-store sales
-		finalDaily := raw.OrigDailySales
-		finalMax := raw.OrigMaxDailySales
-		isInPadang := 0
-
-		// If SKU exists in Padang, scale Padang's per-SKU sales by contribution percentage
-		if padangSalesBySKU != nil {
-			if ps, ok := padangSalesBySKU[raw.SKU]; ok {
-				isInPadang = 1
-				factor := raw.Contribution / 100.0
-				finalDaily = ps.Daily * factor
-				finalMax = ps.Max * factor
-			}
-		}
-
-		// Use adjusted sales when computing inventory metrics
-		adj := raw
-		adj.DailySales = finalDaily
-		adj.MaxDailySales = finalMax
-		metrics := p.calculator.Calculate(&adj)
+		// Use each store's original daily sales and max daily sales directly
+		metrics := p.calculator.Calculate(&raw)
 
 		// Enrich with supplier data if available
 		var supplierStore, supplierName, supplierPhone string
@@ -490,8 +474,8 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 			Stock:         raw.Stock,
 			HPP:           raw.HPP,
 			Harga:         raw.Harga,
-			DailySales:    finalDaily,
-			MaxDailySales: finalMax,
+			DailySales:    raw.DailySales,
+			MaxDailySales: raw.MaxDailySales,
 			LeadTime:      raw.LeadTime,
 			MaxLeadTime:   raw.MaxLeadTime,
 			SedangPO:      raw.SedangPO,
@@ -502,10 +486,9 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 			SupplierStore: supplierStore,
 			SupplierName:  supplierName,
 			SupplierPhone: supplierPhone,
-			// carry through original per-store sales; IsInPadang derived from Padang reference
+			// carry through original per-store sales
 			OrigDailySales:    raw.OrigDailySales,
 			OrigMaxDailySales: raw.OrigMaxDailySales,
-			IsInPadang:        isInPadang,
 		}
 		transformed = append(transformed, row)
 	}
@@ -929,26 +912,11 @@ func (p *StockHealthPipeline) writeIntermediateCSV(date time.Time, stage string,
 }
 
 func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile string, rows []TransformedStockRow) error {
-	if p.config.IntermediateDir == "" {
-		return nil
-	}
-
-	baseDir := filepath.Join(p.config.IntermediateDir, "3_with_metrics", date.Format("20060102"))
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return err
-	}
-
 	fileName := filepath.Base(inputFile)
-	path := filepath.Join(baseDir, fileName)
 
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	w := csv.NewWriter(f)
-	defer w.Flush()
+	// Serialize to CSV bytes
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
 
 	headers := []string{
 		"date",
@@ -1032,6 +1000,37 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 		if err := w.Write(rec); err != nil {
 			return err
 		}
+	}
+
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return err
+	}
+
+	data := buf.Bytes()
+
+	// Upload to cloud storage if enabled
+	if p.storageClient != nil && p.cloudLayout != nil {
+		key := p.cloudLayout.intermediateKey("3_with_metrics", date, fileName)
+		if err := p.storageClient.UploadObject(context.Background(), key, data); err != nil {
+			return fmt.Errorf("failed to upload metrics intermediate %s: %w", key, err)
+		}
+		return nil
+	}
+
+	// Otherwise write to local disk
+	if p.config.IntermediateDir == "" {
+		return nil
+	}
+
+	baseDir := filepath.Join(p.config.IntermediateDir, "3_with_metrics", date.Format("20060102"))
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		return err
+	}
+
+	path := filepath.Join(baseDir, fileName)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return err
 	}
 
 	return nil

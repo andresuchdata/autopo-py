@@ -322,6 +322,9 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	brandNames := make(map[string]string)
 	skuHPP := make(map[string]float64)
 
+	var skippedRows int
+	var rowNumber int
+
 	for {
 		record, err := reader.Read()
 		if err != nil {
@@ -330,9 +333,12 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			}
 			return fmt.Errorf("error reading record: %w", err)
 		}
+		rowNumber++
 
 		sku := strings.TrimSpace(record[colMap["sku"]])
 		if sku == "" {
+			skippedRows++
+			log.Printf("warning: skipping row %d in %s: empty SKU", rowNumber+1, filepath.Base(filePath))
 			continue
 		}
 
@@ -457,7 +463,11 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Printf("Successfully processed %d stock health records from %s", len(records), filePath)
+	if skippedRows > 0 {
+		log.Printf("Successfully processed %d stock health records from %s (%d rows skipped)", len(records), filePath, skippedRows)
+	} else {
+		log.Printf("Successfully processed %d stock health records from %s", len(records), filePath)
+	}
 	return nil
 }
 
