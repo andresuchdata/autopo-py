@@ -24,3 +24,6 @@ ehthumbs.db
 Thumbs.db
 
 data/pipeline
+data/pipeline/stock_health/raw
+data/pipeline/stock_health/intermediate
+data/pipeline/stock_health/output

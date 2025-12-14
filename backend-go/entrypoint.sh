@@ -1,35 +1,56 @@
 #!/bin/sh
 set -e
 
-# Wait for PostgreSQL to be ready
-until PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c '\q'; do
-  >&2 echo "PostgreSQL is unavailable - sleeping"
-  sleep 1
-done
+# Function to wait for PostgreSQL
+wait_for_postgres() {
+  echo "Waiting for PostgreSQL to be ready..."
+  until PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c '\q' 2>/dev/null; do
+    >&2 echo "PostgreSQL is unavailable - sleeping"
+    sleep 1
+  done
+  echo "PostgreSQL is ready!"
+}
 
-# Run database migrations only once per file
-echo "Ensuring schema_migrations table exists..."
-PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" <<'SQL'
+# Function to run migrations
+run_migrations() {
+  echo "Ensuring schema_migrations table exists..."
+  PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" <<'SQL'
 CREATE TABLE IF NOT EXISTS schema_migrations (
   name TEXT PRIMARY KEY,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 SQL
 
-echo "Running database migrations..."
-for migration in /app/scripts/migrations/*.sql; do
-  migration_name=$(basename "$migration")
-  applied=$(PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1 FROM schema_migrations WHERE name = '$migration_name'")
+  echo "Running database migrations..."
+  for migration in /app/scripts/migrations/*.sql; do
+    migration_name=$(basename "$migration")
+    applied=$(PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1 FROM schema_migrations WHERE name = '$migration_name'")
 
-  if [ "$applied" = "1" ]; then
-    echo "Skipping migration $migration_name (already applied)"
-    continue
+    if [ "$applied" = "1" ]; then
+      echo "Skipping migration $migration_name (already applied)"
+      continue
+    fi
+
+    echo "Applying migration: $migration_name"
+    PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -f "$migration"
+    PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "INSERT INTO schema_migrations (name) VALUES ('$migration_name') ON CONFLICT (name) DO NOTHING;"
+  done
+}
+
+# Check if this is a direct seed command (for cron/manual runs)
+if [ "$1" = "/app/bin/seed" ] || [ "$1" = "seed" ]; then
+  echo "Direct seed command detected - running in one-off mode"
+  wait_for_postgres
+  # Run migrations only if SKIP_MIGRATIONS is not set
+  if [ "$SKIP_MIGRATIONS" != "true" ]; then
+    run_migrations
   fi
+  exec "$@"
+fi
 
-  echo "Applying migration: $migration_name"
-  PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -f "$migration"
-  PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "INSERT INTO schema_migrations (name) VALUES ('$migration_name') ON CONFLICT (name) DO NOTHING;"
-done
+# Otherwise, run normal startup flow
+wait_for_postgres
+run_migrations
 
 # Check if we should run seed data
 if [ "$RUN_SEED_DATA" = "true" ]; then
@@ -79,6 +100,12 @@ if [ "$RUN_SEED_DATA" = "true" ]; then
         if [ "$INCLUDE_MAPPINGS" = "true" ]; then
           set -- "$@" --include-mappings
         fi
+        run_seed_command "$@"
+      )
+      ;;
+    pipeline-stock-health)
+      (
+        eval set -- $(build_common_args "pipeline-stock-health")
         run_seed_command "$@"
       )
       ;;
