@@ -349,13 +349,20 @@ func runStockHealthPipeline(c *cli.Context) error {
 		return fmt.Errorf("failed to create stock health pipeline: %w", err)
 	}
 
-	// Upload raw files to cloud storage if enabled
+	// Upload raw files to cloud storage concurrently with processing
+	var uploadErr error
+	uploadDone := make(chan struct{})
 	if stockCfg.CloudStorageEnabled && snapshotDate != "" {
-		log.Printf("Uploading %d raw files to cloud storage...", len(localFiles))
-		parsedDate, err := time.Parse(inputDateFormat, snapshotDate)
-		if err != nil {
-			log.Printf("warning: failed to parse snapshot date %s: %v (skipping raw upload)", snapshotDate, err)
-		} else {
+		go func() {
+			defer close(uploadDone)
+			log.Printf("Starting concurrent upload of %d raw files to cloud storage...", len(localFiles))
+			parsedDate, err := time.Parse(inputDateFormat, snapshotDate)
+			if err != nil {
+				log.Printf("warning: failed to parse snapshot date %s: %v (skipping raw upload)", snapshotDate, err)
+				uploadErr = err
+				return
+			}
+
 			uploadedCount := 0
 			for _, localPath := range localFiles {
 				if _, err := pipelineImpl.UploadRawFile(ctx, parsedDate, localPath); err != nil {
@@ -365,7 +372,9 @@ func runStockHealthPipeline(c *cli.Context) error {
 				}
 			}
 			log.Printf("Successfully uploaded %d/%d raw files to cloud storage", uploadedCount, len(localFiles))
-		}
+		}()
+	} else {
+		close(uploadDone)
 	}
 
 	// Configure generic pipeline config
@@ -378,6 +387,12 @@ func runStockHealthPipeline(c *cli.Context) error {
 	orch := pipeline.NewOrchestrator(db, pCfg)
 	if err := orch.Run(ctx, pipelineImpl, localFiles); err != nil {
 		return fmt.Errorf("stock health pipeline run failed: %w", err)
+	}
+
+	// Wait for raw file uploads to complete
+	<-uploadDone
+	if uploadErr != nil {
+		log.Printf("warning: raw file upload encountered errors: %v", uploadErr)
 	}
 
 	log.Println("Stock health pipeline completed successfully")

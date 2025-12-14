@@ -97,10 +97,12 @@ When `CLOUD_STORAGE_ENABLED=false` (default), the pipeline operates normally usi
 
 When `CLOUD_STORAGE_ENABLED=true`:
 1. **Raw files** are downloaded from Google Drive to local temp directory
-2. **Raw files** are uploaded to `{bucket}/stock_health/raw/{YYYY}/{MM}/{DD}/` (backup)
-3. **Intermediate CSVs** are uploaded to `{bucket}/stock_health/intermediate/...`
+2. **Raw files** are uploaded to `{bucket}/stock_health/raw/{YYYY}/{MM}/{DD}/` (backup) **concurrently** with processing
+3. **Intermediate CSVs** are uploaded to `{bucket}/stock_health/intermediate/...` during processing
 4. **Final aggregated CSV** is uploaded to `{bucket}/stock_health/output/{YYYY}/{MM}/{DD}/`
 5. Local directories (`STOCK_HEALTH_DOWNLOAD_DIR`, etc.) are still used for temporary processing
+
+**Performance Optimization**: Raw file uploads run in a background goroutine, allowing transformation and processing to start immediately without waiting for uploads to complete. The pipeline ensures all uploads finish before exiting.
 
 ### Hybrid Mode
 
