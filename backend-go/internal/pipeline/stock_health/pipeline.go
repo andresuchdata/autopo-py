@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
@@ -32,54 +30,31 @@ type StockHealthPipeline struct {
 	config     Config
 	calculator *InventoryCalculator
 
-	padangSalesCache   map[string]map[string]padangSales // dateKey -> SKU -> Padang sales
-	padangSalesCacheMu sync.Mutex
+	padangSalesCache map[string]map[string]padangSales // dateKey -> SKU -> Padang sales
 
 	supplierIndex map[supplierKey]SupplierData
 
 	storageClient storage.ObjectStorage
-	cloudLayout   *cloudLayout
+	cloudLayout   *pipeline.CloudLayout
 	tempDir       string
 }
 
-type cloudLayout struct {
-	taskName string
-}
-
-func newCloudLayout(task string) *cloudLayout {
-	return &cloudLayout{taskName: strings.Trim(task, "/")}
-}
-
-func (l *cloudLayout) path(parts ...string) string {
-	segments := []string{l.taskName}
-	segments = append(segments, parts...)
-	return path.Join(segments...)
-}
-
-func (l *cloudLayout) dateParts(date time.Time) []string {
-	return []string{
-		fmt.Sprintf("%04d", date.Year()),
-		fmt.Sprintf("%02d", int(date.Month())),
-		fmt.Sprintf("%02d", date.Day()),
-	}
-}
-
-func (l *cloudLayout) rawKey(date time.Time, fileName string) string {
-	parts := append([]string{"raw"}, l.dateParts(date)...)
+func rawKey(l *pipeline.CloudLayout, date time.Time, fileName string) string {
+	parts := append([]string{"raw"}, l.DateParts(date)...)
 	parts = append(parts, fileName)
-	return l.path(parts...)
+	return l.Path(parts...)
 }
 
-func (l *cloudLayout) intermediateKey(stage string, date time.Time, fileName string) string {
-	parts := append([]string{"intermediate", stage}, l.dateParts(date)...)
+func intermediateKey(l *pipeline.CloudLayout, stage string, date time.Time, fileName string) string {
+	parts := append([]string{"intermediate", stage}, l.DateParts(date)...)
 	parts = append(parts, fileName)
-	return l.path(parts...)
+	return l.Path(parts...)
 }
 
-func (l *cloudLayout) outputKey(date time.Time, fileName string) string {
-	parts := append([]string{"output"}, l.dateParts(date)...)
+func outputKey(l *pipeline.CloudLayout, date time.Time, fileName string) string {
+	parts := append([]string{"output"}, l.DateParts(date)...)
 	parts = append(parts, fileName)
-	return l.path(parts...)
+	return l.Path(parts...)
 }
 
 // NewStockHealthPipeline creates a new stock health pipeline instance.
@@ -131,7 +106,7 @@ func NewStockHealthPipeline(cfg Config) (*StockHealthPipeline, error) {
 			return nil, fmt.Errorf("failed to create temp dir for cloud downloads: %w", err)
 		}
 		p.storageClient = client
-		p.cloudLayout = newCloudLayout(p.Name())
+		p.cloudLayout = pipeline.NewCloudLayout(p.Name())
 		p.tempDir = tempDir
 	}
 
@@ -158,7 +133,7 @@ func (p *StockHealthPipeline) UploadRawFile(ctx context.Context, snapshotDate ti
 	if err != nil {
 		return "", fmt.Errorf("failed to read %s for upload: %w", localPath, err)
 	}
-	key := p.cloudLayout.rawKey(snapshotDate, filepath.Base(localPath))
+	key := rawKey(p.cloudLayout, snapshotDate, filepath.Base(localPath))
 	if err := p.storageClient.UploadObject(ctx, key, data); err != nil {
 		return "", fmt.Errorf("failed to upload raw file %s: %w", key, err)
 	}
@@ -190,7 +165,7 @@ func (p *StockHealthPipeline) UploadAggregatedOutput(ctx context.Context, snapsh
 	if err != nil {
 		return fmt.Errorf("failed to read aggregated output %s: %w", localPath, err)
 	}
-	key := p.cloudLayout.outputKey(snapshotDate, filepath.Base(localPath))
+	key := outputKey(p.cloudLayout, snapshotDate, filepath.Base(localPath))
 	if err := p.storageClient.UploadObject(ctx, key, data); err != nil {
 		return fmt.Errorf("failed to upload aggregated output %s: %w", key, err)
 	}

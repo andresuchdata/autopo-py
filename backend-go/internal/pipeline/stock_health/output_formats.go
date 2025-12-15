@@ -104,7 +104,7 @@ func (p *StockHealthPipeline) generateAndUploadM2Format(ctx context.Context, sna
 
 	// Upload to cloud storage under output/m2/ folder
 	baseName := filepath.Base(completeCSVPath)
-	key := p.cloudLayout.path("output", "m2", fmt.Sprintf("%04d", snapshotDate.Year()),
+	key := p.cloudLayout.Path("output", "m2", fmt.Sprintf("%04d", snapshotDate.Year()),
 		fmt.Sprintf("%02d", int(snapshotDate.Month())),
 		fmt.Sprintf("%02d", snapshotDate.Day()), baseName)
 
@@ -214,7 +214,7 @@ func (p *StockHealthPipeline) generateAndUploadEmergencyFormat(ctx context.Conte
 
 	// Upload to cloud storage under output/emergency/ folder
 	baseName := filepath.Base(completeCSVPath)
-	key := p.cloudLayout.path("output", "emergency", fmt.Sprintf("%04d", snapshotDate.Year()),
+	key := p.cloudLayout.Path("output", "emergency", fmt.Sprintf("%04d", snapshotDate.Year()),
 		fmt.Sprintf("%02d", int(snapshotDate.Month())),
 		fmt.Sprintf("%02d", snapshotDate.Day()), baseName)
 

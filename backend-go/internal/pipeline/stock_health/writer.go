@@ -74,7 +74,7 @@ func (p *StockHealthPipeline) writeIntermediateCSV(date time.Time, stage string,
 	}
 
 	if p.storageClient != nil && p.cloudLayout != nil {
-		key := p.cloudLayout.intermediateKey(stage, date, fileName)
+		key := intermediateKey(p.cloudLayout, stage, date, fileName)
 		if err := p.storageClient.UploadObject(context.Background(), key, data); err != nil {
 			return fmt.Errorf("failed to upload intermediate %s: %w", key, err)
 		}
@@ -199,7 +199,7 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 
 	// Upload to cloud storage if enabled
 	if p.storageClient != nil && p.cloudLayout != nil {
-		key := p.cloudLayout.intermediateKey("3_with_metrics", date, fileName)
+		key := intermediateKey(p.cloudLayout, "3_with_metrics", date, fileName)
 		if err := p.storageClient.UploadObject(context.Background(), key, data); err != nil {
 			return fmt.Errorf("failed to upload metrics intermediate %s: %w", key, err)
 		}
