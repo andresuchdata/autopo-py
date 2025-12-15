@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/drive"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
 	stockhealth "github.com/andresuchdata/autopo-py/backend-go/internal/pipeline/stock_health"
@@ -379,6 +381,20 @@ func runStockHealthPipeline(c *cli.Context) error {
 	orch := pipeline.NewOrchestrator(db, pCfg)
 	if err := orch.Run(ctx, pipelineImpl, localFiles); err != nil {
 		return fmt.Errorf("stock health pipeline run failed: %w", err)
+	}
+
+	// Invalidate cached stock health responses so the API doesn't serve stale
+	// data (e.g. previously cached empty summaries) after the pipeline seeds.
+	cfg := config.Load()
+	if cfg.Cache.Enabled {
+		stockHealthCache, err := cache.NewStockHealthCache(cfg.Cache)
+		if err != nil {
+			log.Printf("warning: failed to create stock health cache for invalidation: %v", err)
+		} else if err := stockHealthCache.InvalidateAll(ctx); err != nil {
+			log.Printf("warning: failed to invalidate stock health cache: %v", err)
+		} else {
+			log.Printf("Invalidated stock health cache")
+		}
 	}
 
 	// Wait for raw file uploads to complete
