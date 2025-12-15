@@ -19,13 +19,22 @@ const (
 	// Bump version to v2 so we don't reuse old summary cache entries
 	// that were created before kategori_brand and other filters were
 	// included in the cache key hash.
-	stockHealthSummaryKeyPrefix = "stock_health:summary:v2"
-	stockHealthScanBatchSize    = 100
+	stockHealthSummaryKeyPrefix   = "stock_health:summary:v2"
+	stockHealthBrandKeyPrefix     = "stock_health:brand:v2"
+	stockHealthStoreKeyPrefix     = "stock_health:store:v2"
+	stockHealthOverstockKeyPrefix = "stock_health:overstock:v2"
+	stockHealthScanBatchSize      = 100
 )
 
 type StockHealthCache interface {
 	GetSummary(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealthSummary, bool, error)
 	SetSummary(ctx context.Context, filter domain.StockHealthFilter, summaries []domain.StockHealthSummary) error
+	GetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, bool, error)
+	SetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter, breakdown []domain.ConditionBreakdown) error
+	GetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, bool, error)
+	SetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter, breakdown []domain.ConditionBreakdown) error
+	GetOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.OverstockBreakdown, bool, error)
+	SetOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter, breakdown []domain.OverstockBreakdown) error
 	InvalidateSummary(ctx context.Context, filter domain.StockHealthFilter) error
 	InvalidateAll(ctx context.Context) error
 }
@@ -89,13 +98,117 @@ func (c *redisStockHealthCache) SetSummary(ctx context.Context, filter domain.St
 	return nil
 }
 
+func (c *redisStockHealthCache) GetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, bool, error) {
+	key := buildBrandBreakdownKey(filter)
+	payload, err := c.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("redis get failed: %w", err)
+	}
+
+	var breakdown []domain.ConditionBreakdown
+	if err := json.Unmarshal(payload, &breakdown); err != nil {
+		return nil, false, fmt.Errorf("decode brand breakdown cache: %w", err)
+	}
+
+	return breakdown, true, nil
+}
+
+func (c *redisStockHealthCache) SetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter, breakdown []domain.ConditionBreakdown) error {
+	key := buildBrandBreakdownKey(filter)
+	payload, err := json.Marshal(breakdown)
+	if err != nil {
+		return fmt.Errorf("encode brand breakdown cache: %w", err)
+	}
+
+	if err := c.client.Set(ctx, key, payload, c.ttl).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
+	return nil
+}
+
+func (c *redisStockHealthCache) GetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, bool, error) {
+	key := buildStoreBreakdownKey(filter)
+	payload, err := c.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("redis get failed: %w", err)
+	}
+
+	var breakdown []domain.ConditionBreakdown
+	if err := json.Unmarshal(payload, &breakdown); err != nil {
+		return nil, false, fmt.Errorf("decode store breakdown cache: %w", err)
+	}
+
+	return breakdown, true, nil
+}
+
+func (c *redisStockHealthCache) SetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter, breakdown []domain.ConditionBreakdown) error {
+	key := buildStoreBreakdownKey(filter)
+	payload, err := json.Marshal(breakdown)
+	if err != nil {
+		return fmt.Errorf("encode store breakdown cache: %w", err)
+	}
+
+	if err := c.client.Set(ctx, key, payload, c.ttl).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
+	return nil
+}
+
+func (c *redisStockHealthCache) GetOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.OverstockBreakdown, bool, error) {
+	key := buildOverstockBreakdownKey(filter)
+	payload, err := c.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("redis get failed: %w", err)
+	}
+
+	var breakdown []domain.OverstockBreakdown
+	if err := json.Unmarshal(payload, &breakdown); err != nil {
+		return nil, false, fmt.Errorf("decode overstock breakdown cache: %w", err)
+	}
+
+	return breakdown, true, nil
+}
+
+func (c *redisStockHealthCache) SetOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter, breakdown []domain.OverstockBreakdown) error {
+	key := buildOverstockBreakdownKey(filter)
+	payload, err := json.Marshal(breakdown)
+	if err != nil {
+		return fmt.Errorf("encode overstock breakdown cache: %w", err)
+	}
+
+	if err := c.client.Set(ctx, key, payload, c.ttl).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
+	return nil
+}
+
 func (c *redisStockHealthCache) InvalidateSummary(ctx context.Context, filter domain.StockHealthFilter) error {
 	key := buildStockHealthSummaryKey(filter)
 	return c.client.Del(ctx, key).Err()
 }
 
 func (c *redisStockHealthCache) InvalidateAll(ctx context.Context) error {
-	return deleteKeysWithPrefix(ctx, c.client, stockHealthSummaryKeyPrefix, stockHealthScanBatchSize)
+	prefixes := []string{
+		stockHealthSummaryKeyPrefix,
+		stockHealthBrandKeyPrefix,
+		stockHealthStoreKeyPrefix,
+		stockHealthOverstockKeyPrefix,
+	}
+	for _, prefix := range prefixes {
+		if err := deleteKeysWithPrefix(ctx, c.client, prefix, stockHealthScanBatchSize); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (n *noopStockHealthCache) GetSummary(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealthSummary, bool, error) {
@@ -103,6 +216,30 @@ func (n *noopStockHealthCache) GetSummary(ctx context.Context, filter domain.Sto
 }
 
 func (n *noopStockHealthCache) SetSummary(ctx context.Context, filter domain.StockHealthFilter, summaries []domain.StockHealthSummary) error {
+	return nil
+}
+
+func (n *noopStockHealthCache) GetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, bool, error) {
+	return nil, false, nil
+}
+
+func (n *noopStockHealthCache) SetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter, breakdown []domain.ConditionBreakdown) error {
+	return nil
+}
+
+func (n *noopStockHealthCache) GetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, bool, error) {
+	return nil, false, nil
+}
+
+func (n *noopStockHealthCache) SetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter, breakdown []domain.ConditionBreakdown) error {
+	return nil
+}
+
+func (n *noopStockHealthCache) GetOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.OverstockBreakdown, bool, error) {
+	return nil, false, nil
+}
+
+func (n *noopStockHealthCache) SetOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter, breakdown []domain.OverstockBreakdown) error {
 	return nil
 }
 
@@ -116,6 +253,18 @@ func (n *noopStockHealthCache) InvalidateAll(ctx context.Context) error {
 
 func buildStockHealthSummaryKey(filter domain.StockHealthFilter) string {
 	return fmt.Sprintf("%s:%s", stockHealthSummaryKeyPrefix, stockHealthFilterHash(filter))
+}
+
+func buildBrandBreakdownKey(filter domain.StockHealthFilter) string {
+	return fmt.Sprintf("%s:%s", stockHealthBrandKeyPrefix, stockHealthFilterHash(filter))
+}
+
+func buildStoreBreakdownKey(filter domain.StockHealthFilter) string {
+	return fmt.Sprintf("%s:%s", stockHealthStoreKeyPrefix, stockHealthFilterHash(filter))
+}
+
+func buildOverstockBreakdownKey(filter domain.StockHealthFilter) string {
+	return fmt.Sprintf("%s:%s", stockHealthOverstockKeyPrefix, stockHealthFilterHash(filter))
 }
 
 func stockHealthFilterHash(filter domain.StockHealthFilter) string {
