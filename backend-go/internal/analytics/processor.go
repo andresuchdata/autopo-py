@@ -555,8 +555,9 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	seen := make(map[stockHealthKey]int)
 	log.Printf("[DEBUG] Building %d stockHealthRecords from rawRows", len(rawRows))
 	for i, raw := range rawRows {
-		if i < 3 {
-			log.Printf("[DEBUG] RawRow %d - SKU: %s, dailySales: %f, maxDailySales: %f", i, raw.sku, raw.dailySales, raw.maxDailySales)
+		if i < 3 || raw.sku == "51300243348" {
+			log.Printf("[DEBUG] RawRow %d - SKU: %s, dailySales: %f, maxDailySales: %f, isOpenPO: %v",
+				i, raw.sku, raw.dailySales, raw.maxDailySales, raw.isOpenPO)
 		}
 		storeID, ok := storeIDs[strings.ToLower(raw.storeName)]
 		if !ok {

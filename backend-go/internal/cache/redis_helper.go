@@ -11,9 +11,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const defaultCacheTTL = time.Minute
+// default 1 hour
+const defaultCacheTTL = time.Minute * 60
 
-func newRedisClient(cfg config.CacheConfig) (*redis.Client, time.Duration, error) {
+func newRedisClient(cfg config.CacheConfig, ttlSeconds int) (*redis.Client, time.Duration, error) {
 	opts, err := buildRedisOptions(cfg)
 	if err != nil {
 		log.Error().Err(err).Msg("cache: failed to build redis options")
@@ -29,7 +30,7 @@ func newRedisClient(cfg config.CacheConfig) (*redis.Client, time.Duration, error
 		return nil, 0, fmt.Errorf("redis ping failed: %w", err)
 	}
 
-	ttl := time.Duration(cfg.DashboardTTLSeconds) * time.Second
+	ttl := time.Duration(ttlSeconds) * time.Second
 	if ttl <= 0 {
 		ttl = defaultCacheTTL
 	}
