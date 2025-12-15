@@ -24,11 +24,13 @@ func NewStockHealthService(repo repository.StockHealthRepository, cacheImpl cach
 
 func (s *StockHealthService) GetSummary(ctx context.Context, filter domain.StockHealthFilter) ([]domain.StockHealthSummary, error) {
 	if summaries, ok, err := s.cache.GetSummary(ctx, filter); err == nil && ok {
+		log.Debug().Msg("stock health: cache HIT for summary")
 		return summaries, nil
 	} else if err != nil {
 		log.Warn().Err(err).Msg("stock health: cache get summary failed")
 	}
 
+	log.Debug().Msg("stock health: cache MISS for summary - querying database")
 	summaries, err := s.repo.GetStockHealthSummary(ctx, filter)
 	if err != nil {
 		return nil, err
@@ -53,11 +55,66 @@ func (s *StockHealthService) GetTimeSeries(ctx context.Context, days int, filter
 }
 
 func (s *StockHealthService) GetBrandBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error) {
-	return s.repo.GetBrandBreakdown(ctx, filter)
+	if breakdown, ok, err := s.cache.GetBrandBreakdown(ctx, filter); err == nil && ok {
+		log.Debug().Msg("stock health: cache HIT for brand breakdown")
+		return breakdown, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("stock health: cache get brand breakdown failed")
+	}
+
+	log.Debug().Msg("stock health: cache MISS for brand breakdown - querying database")
+	breakdown, err := s.repo.GetBrandBreakdown(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.cache.SetBrandBreakdown(ctx, filter, breakdown); err != nil {
+		log.Warn().Err(err).Msg("stock health: cache set brand breakdown failed")
+	}
+
+	return breakdown, nil
 }
 
 func (s *StockHealthService) GetStoreBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.ConditionBreakdown, error) {
-	return s.repo.GetStoreBreakdown(ctx, filter)
+	if breakdown, ok, err := s.cache.GetStoreBreakdown(ctx, filter); err == nil && ok {
+		log.Debug().Msg("stock health: cache HIT for store breakdown")
+		return breakdown, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("stock health: cache get store breakdown failed")
+	}
+
+	log.Debug().Msg("stock health: cache MISS for store breakdown - querying database")
+	breakdown, err := s.repo.GetStoreBreakdown(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.cache.SetStoreBreakdown(ctx, filter, breakdown); err != nil {
+		log.Warn().Err(err).Msg("stock health: cache set store breakdown failed")
+	}
+
+	return breakdown, nil
+}
+
+func (s *StockHealthService) getOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.OverstockBreakdown, error) {
+	if breakdown, ok, err := s.cache.GetOverstockBreakdown(ctx, filter); err == nil && ok {
+		log.Debug().Msg("stock health: cache HIT for overstock breakdown")
+		return breakdown, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("stock health: cache get overstock breakdown failed")
+	}
+
+	log.Debug().Msg("stock health: cache MISS for overstock breakdown - querying database")
+	breakdown, err := s.repo.GetOverstockBreakdown(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.cache.SetOverstockBreakdown(ctx, filter, breakdown); err != nil {
+		log.Warn().Err(err).Msg("stock health: cache set overstock breakdown failed")
+	}
+
+	return breakdown, nil
 }
 
 func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter domain.StockHealthFilter) (*domain.StockHealthDashboard, error) {
@@ -75,7 +132,7 @@ func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter 
 	// queries and service methods intact for future use.
 	timeSeries := make(map[string][]domain.TimeSeriesData)
 
-	brandBreakdown, err := s.repo.GetBrandBreakdown(ctx, filter)
+	brandBreakdown, err := s.GetBrandBreakdown(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +140,7 @@ func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter 
 		brandBreakdown = make([]domain.ConditionBreakdown, 0)
 	}
 
-	storeBreakdown, err := s.repo.GetStoreBreakdown(ctx, filter)
+	storeBreakdown, err := s.GetStoreBreakdown(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +148,7 @@ func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter 
 		storeBreakdown = make([]domain.ConditionBreakdown, 0)
 	}
 
-	overstockBreakdown, err := s.repo.GetOverstockBreakdown(ctx, filter)
+	overstockBreakdown, err := s.getOverstockBreakdown(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
