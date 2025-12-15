@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
 )
 
 // readAndCleanCSV reads a CSV file into RawStockRow slice.
@@ -33,9 +35,7 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 		firstLine, _ := bufReader.ReadString('\n')
 		fileForCheck.Close()
 
-		if strings.Count(firstLine, ";") > strings.Count(firstLine, ",") {
-			reader.Comma = ';'
-		}
+		reader.Comma = pipeline.DetectCSVDelimiter(firstLine)
 	}
 
 	header, err := reader.Read()

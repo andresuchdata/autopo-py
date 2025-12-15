@@ -405,6 +405,12 @@ func main() {
 				Action: runStockHealthPipeline,
 			},
 			{
+				Name:   "pipeline-po-snapshots",
+				Usage:  "Run PO snapshot pipeline end-to-end from Google Drive",
+				Flags:  poSnapshotPipelineFlags(),
+				Action: runPOSnapshotPipeline,
+			},
+			{
 				Name:  "master",
 				Usage: "Seed master data (brands, suppliers, stores, etc.)",
 				Flags: []cli.Flag{
