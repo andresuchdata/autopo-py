@@ -48,7 +48,7 @@ func NewDashboardCache(cfg config.CacheConfig) (DashboardCache, error) {
 		return &noopDashboardCache{}, nil
 	}
 
-	client, ttl, err := newRedisClient(cfg)
+	client, ttl, err := newRedisClient(cfg, cfg.DashboardTTLSeconds)
 	if err != nil {
 		return nil, err
 	}

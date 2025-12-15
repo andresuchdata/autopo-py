@@ -42,7 +42,7 @@ func NewStockHealthCache(cfg config.CacheConfig) (StockHealthCache, error) {
 		return &noopStockHealthCache{}, nil
 	}
 
-	client, ttl, err := newRedisClient(cfg)
+	client, ttl, err := newRedisClient(cfg, cfg.StockHealthTTLSeconds)
 	if err != nil {
 		return nil, err
 	}

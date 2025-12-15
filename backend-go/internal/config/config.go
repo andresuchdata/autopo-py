@@ -40,13 +40,14 @@ type AppConfig struct {
 }
 
 type CacheConfig struct {
-	Enabled             bool
-	RedisURL            string
-	RedisHost           string
-	RedisPort           string
-	RedisPassword       string
-	RedisDB             int
-	DashboardTTLSeconds int
+	Enabled               bool
+	RedisURL              string
+	RedisHost             string
+	RedisPort             string
+	RedisPassword         string
+	RedisDB               int
+	DashboardTTLSeconds   int
+	StockHealthTTLSeconds int
 }
 
 var (
@@ -78,6 +79,7 @@ func Load() *Config {
 		viper.SetDefault("REDIS_PASSWORD", "")
 		viper.SetDefault("REDIS_DB", 0)
 		viper.SetDefault("CACHE_DASHBOARD_TTL_SECONDS", 60)
+		viper.SetDefault("CACHE_STOCK_HEALTH_TTL_SECONDS", 3600)
 
 		// Read from environment variables
 		viper.AutomaticEnv()
@@ -107,13 +109,14 @@ func Load() *Config {
 				DataDir:   viper.GetString("APP_DATA_DIR"),
 			},
 			Cache: CacheConfig{
-				Enabled:             viper.GetBool("CACHE_ENABLED"),
-				RedisURL:            viper.GetString("REDIS_URL"),
-				RedisHost:           viper.GetString("REDIS_HOST"),
-				RedisPort:           viper.GetString("REDIS_PORT"),
-				RedisPassword:       viper.GetString("REDIS_PASSWORD"),
-				RedisDB:             viper.GetInt("REDIS_DB"),
-				DashboardTTLSeconds: viper.GetInt("CACHE_DASHBOARD_TTL_SECONDS"),
+				Enabled:               viper.GetBool("CACHE_ENABLED"),
+				RedisURL:              viper.GetString("REDIS_URL"),
+				RedisHost:             viper.GetString("REDIS_HOST"),
+				RedisPort:             viper.GetString("REDIS_PORT"),
+				RedisPassword:         viper.GetString("REDIS_PASSWORD"),
+				RedisDB:               viper.GetInt("REDIS_DB"),
+				DashboardTTLSeconds:   viper.GetInt("CACHE_DASHBOARD_TTL_SECONDS"),
+				StockHealthTTLSeconds: viper.GetInt("CACHE_STOCK_HEALTH_TTL_SECONDS"),
 			},
 		}
 	})
