@@ -14,7 +14,7 @@ fi
 SNAPSHOT_DATE="${1:-$PO_SNAPSHOT_SNAPSHOT_DATE}"
 
 # Build command
-CMD="/app/bin/seed pipeline-po-snapshot --db-url \"$DATABASE_URL\""
+CMD="/app/bin/seed pipeline-po-snapshots --db-url \"$DATABASE_URL\""
 
 # Add optional flags
 if [ -n "$SNAPSHOT_DATE" ]; then
@@ -31,4 +31,4 @@ else
 fi
 
 # Execute via entrypoint (handles DB wait and migrations)
-exec /app/entrypoint.sh /app/bin/seed pipeline-po-snapshot --db-url "$DATABASE_URL"
+exec /app/entrypoint.sh /app/bin/seed pipeline-po-snapshots --db-url "$DATABASE_URL"
