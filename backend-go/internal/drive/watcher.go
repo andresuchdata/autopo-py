@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
+
+var nonFilenameChars = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 // DownloadOptions controls how files are pulled from Google Drive.
 type DownloadOptions struct {
@@ -29,6 +32,91 @@ func NewDownloader(s *Service) *Downloader {
 	return &Downloader{service: s}
 }
 
+func (d *Downloader) downloadCSVOrXLSXFiles(ctx context.Context, dateStr string, fileList []*File, downloadDir string) ([]string, error) {
+	var localPaths []string
+	for _, cf := range fileList {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		ext := strings.ToLower(filepath.Ext(cf.Name))
+		isGoogleSheet := cf.MimeType == "application/vnd.google-apps.spreadsheet"
+		isCSV := ext == ".csv" || strings.EqualFold(strings.TrimSpace(cf.MimeType), "text/csv")
+		isXLSX := ext == ".xlsx"
+		if !isGoogleSheet && !isCSV && !isXLSX {
+			continue
+		}
+
+		// Prefix local filename with the date folder so the pipeline can
+		// derive snapshot date from the filename.
+		baseName := fmt.Sprintf("%s_%s", dateStr, cf.Name)
+		if isCSV {
+			localPath := filepath.Join(downloadDir, baseName)
+			out, err := os.Create(localPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create local file %s: %w", localPath, err)
+			}
+			if err := d.service.DownloadFile(cf.ID, out); err != nil {
+				out.Close()
+				return nil, fmt.Errorf("failed to download %s: %w", cf.Name, err)
+			}
+			out.Close()
+			localPaths = append(localPaths, localPath)
+			continue
+		}
+
+		if isGoogleSheet {
+			safeName := nonFilenameChars.ReplaceAllString(strings.TrimSpace(cf.Name), "_")
+			if safeName == "" {
+				safeName = "sheet"
+			}
+
+			csvName := fmt.Sprintf("%s_%s.csv", dateStr, safeName)
+			csvPath := filepath.Join(downloadDir, csvName)
+			out, err := os.Create(csvPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create local csv %s: %w", csvPath, err)
+			}
+
+			if err := d.service.ExportFile(cf.ID, "text/csv", out); err != nil {
+				out.Close()
+				return nil, fmt.Errorf("failed to export Google Sheet %s: %w", cf.Name, err)
+			}
+
+			out.Close()
+			localPaths = append(localPaths, csvPath)
+			continue
+		}
+
+		// XLSX: download then convert first sheet to CSV
+		tmpXLSXPath := filepath.Join(downloadDir, baseName)
+		out, err := os.Create(tmpXLSXPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temp xlsx %s: %w", tmpXLSXPath, err)
+		}
+
+		if err := d.service.DownloadFile(cf.ID, out); err != nil {
+			out.Close()
+			return nil, fmt.Errorf("failed to download %s: %w", cf.Name, err)
+		}
+		out.Close()
+
+		csvName := strings.TrimSuffix(baseName, filepath.Ext(baseName)) + ".csv"
+		csvPath := filepath.Join(downloadDir, csvName)
+		if err := convertXLSXToCSV(tmpXLSXPath, csvPath); err != nil {
+			return nil, fmt.Errorf("failed to convert %s to csv: %w", cf.Name, err)
+		}
+
+		// Best-effort remove temp XLSX
+		_ = os.Remove(tmpXLSXPath)
+		localPaths = append(localPaths, csvPath)
+	}
+
+	return localPaths, nil
+}
+
 // DownloadFolderCSV downloads all non-trashed CSV and XLSX files from the given Drive folder
 // into DownloadDir and returns local CSV paths.
 //
@@ -48,8 +136,10 @@ func (d *Downloader) DownloadFolderCSV(ctx context.Context, opts DownloadOptions
 		return nil, err
 	}
 
-	// We expect the root folder to contain date-named subfolders (e.g. 20251201),
-	// each containing an "input" subfolder with per-store files.
+	// We expect the root folder to contain date-named subfolders (e.g. 20251201).
+	// Supported layouts within each date folder:
+	//   1) input/<files> (historical)
+	//   2) <files> directly under the date folder
 	var localPaths []string
 	for _, f := range files {
 		// Only consider folders at the root level for date grouping
@@ -87,7 +177,15 @@ func (d *Downloader) DownloadFolderCSV(ctx context.Context, opts DownloadOptions
 				break
 			}
 		}
+
 		if inputFolderID == "" {
+			// Fall back to downloading CSV/XLSX directly from the date folder.
+			downloaded, err := d.downloadCSVOrXLSXFiles(ctx, dateStr, childFiles, opts.DownloadDir)
+			if err != nil {
+				return nil, err
+			}
+
+			localPaths = append(localPaths, downloaded...)
 			continue
 		}
 
@@ -96,57 +194,11 @@ func (d *Downloader) DownloadFolderCSV(ctx context.Context, opts DownloadOptions
 			return nil, fmt.Errorf("failed to list files in input folder for %s: %w", f.Name, err)
 		}
 
-		for _, cf := range inputFiles {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			default:
-			}
-
-			ext := strings.ToLower(filepath.Ext(cf.Name))
-			if ext != ".csv" && ext != ".xlsx" {
-				continue
-			}
-
-			// Prefix local filename with the date folder so the pipeline can
-			// derive snapshot date from the filename.
-			baseName := fmt.Sprintf("%s_%s", dateStr, cf.Name)
-			if ext == ".csv" {
-				localPath := filepath.Join(opts.DownloadDir, baseName)
-				out, err := os.Create(localPath)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create local file %s: %w", localPath, err)
-				}
-				if err := d.service.DownloadFile(cf.ID, out); err != nil {
-					out.Close()
-					return nil, fmt.Errorf("failed to download %s: %w", cf.Name, err)
-				}
-				out.Close()
-				localPaths = append(localPaths, localPath)
-				continue
-			}
-
-			// XLSX: download then convert first sheet to CSV
-			tmpXLSXPath := filepath.Join(opts.DownloadDir, baseName)
-			out, err := os.Create(tmpXLSXPath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create temp xlsx %s: %w", tmpXLSXPath, err)
-			}
-			if err := d.service.DownloadFile(cf.ID, out); err != nil {
-				out.Close()
-				return nil, fmt.Errorf("failed to download %s: %w", cf.Name, err)
-			}
-			out.Close()
-
-			csvName := strings.TrimSuffix(baseName, filepath.Ext(baseName)) + ".csv"
-			csvPath := filepath.Join(opts.DownloadDir, csvName)
-			if err := convertXLSXToCSV(tmpXLSXPath, csvPath); err != nil {
-				return nil, fmt.Errorf("failed to convert %s to csv: %w", cf.Name, err)
-			}
-			// Best-effort remove temp XLSX
-			_ = os.Remove(tmpXLSXPath)
-			localPaths = append(localPaths, csvPath)
+		downloaded, err := d.downloadCSVOrXLSXFiles(ctx, dateStr, inputFiles, opts.DownloadDir)
+		if err != nil {
+			return nil, err
 		}
+		localPaths = append(localPaths, downloaded...)
 	}
 
 	return localPaths, nil

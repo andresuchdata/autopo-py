@@ -20,6 +20,8 @@ type Worker struct {
 	db         *sql.DB
 	aggregator *StreamingAggregator
 	processor  *analytics.AnalyticsProcessor
+	verbose    bool
+	rowFilter  *RowFilter
 }
 
 // NewWorker creates a new pipeline worker
@@ -28,12 +30,17 @@ func NewWorker(pipeline Pipeline, config PipelineConfig, db *sql.DB) *Worker {
 	// Initialize analytics processor with default parse config (locale, etc.)
 	processor := analytics.NewAnalyticsProcessor(db, analytics.ParseConfig{})
 
+	verbose := os.Getenv("PIPELINE_VERBOSE") == "1"
+	rowFilter := NewRowFilterFromEnv()
+
 	return &Worker{
 		pipeline:  pipeline,
 		config:    config,
 		repo:      repo,
 		db:        db,
 		processor: processor,
+		verbose:   verbose,
+		rowFilter: rowFilter,
 	}
 }
 
@@ -55,7 +62,10 @@ func (w *Worker) ProcessBatch(ctx context.Context, date time.Time, files []strin
 		date,
 		func(ctx context.Context, csvPath string) error {
 			// This callback uses the existing analytics.ProcessFile
-			log.Printf("[%s] Seeding aggregated data from %s", w.pipeline.Name(), csvPath)
+			if w.verbose {
+				log.Printf("[%s] Seeding aggregated data from %s", w.pipeline.Name(), csvPath)
+			}
+
 			return w.processor.ProcessFile(ctx, csvPath)
 		},
 	)
@@ -194,7 +204,9 @@ func (w *Worker) processFile(ctx context.Context, run *PipelineRun, job *FileJob
 		return err
 	}
 
-	log.Printf("[%s] Processing file: %s", w.pipeline.Name(), job.FilePath)
+	if w.verbose {
+		log.Printf("[%s] Processing file: %s", w.pipeline.Name(), job.FilePath)
+	}
 
 	// Validate file
 	if err := w.pipeline.Validate(inputPath); err != nil {
@@ -205,6 +217,15 @@ func (w *Worker) processFile(ctx context.Context, run *PipelineRun, job *FileJob
 	rows, err := w.pipeline.Transform(ctx, inputPath)
 	if err != nil {
 		return w.markJobFailed(ctx, job, fmt.Errorf("transformation failed: %w", err))
+	}
+
+	if w.rowFilter != nil {
+		filtered, dropped := w.rowFilter.FilterRows(rows)
+		if dropped > 0 && w.verbose {
+			log.Printf("[%s] Filtered %d/%d rows from %s",
+				w.pipeline.Name(), dropped, len(rows), job.FilePath)
+		}
+		rows = filtered
 	}
 
 	// Add to aggregator buffer
@@ -229,8 +250,10 @@ func (w *Worker) processFile(ctx context.Context, run *PipelineRun, job *FileJob
 	}
 
 	duration := time.Since(startTime)
-	log.Printf("[%s] Completed %s in %v (%d rows)",
-		w.pipeline.Name(), job.FilePath, duration, len(rows))
+	if w.verbose {
+		log.Printf("[%s] Completed %s in %v (%d rows)",
+			w.pipeline.Name(), job.FilePath, duration, len(rows))
+	}
 
 	return nil
 }
