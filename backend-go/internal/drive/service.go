@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,6 +105,19 @@ func (s *Service) DownloadFile(fileID string, w io.Writer) error {
 	}
 	defer resp.Body.Close()
 
+	_, err = io.Copy(w, resp.Body)
+	return err
+}
+
+func (s *Service) ExportFile(fileID, exportMimeType string, w io.Writer) error {
+	resp, err := s.srv.Files.Export(fileID, exportMimeType).Download()
+	if err != nil {
+		return fmt.Errorf("unable to export file: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("export request failed with status %s", resp.Status)
+	}
 	_, err = io.Copy(w, resp.Body)
 	return err
 }
