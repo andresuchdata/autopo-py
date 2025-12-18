@@ -19,6 +19,7 @@ import { Loader2, ChevronLeft, ChevronRight, Package, ShoppingCart, DollarSign, 
 import { getPOSnapshotItems, POSnapshotItem } from '@/services/api';
 import { getStatusColor } from '@/constants/poStatusColors';
 import { usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
+import * as XLSX from 'xlsx';
 
 interface POSnapshotDialogProps {
     status: string | null;
@@ -60,6 +61,12 @@ const formatDate = (value: string | null) => {
         month: 'short',
         year: 'numeric',
     });
+};
+
+const excelSafeText = (value: string | number | null) => {
+    const stringValue = value === null ? '' : `${value}`;
+    if (stringValue === '') return '';
+    return `="${stringValue.replace(/"/g, '""')}"`;
 };
 
 export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }: POSnapshotDialogProps) {
@@ -161,42 +168,114 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
     const fetchAllItemsForDownload = useCallback(async () => {
         if (!status) return [];
 
-        const aggregated: POSnapshotItem[] = [];
         // Backend caps page_size to 100; stay within that so we can reliably page through all results
         const dlPageSize = 100;
-        let dlPage = 1;
-        let dlTotal = Infinity;
 
-        while (aggregated.length < dlTotal) {
+        const baseParams = {
+            status,
+            pageSize: dlPageSize,
+            sortField,
+            sortDirection,
+            poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
+            releasedDate: releasedDateFilter || undefined,
+            storeIds: storeIdsFilter,
+            brandIds: brandIdsFilter,
+        };
+
+        // First request gives us totals so we can parallelize remaining pages.
+        const firstResponse = await getPOSnapshotItems({
+            ...baseParams,
+            page: 1,
+        });
+
+        const firstItems = firstResponse.items ?? [];
+        const totalItems = firstResponse.total ?? firstItems.length;
+        if (totalItems <= firstItems.length) {
+            return firstItems;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(totalItems / dlPageSize));
+        const pagesToFetch: number[] = [];
+        for (let p = 2; p <= totalPages; p += 1) {
+            pagesToFetch.push(p);
+        }
+
+        const concurrency = 5;
+        const pageResults: Array<POSnapshotItem[] | undefined> = new Array(totalPages + 1);
+        pageResults[1] = firstItems;
+
+        const fetchPage = async (pageValue: number) => {
             const response = await getPOSnapshotItems({
-                status,
-                page: dlPage,
-                pageSize: dlPageSize,
-                sortField,
-                sortDirection,
-                poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
-                releasedDate: releasedDateFilter || undefined,
-                storeIds: storeIdsFilter,
-                brandIds: brandIdsFilter,
+                ...baseParams,
+                page: pageValue,
             });
+            pageResults[pageValue] = response.items ?? [];
+        };
 
-            const pageItems = response.items ?? [];
-            if (pageItems.length === 0) {
-                break;
+        let cursor = 0;
+        const workers = Array.from({ length: Math.min(concurrency, pagesToFetch.length) }, async () => {
+            while (cursor < pagesToFetch.length) {
+                const pageValue = pagesToFetch[cursor];
+                cursor += 1;
+                await fetchPage(pageValue);
             }
+        });
 
-            aggregated.push(...pageItems);
-            dlTotal = response.total ?? aggregated.length;
+        await Promise.all(workers);
 
-            if (aggregated.length >= dlTotal) {
-                break;
+        const aggregated: POSnapshotItem[] = [];
+        for (let p = 1; p <= totalPages; p += 1) {
+            const pageItems = pageResults[p];
+            if (pageItems && pageItems.length > 0) {
+                aggregated.push(...pageItems);
             }
-
-            dlPage += 1;
         }
 
         return aggregated;
     }, [status, poTypeFilter, releasedDateFilter, sortField, sortDirection, storeIdsFilter, brandIdsFilter]);
+
+    const downloadAsExcel = useCallback((excelItems: POSnapshotItem[], scopeLabel: string) => {
+        const headers = [
+            'Snapshot Time',
+            'PO Number',
+            'SKU',
+            'Product Name',
+            'Brand',
+            'Store',
+            'Qty',
+            'Total Amount',
+            'Released',
+            'Sent',
+            'Approved',
+            'Arrived',
+            'Received',
+        ];
+
+        const rows = excelItems.map((item) => [
+            formatDate(item.snapshot_time),
+            item.po_number,
+            item.sku,
+            item.product_name,
+            item.brand_name,
+            item.store_name,
+            item.po_qty,
+            item.total_amount,
+            formatDate(item.po_released_at),
+            formatDate(item.po_sent_at),
+            formatDate(item.po_approved_at),
+            formatDate(item.po_arrived_at),
+            formatDate(item.po_received_at),
+        ]);
+
+        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'PO Snapshot');
+
+        const datePart = new Date().toISOString().split('T')[0];
+        const safeStatus = status ?? 'all';
+        XLSX.writeFile(workbook, `po-snapshot-${scopeLabel}-${safeStatus}-${datePart}.xlsx`);
+    }, [status]);
 
     const handleDownloadCurrentPage = useCallback(async () => {
         if (!status || isDownloading) return;
@@ -236,7 +315,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             const rows = pageItems.map(item => [
                 formatDate(item.snapshot_time),
                 item.po_number,
-                item.sku,
+                excelSafeText(item.sku),
                 item.product_name,
                 item.brand_name,
                 item.store_name,
@@ -249,9 +328,11 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                 formatDate(item.po_received_at),
             ]);
 
-            const csvContent = [headers, ...rows]
-                .map(row => row.map(escapeCsvValue).join(','))
+            const delimiter = ';';
+            const csvBody = [headers, ...rows]
+                .map(row => row.map(escapeCsvValue).join(delimiter))
                 .join('\n');
+            const csvContent = [`sep=${delimiter}`, csvBody].join('\n');
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -308,8 +389,8 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
 
             const rows = allItems.map(item => [
                 formatDate(item.snapshot_time),
-                item.po_number,
-                item.sku,
+                excelSafeText(item.po_number),
+                excelSafeText(item.sku),
                 item.product_name,
                 item.brand_name,
                 item.store_name,
@@ -322,9 +403,11 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                 formatDate(item.po_received_at),
             ]);
 
-            const csvContent = [headers, ...rows]
-                .map(row => row.map(escapeCsvValue).join(','))
+            const delimiter = ';';
+            const csvBody = [headers, ...rows]
+                .map(row => row.map(escapeCsvValue).join(delimiter))
                 .join('\n');
+            const csvContent = [`sep=${delimiter}`, csvBody].join('\n');
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -343,6 +426,46 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             setIsDownloading(false);
         }
     }, [status, isDownloading, fetchAllItemsForDownload]);
+
+    const handleDownloadCurrentPageExcel = useCallback(async () => {
+        if (!status || isDownloading) return;
+
+        setIsDownloading(true);
+        try {
+            const pageItems = items;
+            if (!pageItems || pageItems.length === 0) {
+                setError('No items available to download');
+                return;
+            }
+
+            downloadAsExcel(pageItems, 'page');
+        } catch (err) {
+            console.error('Failed to download Excel', err);
+            setError('Failed to download Excel');
+        } finally {
+            setIsDownloading(false);
+        }
+    }, [status, isDownloading, items, downloadAsExcel]);
+
+    const handleDownloadAllExcel = useCallback(async () => {
+        if (!status || isDownloading) return;
+
+        setIsDownloading(true);
+        try {
+            const allItems = await fetchAllItemsForDownload();
+            if (allItems.length === 0) {
+                setError('No items available to download');
+                return;
+            }
+
+            downloadAsExcel(allItems, 'all');
+        } catch (err) {
+            console.error('Failed to download Excel', err);
+            setError('Failed to download Excel');
+        } finally {
+            setIsDownloading(false);
+        }
+    }, [status, isDownloading, fetchAllItemsForDownload, downloadAsExcel]);
 
     // Helper to render sort arrow
     const renderSortIcon = (field: string) => {
@@ -402,6 +525,16 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 {isDownloading ? 'Downloading…' : 'Download page'}
                             </Button>
                             <Button
+                                variant="secondary"
+                                size="sm"
+                                className="gap-1"
+                                onClick={handleDownloadCurrentPageExcel}
+                                disabled={loading || isDownloading || items.length === 0}
+                            >
+                                <Download className="h-4 w-4" />
+                                {isDownloading ? 'Downloading…' : 'Download Excel'}
+                            </Button>
+                            <Button
                                 variant="outline"
                                 size="sm"
                                 className="gap-1"
@@ -410,6 +543,16 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                             >
                                 <Download className="h-4 w-4" />
                                 {isDownloading ? 'Downloading…' : 'Download all'}
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={handleDownloadAllExcel}
+                                disabled={loading || isDownloading || (total === 0)}
+                            >
+                                <Download className="h-4 w-4" />
+                                {isDownloading ? 'Downloading…' : 'Download all (Excel)'}
                             </Button>
                         </div>
                     </div>
