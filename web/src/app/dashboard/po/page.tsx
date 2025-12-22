@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Filter as FilterIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { DollarSign, Filter as FilterIcon, Layers, Package, ShoppingCart } from 'lucide-react';
 import { POStatusCard } from '@/components/dashboard/POStatusCard';
 import { POFunnelChart } from '@/components/dashboard/POFunnelChart';
 import { POTrendChart } from '@/components/dashboard/POTrendChart';
@@ -12,6 +12,7 @@ import { POSnapshotDialog } from '@/components/dashboard/POSnapshotDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PODashboardFilterProvider, usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
 import { PODashboardFilter } from '@/components/dashboard/PODashboardFilter';
+import { formatCurrencyIDR, formatNumberID } from '@/utils/formatters';
 
 interface DashboardData {
     status_summaries: any[];
@@ -102,6 +103,23 @@ function PODashboardContent() {
     const agingData = data?.aging ?? [];
     const supplierPerformanceData = data?.supplier_performance ?? [];
 
+    const totals = useMemo(() => {
+        if (!statusSummaries.length) {
+            return { totalPOs: 0, totalValue: 0, totalQty: 0, totalSku: 0 };
+        }
+
+        return statusSummaries.reduce(
+            (acc, summary) => {
+                acc.totalPOs += summary.count ?? 0;
+                acc.totalValue += summary.total_value ?? 0;
+                acc.totalQty += summary.total_qty ?? 0;
+                acc.totalSku += summary.sku_count ?? 0;
+                return acc;
+            },
+            { totalPOs: 0, totalValue: 0, totalQty: 0, totalSku: 0 }
+        );
+    }, [statusSummaries]);
+
     return (
         <div className="min-h-screen bg-background text-foreground p-6 space-y-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -137,7 +155,6 @@ function PODashboardContent() {
                               skuCount={summary.sku_count}
                               totalQty={summary.total_qty}
                               avgDays={summary.avg_days}
-                              diffDays={summary.diff_days}
                               isActive={statusModalOpen && summary.status === selectedStatus}
                               onClick={() => {
                                   setSelectedStatus(summary.status);
@@ -145,6 +162,88 @@ function PODashboardContent() {
                               }}
                           />
                       ))}
+            </div>
+
+            {/* 1b. Aggregate Totals */}
+            <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-muted/40 via-card to-background p-5 shadow-md space-y-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Overall totals</p>
+                        <h2 className="text-lg font-semibold text-foreground">Impact of current filters</h2>
+                        <p className="text-sm text-muted-foreground">
+                            Sum of PO count, inventory value, quantity, and SKU breadth across visible statuses.
+                        </p>
+                    </div>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-4 py-1 text-xs font-medium text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full bg-primary" />
+                        {statusSummaries.length} statuses included
+                    </div>
+                </div>
+
+                {loading ? (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        {Array.from({ length: 4 }).map((_, idx) => (
+                            <div key={idx} className="rounded-2xl border border-border/60 bg-card/60 p-4">
+                                <Skeleton className="h-4 w-24 mb-3" />
+                                <Skeleton className="h-8 w-32" />
+                                <Skeleton className="h-3 w-20 mt-2" />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        {[
+                            {
+                                label: 'PO Count',
+                                value: totals.totalPOs,
+                                icon: ShoppingCart,
+                                helper: 'Orders created',
+                                formatter: (val: number) => formatNumberID(val),
+                            },
+                            {
+                                label: 'Total Value',
+                                value: totals.totalValue,
+                                icon: DollarSign,
+                                helper: 'IDR',
+                                formatter: (val: number) =>
+                                    formatCurrencyIDR(val, { compactThreshold: 50_000_000, compactMaximumFractionDigits: 1 }),
+                            },
+                            {
+                                label: 'Total Qty',
+                                value: totals.totalQty,
+                                icon: Package,
+                                helper: 'Units pending',
+                                formatter: (val: number) => formatNumberID(val),
+                            },
+                            {
+                                label: 'Total SKUs',
+                                value: totals.totalSku,
+                                icon: Layers,
+                                helper: 'Unique items',
+                                formatter: (val: number) => formatNumberID(val),
+                            },
+                        ].map((metric) => {
+                            const Icon = metric.icon;
+                            return (
+                                <div
+                                    key={metric.label}
+                                    className="rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm hover:shadow-md transition-shadow"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">{metric.label}</p>
+                                            <p className="mt-2 text-2xl font-semibold text-foreground">{metric.formatter(metric.value)}</p>
+                                        </div>
+                                        <div className="rounded-xl bg-primary/10 p-2 text-primary">
+                                            <Icon className="h-5 w-5" strokeWidth={2.2} />
+                                        </div>
+                                    </div>
+                                    <p className="mt-3 text-xs text-muted-foreground">{metric.helper}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             {/* 2. Charts Row 1: Funnel & Trend */}

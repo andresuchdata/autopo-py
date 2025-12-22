@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUp, ArrowDown, Package, ShoppingCart, DollarSign, Clock, Layers } from 'lucide-react';
+import { Package, DollarSign, Clock, Layers } from 'lucide-react';
 import { getStatusColor } from '@/constants/poStatusColors';
 
 interface POStatusCardProps {
@@ -9,7 +9,6 @@ interface POStatusCardProps {
     skuCount: number;
     totalQty: number;
     avgDays: number;
-    diffDays?: number; // For the "big number" diff or similar
     isActive?: boolean;
     onClick?: () => void;
     className?: string;
@@ -45,7 +44,6 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
     skuCount,
     totalQty,
     avgDays,
-    diffDays,
     isActive,
     onClick,
     className
@@ -145,12 +143,6 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
                     </span>
                     <div className="flex items-center gap-1">
                         <span className="text-sm font-bold">{avgDays.toFixed(0)}</span>
-                        {diffDays !== undefined && diffDays !== 0 && (
-                            <span className={`text-[10px] items-center flex ${diffDays > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                {diffDays > 0 ? <ArrowUp size={8} /> : <ArrowDown size={8} />}
-                                {Math.abs(diffDays)}
-                            </span>
-                        )}
                     </div>
                 </div>
             </div>
