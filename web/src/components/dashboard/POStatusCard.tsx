@@ -1,6 +1,7 @@
 import React from 'react';
-import { ArrowUp, ArrowDown, Package, ShoppingCart, DollarSign, Clock, Layers } from 'lucide-react';
+import { Package, DollarSign, Clock, Layers } from 'lucide-react';
 import { getStatusColor } from '@/constants/poStatusColors';
+import { formatCurrencyIDR, formatNumberID } from '@/utils/formatters';
 
 interface POStatusCardProps {
     title: string;
@@ -9,34 +10,10 @@ interface POStatusCardProps {
     skuCount: number;
     totalQty: number;
     avgDays: number;
-    diffDays?: number; // For the "big number" diff or similar
     isActive?: boolean;
     onClick?: () => void;
     className?: string;
 }
-
-const formatCurrencyShort = (value: number) => {
-    if (value >= 1000000000) {
-        return `${(value / 1000000000).toFixed(1)}B`;
-    }
-    if (value >= 1000000) {
-        return `${(value / 1000000).toFixed(1)}M`;
-    }
-    if (value >= 1000) {
-        return `${(value / 1000).toFixed(1)}K`;
-    }
-    return value.toLocaleString();
-};
-
-const formatNumberShort = (value: number) => {
-    if (value >= 1000000) {
-        return `${(value / 1000000).toFixed(1)}M`;
-    }
-    if (value >= 1000) {
-        return `${(value / 1000).toFixed(1)}K`;
-    }
-    return value.toLocaleString();
-};
 
 export const POStatusCard: React.FC<POStatusCardProps> = ({
     title,
@@ -45,7 +22,6 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
     skuCount,
     totalQty,
     avgDays,
-    diffDays,
     isActive,
     onClick,
     className
@@ -113,8 +89,16 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
                     <span className="text-[10px] uppercase text-muted-foreground font-medium flex items-center gap-1">
                         <DollarSign size={10} /> Value
                     </span>
-                    <span className="text-sm font-bold" title={`Rp ${totalValue.toLocaleString()}`}>
-                        {formatCurrencyShort(totalValue)}
+                    <span
+                        className="text-sm font-bold"
+                        title={formatCurrencyIDR(totalValue, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    >
+                        {formatCurrencyIDR(totalValue, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                            compactThreshold: 1_000_000,
+                            compactMaximumFractionDigits: 2,
+                        })}
                     </span>
                 </div>
 
@@ -123,8 +107,8 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
                     <span className="text-[10px] uppercase text-muted-foreground font-medium flex items-center gap-1">
                         <Package size={10} /> Qty
                     </span>
-                    <span className="text-sm font-bold" title={totalQty.toLocaleString()}>
-                        {formatNumberShort(totalQty)}
+                    <span className="text-sm font-bold" title={formatNumberID(totalQty)}>
+                        {formatNumberID(totalQty)}
                     </span>
                 </div>
 
@@ -134,7 +118,7 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
                         <Layers size={10} /> SKUs
                     </span>
                     <span className="text-sm font-bold">
-                        {skuCount.toLocaleString()}
+                        {formatNumberID(skuCount)}
                     </span>
                 </div>
 
@@ -145,12 +129,6 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
                     </span>
                     <div className="flex items-center gap-1">
                         <span className="text-sm font-bold">{avgDays.toFixed(0)}</span>
-                        {diffDays !== undefined && diffDays !== 0 && (
-                            <span className={`text-[10px] items-center flex ${diffDays > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                {diffDays > 0 ? <ArrowUp size={8} /> : <ArrowDown size={8} />}
-                                {Math.abs(diffDays)}
-                            </span>
-                        )}
                     </div>
                 </div>
             </div>

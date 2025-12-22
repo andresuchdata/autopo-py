@@ -236,6 +236,17 @@ func (h *POHandler) GetDashboardSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, summary)
 }
 
+// GetStatusSummaryRaw returns PO status summary grouped directly by stored status codes
+func (h *POHandler) GetStatusSummaryRaw(c *gin.Context) {
+	filter := h.parseDashboardFilter(c)
+	summary, err := h.poService.GetPOSnapshotStatusSummaryRaw(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch raw status summary"})
+		return
+	}
+	c.JSON(http.StatusOK, summary)
+}
+
 // GetPOTrend returns the trend data
 func (h *POHandler) GetPOTrend(c *gin.Context) {
 	interval := c.DefaultQuery("interval", "day")
