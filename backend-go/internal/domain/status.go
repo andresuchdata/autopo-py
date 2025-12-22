@@ -9,6 +9,7 @@ var poStatusLabels = map[int]string{
 	3: "Received",
 	4: "Sent",
 	5: "Arrived",
+	9: "Deleted",
 }
 
 var poStatusCodes = map[string]int{
@@ -18,7 +19,11 @@ var poStatusCodes = map[string]int{
 	"received": 3,
 	"sent":     4,
 	"arrived":  5,
+	"deleted":  9,
 }
+
+// POStatusOrder provides default ordering for PO status summaries.
+var POStatusOrder = []int{0, 1, 2, 3, 4, 5, 9}
 
 // POStatusLabel returns a human-readable label for a PO status code.
 func POStatusLabel(status int) string {

@@ -161,6 +161,79 @@ func (r *poRepository) getStatusSummariesByDate(ctx context.Context, filter *dom
 	return results, nil
 }
 
+func (r *poRepository) GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
+
+	query := fmt.Sprintf(`
+        WITH latest_day AS (
+            SELECT MAX(time::date) AS latest_date
+            FROM po_snapshots
+        ),
+        latest_snapshot AS (
+            SELECT 
+                po_number,
+                sku,
+                MAX(time) AS latest_time
+            FROM po_snapshots s
+            JOIN latest_day d ON s.time::date = d.latest_date
+            WHERE s.po_number <> '' %s
+            GROUP BY po_number, sku
+        )
+        SELECT 
+            COALESCE(s.status, -1) AS status_code,
+            COUNT(DISTINCT s.po_number) as po_count,
+            COUNT(*) as sku_count,
+            COALESCE(SUM(s.quantity_ordered), 0) as total_qty,
+            COALESCE(SUM(s.total_amount), 0) as total_value
+        FROM po_snapshots s
+        JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+        WHERE COALESCE(s.status, -1) IN (0,1,2,3,4,5,9) %s
+        GROUP BY COALESCE(s.status, -1)
+        ORDER BY COALESCE(s.status, -1)
+    `, filterClause, filterClause)
+
+	if filterClause != "" {
+		log.Debug().
+			Str("filter_clause", filterClause).
+			Interface("filter_args", filterArgs).
+			Msg("po dashboard: raw status summaries applying filter")
+	}
+
+	type rawRow struct {
+		StatusCode int     `db:"status_code"`
+		POCount    int     `db:"po_count"`
+		SKUCount   int     `db:"sku_count"`
+		TotalQty   int     `db:"total_qty"`
+		TotalValue float64 `db:"total_value"`
+	}
+
+	var rows []rawRow
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query, append(filterArgs, filterArgs...)...); err != nil {
+		return nil, fmt.Errorf("failed to fetch raw status summaries: %w", err)
+	}
+
+	rowMap := make(map[int]rawRow, len(rows))
+	for _, row := range rows {
+		rowMap[row.StatusCode] = row
+	}
+
+	summaries := make([]domain.POStatusSummary, 0, len(domain.POStatusOrder))
+	for _, statusCode := range domain.POStatusOrder {
+		row := rowMap[statusCode]
+		summaries = append(summaries, domain.POStatusSummary{
+			Status:     domain.POStatusLabel(statusCode),
+			Count:      row.POCount,
+			SKUCount:   row.SKUCount,
+			TotalQty:   row.TotalQty,
+			TotalValue: row.TotalValue,
+			AvgDays:    0,
+			DiffDays:   0,
+		})
+	}
+
+	return summaries, nil
+}
+
 func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error) {
 	return r.getPOTrendWithFilter(ctx, interval, nil)
 }

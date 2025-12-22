@@ -234,6 +234,34 @@ func (s *POService) GetDashboardSummary(ctx context.Context, filter *domain.Dash
 	return summary, nil
 }
 
+// GetPOSnapshotStatusSummaryRaw returns PO snapshot summaries grouped directly by stored status
+func (s *POService) GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
+	if summary, ok, err := s.dashboardCache.GetStatusSummaryRaw(ctx, filter); err == nil && ok {
+		return summary, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: status summary raw cache get failed")
+	}
+
+	summary, err := s.repo.GetPOSnapshotStatusSummaryRaw(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug().
+		Interface("filter", filter).
+		Msg("po service: attempting to cache status summary raw")
+
+	if err := s.dashboardCache.SetStatusSummaryRaw(ctx, filter, summary); err != nil {
+		log.Warn().Err(err).Msg("po service: status summary raw cache set failed")
+	} else {
+		log.Debug().
+			Interface("filter", filter).
+			Msg("po service: status summary raw cached")
+	}
+
+	return summary, nil
+}
+
 // GetPOTrend returns the trend data
 func (s *POService) GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error) {
 	if trends, ok, err := s.dashboardCache.GetTrend(ctx, interval, nil); err == nil && ok {

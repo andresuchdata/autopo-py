@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/drive"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
 	posnapshot "github.com/andresuchdata/autopo-py/backend-go/internal/pipeline/po_snapshot"
@@ -258,6 +260,18 @@ func runPOSnapshotPipeline(c *cli.Context) error {
 	orch := pipeline.NewOrchestrator(db, pCfg)
 	if err := orch.Run(ctx, pipelineImpl, localFiles); err != nil {
 		return fmt.Errorf("PO snapshot pipeline run failed: %w", err)
+	}
+
+	appCfg := config.Load()
+	if appCfg.Cache.Enabled {
+		dashboardCache, err := cache.NewDashboardCache(appCfg.Cache)
+		if err != nil {
+			log.Printf("warning: failed to create dashboard cache for invalidation: %v", err)
+		} else if err := dashboardCache.InvalidateAll(ctx); err != nil {
+			log.Printf("warning: failed to invalidate dashboard cache: %v", err)
+		} else {
+			log.Printf("Invalidated dashboard cache")
+		}
 	}
 
 	<-uploadDone
