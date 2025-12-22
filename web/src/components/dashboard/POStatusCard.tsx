@@ -128,7 +128,12 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
                         <Clock size={10} /> Avg Days
                     </span>
                     <div className="flex items-center gap-1">
-                        <span className="text-sm font-bold">{avgDays.toFixed(0)}</span>
+                        <span className="text-sm font-bold">
+                            {(() => {
+                                const rounded = Number(avgDays.toFixed(0));
+                                return Object.is(rounded, -0) ? 0 : rounded;
+                            })()}
+                        </span>
                     </div>
                 </div>
             </div>
