@@ -5,40 +5,104 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 export type POTypeFilter = 'ALL' | 'AU' | 'PO' | 'OTHERS';
 
 interface PODashboardFilterContextType {
+    // Applied filters (trigger backend calls)
     poTypeFilter: POTypeFilter;
-    setPOTypeFilter: (value: POTypeFilter) => void;
     releasedDateFilter: string;
-    setReleasedDateFilter: (value: string) => void;
     storeIdsFilter: number[];
-    setStoreIdsFilter: (value: number[]) => void;
     brandIdsFilter: number[];
-    setBrandIdsFilter: (value: number[]) => void;
     supplierIdsFilter: number[];
-    setSupplierIdsFilter: (value: number[]) => void;
+
+    // Draft filters (UI state)
+    draftPOTypeFilter: POTypeFilter;
+    draftReleasedDateFilter: string;
+    draftStoreIdsFilter: number[];
+    draftBrandIdsFilter: number[];
+    draftSupplierIdsFilter: number[];
+
+    // Setters for draft filters
+    setDraftPOTypeFilter: (value: POTypeFilter) => void;
+    setDraftReleasedDateFilter: (value: string) => void;
+    setDraftStoreIdsFilter: (value: number[] | ((prev: number[]) => number[])) => void;
+    setDraftBrandIdsFilter: (value: number[] | ((prev: number[]) => number[])) => void;
+    setDraftSupplierIdsFilter: (value: number[] | ((prev: number[]) => number[])) => void;
+
+    // Actions
+    applyFilters: () => void;
+    clearFilters: () => void;
 }
 
 const PODashboardFilterContext = createContext<PODashboardFilterContextType | undefined>(undefined);
 
 export const PODashboardFilterProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    // Applied filters (what triggers data fetching)
     const [poTypeFilter, setPOTypeFilter] = useState<POTypeFilter>('ALL');
     const [releasedDateFilter, setReleasedDateFilter] = useState<string>('');
     const [storeIdsFilter, setStoreIdsFilter] = useState<number[]>([]);
     const [brandIdsFilter, setBrandIdsFilter] = useState<number[]>([]);
     const [supplierIdsFilter, setSupplierIdsFilter] = useState<number[]>([]);
 
+    // Draft filters (UI state)
+    const [draftPOTypeFilter, setDraftPOTypeFilter] = useState<POTypeFilter>('ALL');
+    const [draftReleasedDateFilter, setDraftReleasedDateFilter] = useState<string>('');
+    const [draftStoreIdsFilter, setDraftStoreIdsFilter] = useState<number[]>([]);
+    const [draftBrandIdsFilter, setDraftBrandIdsFilter] = useState<number[]>([]);
+    const [draftSupplierIdsFilter, setDraftSupplierIdsFilter] = useState<number[]>([]);
+
+    const applyFilters = () => {
+        setPOTypeFilter(draftPOTypeFilter);
+        setReleasedDateFilter(draftReleasedDateFilter);
+        setStoreIdsFilter(draftStoreIdsFilter);
+        setBrandIdsFilter(draftBrandIdsFilter);
+        setSupplierIdsFilter(draftSupplierIdsFilter);
+    };
+
+    const clearFilters = () => {
+        const clearedState: POTypeFilter = 'ALL';
+        const clearedDate = '';
+        const clearedIds: number[] = [];
+
+        // Apply cleared state
+        setPOTypeFilter(clearedState);
+        setReleasedDateFilter(clearedDate);
+        setStoreIdsFilter(clearedIds);
+        setBrandIdsFilter(clearedIds);
+        setSupplierIdsFilter(clearedIds);
+
+        // Also update draft to match
+        setDraftPOTypeFilter(clearedState);
+        setDraftReleasedDateFilter(clearedDate);
+        setDraftStoreIdsFilter(clearedIds);
+        setDraftBrandIdsFilter(clearedIds);
+        setDraftSupplierIdsFilter(clearedIds);
+    };
+
     return (
         <PODashboardFilterContext.Provider
             value={{
+                // Applied filters
                 poTypeFilter,
-                setPOTypeFilter,
                 releasedDateFilter,
-                setReleasedDateFilter,
                 storeIdsFilter,
-                setStoreIdsFilter,
                 brandIdsFilter,
-                setBrandIdsFilter,
                 supplierIdsFilter,
-                setSupplierIdsFilter,
+
+                // Draft filters
+                draftPOTypeFilter,
+                draftReleasedDateFilter,
+                draftStoreIdsFilter,
+                draftBrandIdsFilter,
+                draftSupplierIdsFilter,
+
+                // Draft setters
+                setDraftPOTypeFilter,
+                setDraftReleasedDateFilter,
+                setDraftStoreIdsFilter,
+                setDraftBrandIdsFilter,
+                setDraftSupplierIdsFilter,
+
+                // Actions
+                applyFilters,
+                clearFilters,
             }}
         >
             {children}

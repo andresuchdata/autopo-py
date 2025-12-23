@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, UIEvent } from "react";
+import React, { useCallback, useMemo, useState, UIEvent } from "react";
+import { flushSync } from "react-dom";
 import { Check, ChevronsUpDown, Store as StoreIcon, Tag } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -9,8 +10,10 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PODashboardFilterProvider, usePODashboardFilter } from "@/contexts/PODashboardFilterContext";
-import { poService } from "@/services/api";
 import { useSupplierOptions } from "@/hooks/useSupplierOptions";
+import { useStoreOptions } from "@/hooks/useStoreOptions";
+import { useBrandOptions } from "@/hooks/useBrandOptions";
+import { FilterCheckboxItem } from "./FilterCheckboxItem";
 
 interface PODashboardFilterProps {
   loading: boolean;
@@ -18,23 +21,22 @@ interface PODashboardFilterProps {
 
 export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading }) => {
   const {
-    poTypeFilter,
-    setPOTypeFilter,
-    releasedDateFilter,
-    setReleasedDateFilter,
-    storeIdsFilter,
-    setStoreIdsFilter,
-    brandIdsFilter,
-    setBrandIdsFilter,
-    supplierIdsFilter,
-    setSupplierIdsFilter,
+    // Draft filters for UI
+    draftPOTypeFilter,
+    setDraftPOTypeFilter,
+    draftReleasedDateFilter,
+    setDraftReleasedDateFilter,
+    draftStoreIdsFilter,
+    setDraftStoreIdsFilter,
+    draftBrandIdsFilter,
+    setDraftBrandIdsFilter,
+    draftSupplierIdsFilter,
+    setDraftSupplierIdsFilter,
+    // Actions
+    applyFilters,
+    clearFilters,
   } = usePODashboardFilter();
 
-  const [stores, setStores] = useState<{ id: number; name: string }[]>([]);
-  const [brands, setBrands] = useState<{ id: number; name: string }[]>([]);
-  const [storeSearch, setStoreSearch] = useState("");
-  const [brandSearch, setBrandSearch] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState("");
 
   const {
@@ -46,70 +48,83 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
     loadMore: supplierLoadMore,
   } = useSupplierOptions("");
 
-  useEffect(() => {
-    const loadInitialOptions = async () => {
-      try {
-        const [storesRes, brandsRes] = await Promise.all([
-          poService.getStores(),
-          poService.getBrands(),
-        ]);
-        setStores(storesRes.data ?? storesRes);
-        setBrands(brandsRes.data ?? brandsRes);
-      } catch (err) {
-        console.error("Failed to load store/brand options", err);
-      }
-    };
+  const [storeSearch, setStoreSearch] = useState("");
+  const {
+    options: storeOptions,
+    loading: storeSearchLoading,
+    loadMoreLoading: storeLoadMoreLoading,
+    hasMore: storeHasMoreOptions,
+    search: storeSearchFn,
+    loadMore: storeLoadMore,
+  } = useStoreOptions("");
 
-    loadInitialOptions();
-  }, []);
+  const [storePopoverOpen, setStorePopoverOpen] = useState(false);
 
-  const storeOptions = useMemo(() => stores.map((s) => ({ id: s.id, label: s.name })), [stores]);
-  const brandOptions = useMemo(() => brands.map((b) => ({ id: b.id, label: b.name })), [brands]);
+  const [brandSearch, setBrandSearch] = useState("");
+  const {
+    options: brandOptions,
+    loading: brandSearchLoading,
+    loadMoreLoading: brandLoadMoreLoading,
+    hasMore: brandHasMoreOptions,
+    search: brandSearchFn,
+    loadMore: brandLoadMore,
+  } = useBrandOptions("");
+
+  const [brandPopoverOpen, setBrandPopoverOpen] = useState(false);
 
   const supplierDisplayOptions = useMemo(
     () => supplierOptions.map((s) => ({ id: s.id, label: s.name })),
     [supplierOptions]
   );
 
+  const filteredSupplierOptions = useMemo(() => {
+    const query = supplierSearch.trim().toLowerCase();
+    if (!query) return supplierDisplayOptions;
+    return supplierDisplayOptions.filter((opt) => opt.label.toLowerCase().includes(query));
+  }, [supplierDisplayOptions, supplierSearch]);
+
+  const filteredStoreOptions = useMemo(() => {
+    const query = storeSearch.trim().toLowerCase();
+    if (!query) return storeOptions;
+    return storeOptions.filter((opt) => opt.name.toLowerCase().includes(query));
+  }, [storeOptions, storeSearch]);
+
+  const filteredBrandOptions = useMemo(() => {
+    const query = brandSearch.trim().toLowerCase();
+    if (!query) return brandOptions;
+    return brandOptions.filter((opt) => opt.name.toLowerCase().includes(query));
+  }, [brandOptions, brandSearch]);
+
+  const storeSelectionSet = useMemo(() => new Set(draftStoreIdsFilter), [draftStoreIdsFilter]);
+  const brandSelectionSet = useMemo(() => new Set(draftBrandIdsFilter), [draftBrandIdsFilter]);
+  const supplierSelectionSet = useMemo(() => new Set(draftSupplierIdsFilter), [draftSupplierIdsFilter]);
+
   const selectedStoresLabel = useMemo(() => {
-    if (storeIdsFilter.length === 0) return "All Stores";
-    if (storeIdsFilter.length === 1) {
-      const match = storeOptions.find((s) => s.id === storeIdsFilter[0]);
-      return match?.label ?? "1 store selected";
+    if (draftStoreIdsFilter.length === 0) return "All Stores";
+    if (draftStoreIdsFilter.length === 1) {
+      const match = storeOptions.find((s) => s.id === draftStoreIdsFilter[0]);
+      return match?.name ?? "1 store selected";
     }
-    return `${storeIdsFilter.length} stores selected`;
-  }, [storeIdsFilter, storeOptions]);
+    return `${draftStoreIdsFilter.length} stores selected`;
+  }, [draftStoreIdsFilter, storeOptions]);
 
   const selectedBrandsLabel = useMemo(() => {
-    if (brandIdsFilter.length === 0) return "All Brands";
-    if (brandIdsFilter.length === 1) {
-      const match = brandOptions.find((b) => b.id === brandIdsFilter[0]);
-      return match?.label ?? "1 brand selected";
+    if (draftBrandIdsFilter.length === 0) return "All Brands";
+    if (draftBrandIdsFilter.length === 1) {
+      const match = brandOptions.find((b) => b.id === draftBrandIdsFilter[0]);
+      return match?.name ?? "1 brand selected";
     }
-    return `${brandIdsFilter.length} brands selected`;
-  }, [brandIdsFilter, brandOptions]);
+    return `${draftBrandIdsFilter.length} brands selected`;
+  }, [draftBrandIdsFilter, brandOptions]);
 
   const selectedSuppliersLabel = useMemo(() => {
-    if (supplierIdsFilter.length === 0) return "All Suppliers";
-    if (supplierIdsFilter.length === 1) {
-      const match = supplierDisplayOptions.find((s) => s.id === supplierIdsFilter[0]);
+    if (draftSupplierIdsFilter.length === 0) return "All Suppliers";
+    if (draftSupplierIdsFilter.length === 1) {
+      const match = supplierDisplayOptions.find((s) => s.id === draftSupplierIdsFilter[0]);
       return match?.label ?? "1 supplier selected";
     }
-    return `${supplierIdsFilter.length} suppliers selected`;
-  }, [supplierIdsFilter, supplierDisplayOptions]);
-
-  const handleClearFilters = () => {
-    if (loading) return;
-    setPOTypeFilter("ALL");
-    setReleasedDateFilter("");
-    setStoreIdsFilter([]);
-    setBrandIdsFilter([]);
-    setSupplierIdsFilter([]);
-    setStoreSearch("");
-    setBrandSearch("");
-    setSupplierSearch("");
-    setFiltersOpen(false);
-  };
+    return `${draftSupplierIdsFilter.length} suppliers selected`;
+  }, [draftSupplierIdsFilter, supplierDisplayOptions]);
 
   const handleSupplierListScroll = (event: UIEvent<HTMLDivElement>) => {
     if (!supplierHasMoreOptions || supplierLoadMoreLoading || supplierSearchLoading) return;
@@ -123,16 +138,120 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
     }
   };
 
+  const handleStoreListScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (!storeHasMoreOptions || storeLoadMoreLoading || storeSearchLoading) return;
+
+    const target = event.currentTarget;
+    const threshold = 32; // px before bottom to trigger load
+    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+
+    if (distanceFromBottom <= threshold) {
+      void storeLoadMore();
+    }
+  };
+
+  const handleBrandListScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (!brandHasMoreOptions || brandLoadMoreLoading || brandSearchLoading) return;
+
+    const target = event.currentTarget;
+    const threshold = 32; // px before bottom to trigger load
+    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+
+    if (distanceFromBottom <= threshold) {
+      void brandLoadMore();
+    }
+  };
+
+  const applyDraftUpdates = useCallback(
+    (updater: () => void, afterApply?: () => void) => {
+      flushSync(updater);
+      applyFilters();
+      afterApply?.();
+    },
+    [applyFilters]
+  );
+
+  const handleStoreToggle = useCallback((id: number) => {
+    setDraftStoreIdsFilter((prev: number[]) => {
+      if (prev.includes(id)) {
+        return prev.filter((existingId: number) => existingId !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  }, [setDraftStoreIdsFilter]);
+
+  const handleSupplierToggle = useCallback((id: number) => {
+    setDraftSupplierIdsFilter((prev: number[]) => {
+      if (prev.includes(id)) {
+        return prev.filter((existingId: number) => existingId !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  }, [setDraftSupplierIdsFilter]);
+
+  const handleBrandToggle = useCallback((id: number) => {
+    setDraftBrandIdsFilter((prev: number[]) => {
+      if (prev.includes(id)) {
+        return prev.filter((existingId: number) => existingId !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  }, [setDraftBrandIdsFilter]);
+
+  const handleStoreApply = useCallback(() => {
+    if (!loading) {
+      applyFilters();
+      setStorePopoverOpen(false);
+    }
+  }, [loading, applyFilters, setStorePopoverOpen]);
+
+  const handleStoreClear = useCallback(() => {
+    if (!loading) {
+      applyDraftUpdates(
+        () => setDraftStoreIdsFilter([]),
+        () => setStorePopoverOpen(false)
+      );
+      setStoreSearch("");
+    }
+  }, [loading, applyDraftUpdates, setDraftStoreIdsFilter, setStorePopoverOpen, setStoreSearch]);
+
+  const handleBrandApply = useCallback(() => {
+    if (!loading) {
+      applyFilters();
+      setBrandPopoverOpen(false);
+    }
+  }, [loading, applyFilters, setBrandPopoverOpen]);
+
+  const handleBrandClear = useCallback(() => {
+    if (!loading) {
+      applyDraftUpdates(
+        () => setDraftBrandIdsFilter([]),
+        () => setBrandPopoverOpen(false)
+      );
+      setBrandSearch("");
+    }
+  }, [loading, applyDraftUpdates, setDraftBrandIdsFilter, setBrandPopoverOpen, setBrandSearch]);
+
+  const handleSupplierClear = useCallback(() => {
+    if (!loading) {
+      applyDraftUpdates(() => setDraftSupplierIdsFilter([]));
+      setSupplierSearch("");
+    }
+  }, [loading, applyDraftUpdates, setDraftSupplierIdsFilter, setSupplierSearch]);
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
       <div className="flex flex-col gap-1">
-        <Label className="text-xs font-medium uppercase text-muted-foreground">PO Type</Label>
+        <Label htmlFor="po-type-select" className="text-xs font-medium uppercase text-muted-foreground">PO Type</Label>
         <Select
-          value={poTypeFilter}
-          onValueChange={(value: "ALL" | "AU" | "PO" | "OTHERS") => setPOTypeFilter(value)}
+          value={draftPOTypeFilter}
+          onValueChange={(value: "ALL" | "AU" | "PO" | "OTHERS") => setDraftPOTypeFilter(value)}
           disabled={loading}
         >
-          <SelectTrigger className="w-40 h-10 bg-background border-border rounded-lg">
+          <SelectTrigger id="po-type-select" className="w-40 h-10 bg-background border-border rounded-lg">
             <SelectValue placeholder="Select type" />
           </SelectTrigger>
           <SelectContent>
@@ -147,10 +266,10 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
         <Label className="text-xs font-medium uppercase text-muted-foreground">PO Released Date</Label>
         <div className={loading ? "pointer-events-none opacity-60" : ""}>
           <DatePicker
-            value={releasedDateFilter || undefined}
+            value={draftReleasedDateFilter || undefined}
             onChange={(value) => {
               if (!loading) {
-                setReleasedDateFilter(value as string);
+                setDraftReleasedDateFilter(value as string);
               }
             }}
             placeholder="All Dates"
@@ -158,19 +277,13 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
         </div>
       </div>
       <div className="flex flex-col gap-1">
-        <Label className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
+        <Label htmlFor="store-popover-trigger" className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
           <StoreIcon className="h-3 w-3 text-primary/70" /> Store
         </Label>
-        <Popover
-          open={loading ? false : filtersOpen}
-          onOpenChange={(open) => {
-            if (!loading) {
-              setFiltersOpen(open);
-            }
-          }}
-        >
+        <Popover open={storePopoverOpen} onOpenChange={setStorePopoverOpen}>
           <PopoverTrigger asChild>
             <Button
+              id="store-popover-trigger"
               variant="outline"
               className="w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
               disabled={loading}
@@ -182,52 +295,90 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           <PopoverContent className="w-64 p-0" align="end">
             <Command>
               <CommandInput
+                id="store-search"
+                name="store-search"
                 placeholder="Search store..."
                 value={storeSearch}
-                onValueChange={setStoreSearch}
+                onValueChange={(value) => {
+                  setStoreSearch(value);
+                  void storeSearchFn(value);
+                }}
               />
-              <CommandList className="max-h-64 overflow-auto">
-                <CommandEmpty>No store found.</CommandEmpty>
-                <CommandGroup>
-                  {storeOptions
-                    .filter((opt) =>
-                      storeSearch ? opt.label.toLowerCase().includes(storeSearch.toLowerCase()) : true
-                    )
-                    .map((opt) => {
-                      const isSelected = storeIdsFilter.includes(opt.id);
-                      return (
-                        <CommandItem
+              <CommandList className="max-h-64 overflow-auto" onScroll={handleStoreListScroll}>
+                {storeSearchLoading ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    Loading stores...
+                  </div>
+                ) : (
+                  <>
+                    <CommandEmpty>No store found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        onSelect={() => {
+                          const allIds = storeOptions.map(opt => opt.id);
+                          setDraftStoreIdsFilter(allIds);
+                        }}
+                      >
+                        <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${
+                          draftStoreIdsFilter.length === storeOptions.length && storeOptions.length > 0
+                            ? "bg-primary text-primary-foreground"
+                            : "opacity-50 [&_svg]:invisible"
+                        }`}>
+                          <Check className="h-3 w-3" />
+                        </div>
+                        <span className="font-medium">Select All</span>
+                      </CommandItem>
+                      {filteredStoreOptions.map((opt) => (
+                        <FilterCheckboxItem
                           key={opt.id}
-                          onSelect={() => {
-                            if (isSelected) {
-                              setStoreIdsFilter(storeIdsFilter.filter((id) => id !== opt.id));
-                            } else {
-                              setStoreIdsFilter([...storeIdsFilter, opt.id]);
-                            }
-                          }}
-                        >
-                          <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${
-                            isSelected ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible"
-                          }`}>
-                            <Check className="h-3 w-3" />
-                          </div>
-                          <span className="truncate text-sm">{opt.label}</span>
-                        </CommandItem>
-                      );
-                    })}
-                </CommandGroup>
+                          id={opt.id}
+                          name={opt.name}
+                          isSelected={storeSelectionSet.has(opt.id)}
+                          onToggle={handleStoreToggle}
+                        />
+                      ))}
+                    </CommandGroup>
+                    <div className="flex gap-1 p-2 border-t sticky bottom-0 bg-popover">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="flex-1 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStoreApply();
+                        }}
+                        disabled={loading}
+                      >
+                        Apply
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStoreClear();
+                        }}
+                        disabled={loading}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CommandList>
             </Command>
           </PopoverContent>
         </Popover>
       </div>
       <div className="flex flex-col gap-1">
-        <Label className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
+        <Label htmlFor="supplier-popover-trigger" className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
           <Tag className="h-3 w-3 text-primary/70" /> Supplier
         </Label>
         <Popover>
           <PopoverTrigger asChild>
             <Button
+              id="supplier-popover-trigger"
               variant="outline"
               className="w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
               disabled={loading || supplierSearchLoading}
@@ -239,6 +390,8 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           <PopoverContent className="w-64 p-0" align="end">
             <Command>
               <CommandInput
+                id="supplier-search"
+                name="supplier-search"
                 placeholder="Search supplier..."
                 value={supplierSearch}
                 onValueChange={(value) => {
@@ -249,53 +402,72 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
               <CommandList className="max-h-64 overflow-auto" onScroll={handleSupplierListScroll}>
                 <CommandEmpty>No supplier found.</CommandEmpty>
                 <CommandGroup>
-                  {supplierDisplayOptions
-                    .filter((opt) =>
-                      supplierSearch
-                        ? opt.label.toLowerCase().includes(supplierSearch.toLowerCase())
-                        : true
-                    )
-                    .map((opt) => {
-                      const isSelected = supplierIdsFilter.includes(opt.id);
-                      return (
-                        <CommandItem
-                          key={opt.id}
-                          onSelect={() => {
-                            if (isSelected) {
-                              setSupplierIdsFilter(
-                                supplierIdsFilter.filter((id) => id !== opt.id)
-                              );
-                            } else {
-                              setSupplierIdsFilter([...supplierIdsFilter, opt.id]);
-                            }
-                          }}
-                        >
-                          <div
-                            className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${
-                              isSelected
-                                ? "bg-primary text-primary-foreground"
-                                : "opacity-50 [&_svg]:invisible"
-                            }`}
-                          >
-                            <Check className="h-3 w-3" />
-                          </div>
-                          <span className="truncate text-sm">{opt.label}</span>
-                        </CommandItem>
-                      );
-                    })}
+                  <CommandItem
+                    onSelect={() => {
+                      const allIds = supplierDisplayOptions.map(opt => opt.id);
+                      setDraftSupplierIdsFilter(allIds);
+                    }}
+                  >
+                    <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${
+                      draftSupplierIdsFilter.length === supplierDisplayOptions.length && supplierDisplayOptions.length > 0
+                        ? "bg-primary text-primary-foreground"
+                        : "opacity-50 [&_svg]:invisible"
+                    }`}>
+                      <Check className="h-3 w-3" />
+                    </div>
+                    <span className="font-medium">Select All</span>
+                  </CommandItem>
+                  {filteredSupplierOptions.map((opt) => (
+                    <FilterCheckboxItem
+                      key={opt.id}
+                      id={opt.id}
+                      name={opt.label}
+                      isSelected={supplierSelectionSet.has(opt.id)}
+                      onToggle={handleSupplierToggle}
+                    />
+                  ))}
                 </CommandGroup>
+                <div className="flex gap-1 p-2 border-t sticky bottom-0 bg-popover">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="flex-1 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!loading) {
+                        applyFilters();
+                      }
+                    }}
+                    disabled={loading}
+                  >
+                    Apply
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSupplierClear();
+                    }}
+                    disabled={loading}
+                  >
+                    Clear
+                  </Button>
+                </div>
               </CommandList>
             </Command>
           </PopoverContent>
         </Popover>
       </div>
       <div className="flex flex-col gap-1">
-        <Label className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
+        <Label htmlFor="brand-popover-trigger" className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
           <Tag className="h-3 w-3 text-primary/70" /> Brand
         </Label>
-        <Popover>
+        <Popover open={brandPopoverOpen} onOpenChange={setBrandPopoverOpen}>
           <PopoverTrigger asChild>
             <Button
+              id="brand-popover-trigger"
               variant="outline"
               className="w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
               disabled={loading}
@@ -307,40 +479,77 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           <PopoverContent className="w-64 p-0" align="end">
             <Command>
               <CommandInput
+                id="brand-search"
+                name="brand-search"
                 placeholder="Search brand..."
                 value={brandSearch}
-                onValueChange={setBrandSearch}
+                onValueChange={(value) => {
+                  setBrandSearch(value);
+                  void brandSearchFn(value);
+                }}
               />
-              <CommandList className="max-h-64 overflow-auto">
-                <CommandEmpty>No brand found.</CommandEmpty>
-                <CommandGroup>
-                  {brandOptions
-                    .filter((opt) =>
-                      brandSearch ? opt.label.toLowerCase().includes(brandSearch.toLowerCase()) : true
-                    )
-                    .map((opt) => {
-                      const isSelected = brandIdsFilter.includes(opt.id);
-                      return (
-                        <CommandItem
+              <CommandList className="max-h-64 overflow-auto" onScroll={handleBrandListScroll}>
+                {brandSearchLoading ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    Loading brands...
+                  </div>
+                ) : (
+                  <>
+                    <CommandEmpty>No brand found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        onSelect={() => {
+                          const allIds = brandOptions.map(opt => opt.id);
+                          setDraftBrandIdsFilter(allIds);
+                        }}
+                      >
+                        <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${
+                          draftBrandIdsFilter.length === brandOptions.length && brandOptions.length > 0
+                            ? "bg-primary text-primary-foreground"
+                            : "opacity-50 [&_svg]:invisible"
+                        }`}>
+                          <Check className="h-3 w-3" />
+                        </div>
+                        <span className="font-medium">Select All</span>
+                      </CommandItem>
+                      {filteredBrandOptions.map((opt) => (
+                        <FilterCheckboxItem
                           key={opt.id}
-                          onSelect={() => {
-                            if (isSelected) {
-                              setBrandIdsFilter(brandIdsFilter.filter((id) => id !== opt.id));
-                            } else {
-                              setBrandIdsFilter([...brandIdsFilter, opt.id]);
-                            }
-                          }}
-                        >
-                          <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${
-                            isSelected ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible"
-                          }`}>
-                            <Check className="h-3 w-3" />
-                          </div>
-                          <span className="truncate text-sm">{opt.label}</span>
-                        </CommandItem>
-                      );
-                    })}
-                </CommandGroup>
+                          id={opt.id}
+                          name={opt.name}
+                          isSelected={brandSelectionSet.has(opt.id)}
+                          onToggle={handleBrandToggle}
+                        />
+                      ))}
+                    </CommandGroup>
+                    <div className="flex gap-1 p-2 border-t sticky bottom-0 bg-popover">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="flex-1 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBrandApply();
+                        }}
+                        disabled={loading}
+                      >
+                        Apply
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBrandClear();
+                        }}
+                        disabled={loading}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CommandList>
             </Command>
           </PopoverContent>
@@ -351,10 +560,14 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           variant="ghost"
           size="sm"
           className="text-xs font-medium text-muted-foreground hover:text-foreground"
-          onClick={handleClearFilters}
+          onClick={() => {
+            if (!loading) {
+              clearFilters();
+            }
+          }}
           disabled={loading}
         >
-          Clear filters
+          Clear all filters
         </Button>
       </div>
     </div>
