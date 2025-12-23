@@ -20,6 +20,7 @@ import (
 	"github.com/andresuchdata/autopo-py/backend-go/internal/telemetry"
 	"github.com/andresuchdata/autopo-py/backend-go/pkg/logger"
 	_ "github.com/lib/pq"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -99,9 +100,14 @@ func main() {
 		telemetry.UseGinTracing(router, cfg.OTel.ServiceName)
 	}
 
+	var handler http.Handler = router
+	if cfg.OTel.Enabled {
+		handler = otelhttp.NewHandler(router, cfg.OTel.ServiceName)
+	}
+
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
-		Handler: router,
+		Handler: handler,
 	}
 
 	// Start server in a goroutine
