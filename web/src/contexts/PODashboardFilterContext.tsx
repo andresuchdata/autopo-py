@@ -28,6 +28,13 @@ interface PODashboardFilterContextType {
 
     // Actions
     applyFilters: () => void;
+    applyFiltersWithOverrides: (overrides: Partial<{
+        poType: POTypeFilter;
+        releasedDate: string;
+        storeIds: number[];
+        brandIds: number[];
+        supplierIds: number[];
+    }>) => void;
     clearFilters: () => void;
 }
 
@@ -54,6 +61,26 @@ export const PODashboardFilterProvider: React.FC<{ children: ReactNode }> = ({ c
         setStoreIdsFilter(draftStoreIdsFilter);
         setBrandIdsFilter(draftBrandIdsFilter);
         setSupplierIdsFilter(draftSupplierIdsFilter);
+    };
+
+    const applyFiltersWithOverrides = (overrides: Partial<{
+        poType: POTypeFilter;
+        releasedDate: string;
+        storeIds: number[];
+        brandIds: number[];
+        supplierIds: number[];
+    }>) => {
+        const newPOType = overrides.poType !== undefined ? overrides.poType : draftPOTypeFilter;
+        const newReleasedDate = overrides.releasedDate !== undefined ? overrides.releasedDate : draftReleasedDateFilter;
+        const newStoreIds = overrides.storeIds !== undefined ? overrides.storeIds : draftStoreIdsFilter;
+        const newBrandIds = overrides.brandIds !== undefined ? overrides.brandIds : draftBrandIdsFilter;
+        const newSupplierIds = overrides.supplierIds !== undefined ? overrides.supplierIds : draftSupplierIdsFilter;
+
+        setPOTypeFilter(newPOType);
+        setReleasedDateFilter(newReleasedDate);
+        setStoreIdsFilter(newStoreIds);
+        setBrandIdsFilter(newBrandIds);
+        setSupplierIdsFilter(newSupplierIds);
     };
 
     const clearFilters = () => {
@@ -102,6 +129,7 @@ export const PODashboardFilterProvider: React.FC<{ children: ReactNode }> = ({ c
 
                 // Actions
                 applyFilters,
+                applyFiltersWithOverrides,
                 clearFilters,
             }}
         >

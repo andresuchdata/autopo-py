@@ -10,6 +10,21 @@ export const api = axios.create({
     },
 });
 
+// Helper to join number arrays into comma-separated strings
+const joinIds = (ids?: number[]): string | undefined => 
+    ids && ids.length > 0 ? ids.join(',') : undefined;
+
+// Helper to build query params object
+const buildQueryParams = (params: Record<string, any>): Record<string, any> => {
+    const query: Record<string, any> = {};
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+            query[key] = value;
+        }
+    });
+    return query;
+};
+
 export const uploadFiles = async (files: File[]) => {
     const formData = new FormData();
     files.forEach((file) => {
@@ -34,19 +49,13 @@ export const poService = {
     },
 
     getSuppliers: async (params?: { search?: string; limit?: number; offset?: number }) => {
-        const query: Record<string, string | number> = {};
-        if (params?.search) {
-            query.search = params.search;
-        }
-        if (typeof params?.limit === 'number') {
-            query.limit = params.limit;
-        }
-        if (typeof params?.offset === 'number') {
-            query.offset = params.offset;
-        }
-
         try {
-            const response = await api.get('/po/suppliers', Object.keys(query).length ? { params: query } : undefined);
+            const query = buildQueryParams({
+                search: params?.search,
+                limit: params?.limit,
+                offset: params?.offset,
+            });
+            const response = await api.get('/po/suppliers', { params: query });
             return response.data;
         } catch (error) {
             console.error('Error fetching suppliers:', error);
@@ -66,7 +75,8 @@ export const poService = {
 
     getStores: async (search?: string) => {
         try {
-            const response = await api.get('/po/stores', search ? { params: { search } } : undefined);
+            const query = buildQueryParams({ search });
+            const response = await api.get('/po/stores', { params: query });
             return response.data;
         } catch (error) {
             console.error('Error fetching stores:', error);
@@ -86,7 +96,8 @@ export const poService = {
 
     getBrands: async (search?: string) => {
         try {
-            const response = await api.get('/po/brands', search ? { params: { search } } : undefined);
+            const query = buildQueryParams({ search });
+            const response = await api.get('/po/brands', { params: query });
             return response.data;
         } catch (error) {
             console.error('Error fetching brands:', error);
@@ -95,22 +106,14 @@ export const poService = {
     },
 
     getSkus: async (params?: { search?: string; limit?: number; offset?: number; brandIds?: number[] }) => {
-        const query: Record<string, string | number> = {};
-        if (params?.search) {
-            query.search = params.search;
-        }
-        if (typeof params?.limit === 'number') {
-            query.limit = params.limit;
-        }
-        if (typeof params?.offset === 'number') {
-            query.offset = params.offset;
-        }
-        if (Array.isArray(params?.brandIds) && params!.brandIds!.length > 0) {
-            query.brand_ids = params!.brandIds!.join(',');
-        }
-
         try {
-            const response = await api.get('/po/skus', Object.keys(query).length ? { params: query } : undefined);
+            const query = buildQueryParams({
+                search: params?.search,
+                limit: params?.limit,
+                offset: params?.offset,
+                brand_ids: joinIds(params?.brandIds),
+            });
+            const response = await api.get('/po/skus', { params: query });
             return response.data;
         } catch (error) {
             console.error('Error fetching SKUs:', error);
@@ -157,15 +160,14 @@ export const getSupplierPOItems = async ({
     sortDirection = 'asc',
 }: SupplierPOItemsParams): Promise<SupplierPOItemsResponse> => {
     try {
-        const response = await api.get('/po/analytics/supplier_items', {
-            params: {
-                supplier_id: supplierId,
-                page,
-                page_size: pageSize,
-                sort_field: sortField,
-                sort_direction: sortDirection,
-            },
+        const query = buildQueryParams({
+            supplier_id: supplierId,
+            page,
+            page_size: pageSize,
+            sort_field: sortField,
+            sort_direction: sortDirection,
         });
+        const response = await api.get('/po/analytics/supplier_items', { params: query });
         return response.data;
     } catch (error) {
         console.error('Error fetching supplier PO items:', error);
@@ -181,19 +183,22 @@ export interface DashboardSummaryParams {
     supplierIds?: number[];
 }
 
-export const getDashboardSummary = async (params?: DashboardSummaryParams) => {
+interface RequestOptions {
+    signal?: AbortSignal;
+}
+
+export const getDashboardSummary = async (params?: DashboardSummaryParams, options?: RequestOptions) => {
     try {
+        const query = buildQueryParams({
+            po_type: params?.poType,
+            released_date: params?.releasedDate,
+            store_ids: joinIds(params?.storeIds),
+            brand_ids: joinIds(params?.brandIds),
+            supplier_ids: joinIds(params?.supplierIds),
+        });
         const response = await api.get('/po/analytics/summary', {
-            params: {
-                po_type: params?.poType,
-                released_date: params?.releasedDate,
-                store_ids: params?.storeIds && params.storeIds.length > 0 ? params.storeIds.join(',') : undefined,
-                brand_ids: params?.brandIds && params.brandIds.length > 0 ? params.brandIds.join(',') : undefined,
-                supplier_ids:
-                    params?.supplierIds && params.supplierIds.length > 0
-                        ? params.supplierIds.join(',')
-                        : undefined,
-            },
+            params: query,
+            signal: options?.signal,
         });
         return response.data;
     } catch (error) {
@@ -243,14 +248,14 @@ interface POAgingParams {
 
 export const getPOAging = async (params?: POAgingParams) => {
     try {
-        const queryParams: any = {};
-        if (params?.page) queryParams.page = params.page;
-        if (params?.pageSize) queryParams.page_size = params.pageSize;
-        if (params?.sortField) queryParams.sort_field = params.sortField;
-        if (params?.sortDirection) queryParams.sort_direction = params.sortDirection;
-        if (params?.status) queryParams.status = params.status;
-
-        const response = await api.get('/po/analytics/aging', { params: queryParams });
+        const query = buildQueryParams({
+            page: params?.page,
+            page_size: params?.pageSize,
+            sort_field: params?.sortField,
+            sort_direction: params?.sortDirection,
+            status: params?.status,
+        });
+        const response = await api.get('/po/analytics/aging', { params: query });
         return response.data;
     } catch (error) {
         console.error('Error fetching PO aging:', error);
@@ -284,13 +289,13 @@ interface SupplierPerformanceParams {
 
 export const getSupplierPerformance = async (params?: SupplierPerformanceParams) => {
     try {
-        const queryParams: any = {};
-        if (params?.page) queryParams.page = params.page;
-        if (params?.pageSize) queryParams.page_size = params.pageSize;
-        if (params?.sortField) queryParams.sort_field = params.sortField;
-        if (params?.sortDirection) queryParams.sort_direction = params.sortDirection;
-
-        const response = await api.get('/po/analytics/supplier-performance', { params: queryParams });
+        const query = buildQueryParams({
+            page: params?.page,
+            page_size: params?.pageSize,
+            sort_field: params?.sortField,
+            sort_direction: params?.sortDirection,
+        });
+        const response = await api.get('/po/analytics/supplier-performance', { params: query });
         return response.data;
     } catch (error) {
         console.error('Error fetching supplier performance:', error);
@@ -305,6 +310,7 @@ export interface POSnapshotItem {
     sku: string;
     product_name: string;
     store_name: string;
+    supplier_name: string | null;
     unit_price: number;
     total_amount: number;
     po_qty: number;
@@ -337,6 +343,7 @@ interface POSnapshotItemsParams {
     releasedDate?: string;
     storeIds?: number[];
     brandIds?: number[];
+    supplierIds?: number[];
 }
 
 export const getPOSnapshotItems = async ({
@@ -349,21 +356,22 @@ export const getPOSnapshotItems = async ({
     releasedDate,
     storeIds,
     brandIds,
+    supplierIds,
 }: POSnapshotItemsParams): Promise<POSnapshotItemsResponse> => {
     try {
-        const response = await api.get('/po/analytics/items', {
-            params: {
-                status: status.toLowerCase(),
-                page,
-                page_size: pageSize,
-                sort_field: sortField,
-                sort_direction: sortDirection,
-                po_type: poType,
-                released_date: releasedDate,
-                store_ids: storeIds && storeIds.length > 0 ? storeIds.join(',') : undefined,
-                brand_ids: brandIds && brandIds.length > 0 ? brandIds.join(',') : undefined,
-            },
+        const query = buildQueryParams({
+            status: status.toLowerCase(),
+            page,
+            page_size: pageSize,
+            sort_field: sortField,
+            sort_direction: sortDirection,
+            po_type: poType,
+            released_date: releasedDate,
+            store_ids: joinIds(storeIds),
+            brand_ids: joinIds(brandIds),
+            supplier_ids: joinIds(supplierIds),
         });
+        const response = await api.get('/po/analytics/items', { params: query });
         return response.data;
     } catch (error) {
         console.error('Error fetching PO snapshot items:', error);

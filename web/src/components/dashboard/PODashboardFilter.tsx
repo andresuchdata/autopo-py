@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useState, UIEvent } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef, UIEvent } from "react";
 import { flushSync } from "react-dom";
 import { Check, ChevronsUpDown, Store as StoreIcon, Tag } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,6 +14,32 @@ import { useSupplierOptions } from "@/hooks/useSupplierOptions";
 import { useStoreOptions } from "@/hooks/useStoreOptions";
 import { useBrandOptions } from "@/hooks/useBrandOptions";
 import { FilterCheckboxItem } from "./FilterCheckboxItem";
+
+const DEFAULT_SEARCH_DEBOUNCE = 300;
+
+function useDebouncedCallback<T extends (...args: any[]) => unknown>(callback: T, delay = DEFAULT_SEARCH_DEBOUNCE) {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return useCallback(
+    (...args: Parameters<T>) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => {
+        void callback(...args);
+      }, delay);
+    },
+    [callback, delay]
+  );
+}
 
 interface PODashboardFilterProps {
   loading: boolean;
@@ -34,6 +60,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
     setDraftSupplierIdsFilter,
     // Actions
     applyFilters,
+    applyFiltersWithOverrides,
     clearFilters,
   } = usePODashboardFilter();
 
@@ -71,29 +98,16 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
   } = useBrandOptions("");
 
   const [brandPopoverOpen, setBrandPopoverOpen] = useState(false);
+  const [supplierPopoverOpen, setSupplierPopoverOpen] = useState(false);
 
   const supplierDisplayOptions = useMemo(
     () => supplierOptions.map((s) => ({ id: s.id, label: s.name })),
     [supplierOptions]
   );
 
-  const filteredSupplierOptions = useMemo(() => {
-    const query = supplierSearch.trim().toLowerCase();
-    if (!query) return supplierDisplayOptions;
-    return supplierDisplayOptions.filter((opt) => opt.label.toLowerCase().includes(query));
-  }, [supplierDisplayOptions, supplierSearch]);
-
-  const filteredStoreOptions = useMemo(() => {
-    const query = storeSearch.trim().toLowerCase();
-    if (!query) return storeOptions;
-    return storeOptions.filter((opt) => opt.name.toLowerCase().includes(query));
-  }, [storeOptions, storeSearch]);
-
-  const filteredBrandOptions = useMemo(() => {
-    const query = brandSearch.trim().toLowerCase();
-    if (!query) return brandOptions;
-    return brandOptions.filter((opt) => opt.name.toLowerCase().includes(query));
-  }, [brandOptions, brandSearch]);
+  const storeSearchDebounced = useDebouncedCallback((value: string) => storeSearchFn(value));
+  const supplierSearchDebounced = useDebouncedCallback((value: string) => supplierSearchFn(value));
+  const brandSearchDebounced = useDebouncedCallback((value: string) => brandSearchFn(value));
 
   const storeSelectionSet = useMemo(() => new Set(draftStoreIdsFilter), [draftStoreIdsFilter]);
   const brandSelectionSet = useMemo(() => new Set(draftBrandIdsFilter), [draftBrandIdsFilter]);
@@ -162,14 +176,6 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
     }
   };
 
-  const applyDraftUpdates = useCallback(
-    (updater: () => void, afterApply?: () => void) => {
-      flushSync(updater);
-      applyFilters();
-      afterApply?.();
-    },
-    [applyFilters]
-  );
 
   const handleStoreToggle = useCallback((id: number) => {
     setDraftStoreIdsFilter((prev: number[]) => {
@@ -210,13 +216,12 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
 
   const handleStoreClear = useCallback(() => {
     if (!loading) {
-      applyDraftUpdates(
-        () => setDraftStoreIdsFilter([]),
-        () => setStorePopoverOpen(false)
-      );
+      setDraftStoreIdsFilter([]);
+      applyFilters();
+      setStorePopoverOpen(false);
       setStoreSearch("");
     }
-  }, [loading, applyDraftUpdates, setDraftStoreIdsFilter, setStorePopoverOpen, setStoreSearch]);
+  }, [loading, applyFilters, setDraftStoreIdsFilter, setStorePopoverOpen, setStoreSearch]);
 
   const handleBrandApply = useCallback(() => {
     if (!loading) {
@@ -227,20 +232,28 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
 
   const handleBrandClear = useCallback(() => {
     if (!loading) {
-      applyDraftUpdates(
-        () => setDraftBrandIdsFilter([]),
-        () => setBrandPopoverOpen(false)
-      );
+      setDraftBrandIdsFilter([]);
+      applyFilters();
+      setBrandPopoverOpen(false);
       setBrandSearch("");
     }
-  }, [loading, applyDraftUpdates, setDraftBrandIdsFilter, setBrandPopoverOpen, setBrandSearch]);
+  }, [loading, applyFilters, setDraftBrandIdsFilter, setBrandPopoverOpen, setBrandSearch]);
+
+  const handleSupplierApply = useCallback(() => {
+    if (!loading) {
+      applyFilters();
+      setSupplierPopoverOpen(false);
+    }
+  }, [loading, applyFilters, setSupplierPopoverOpen]);
 
   const handleSupplierClear = useCallback(() => {
     if (!loading) {
-      applyDraftUpdates(() => setDraftSupplierIdsFilter([]));
+      setDraftSupplierIdsFilter([]);
+      applyFilters();
+      setSupplierPopoverOpen(false);
       setSupplierSearch("");
     }
-  }, [loading, applyDraftUpdates, setDraftSupplierIdsFilter, setSupplierSearch]);
+  }, [loading, applyFilters, setDraftSupplierIdsFilter, setSupplierPopoverOpen, setSupplierSearch]);
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
@@ -248,7 +261,12 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
         <Label htmlFor="po-type-select" className="text-xs font-medium uppercase text-muted-foreground">PO Type</Label>
         <Select
           value={draftPOTypeFilter}
-          onValueChange={(value: "ALL" | "AU" | "PO" | "OTHERS") => setDraftPOTypeFilter(value)}
+          onValueChange={(value: "ALL" | "AU" | "PO" | "OTHERS") => {
+            if (!loading) {
+              setDraftPOTypeFilter(value);
+              applyFiltersWithOverrides({ poType: value });
+            }
+          }}
           disabled={loading}
         >
           <SelectTrigger id="po-type-select" className="w-40 h-10 bg-background border-border rounded-lg">
@@ -269,7 +287,9 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
             value={draftReleasedDateFilter || undefined}
             onChange={(value) => {
               if (!loading) {
-                setDraftReleasedDateFilter(value as string);
+                const dateValue = (value as string) || "";
+                setDraftReleasedDateFilter(dateValue);
+                applyFiltersWithOverrides({ releasedDate: dateValue });
               }
             }}
             placeholder="All Dates"
@@ -293,7 +313,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-64 p-0" align="end">
-            <Command>
+            <Command shouldFilter={false}>
               <CommandInput
                 id="store-search"
                 name="store-search"
@@ -301,7 +321,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                 value={storeSearch}
                 onValueChange={(value) => {
                   setStoreSearch(value);
-                  void storeSearchFn(value);
+                  storeSearchDebounced(value);
                 }}
               />
               <CommandList className="max-h-64 overflow-auto" onScroll={handleStoreListScroll}>
@@ -328,7 +348,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                         </div>
                         <span className="font-medium">Select All</span>
                       </CommandItem>
-                      {filteredStoreOptions.map((opt) => (
+                      {storeOptions.map((opt) => (
                         <FilterCheckboxItem
                           key={opt.id}
                           id={opt.id}
@@ -375,7 +395,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
         <Label htmlFor="supplier-popover-trigger" className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
           <Tag className="h-3 w-3 text-primary/70" /> Supplier
         </Label>
-        <Popover>
+        <Popover open={supplierPopoverOpen} onOpenChange={setSupplierPopoverOpen}>
           <PopoverTrigger asChild>
             <Button
               id="supplier-popover-trigger"
@@ -388,7 +408,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-64 p-0" align="end">
-            <Command>
+            <Command shouldFilter={false}>
               <CommandInput
                 id="supplier-search"
                 name="supplier-search"
@@ -396,7 +416,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                 value={supplierSearch}
                 onValueChange={(value) => {
                   setSupplierSearch(value);
-                  void supplierSearchFn(value);
+                  supplierSearchDebounced(value);
                 }}
               />
               <CommandList className="max-h-64 overflow-auto" onScroll={handleSupplierListScroll}>
@@ -417,7 +437,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                     </div>
                     <span className="font-medium">Select All</span>
                   </CommandItem>
-                  {filteredSupplierOptions.map((opt) => (
+                  {supplierDisplayOptions.map((opt) => (
                     <FilterCheckboxItem
                       key={opt.id}
                       id={opt.id}
@@ -434,9 +454,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                     className="flex-1 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!loading) {
-                        applyFilters();
-                      }
+                      handleSupplierApply();
                     }}
                     disabled={loading}
                   >
@@ -477,7 +495,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-64 p-0" align="end">
-            <Command>
+            <Command shouldFilter={false}>
               <CommandInput
                 id="brand-search"
                 name="brand-search"
@@ -485,7 +503,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                 value={brandSearch}
                 onValueChange={(value) => {
                   setBrandSearch(value);
-                  void brandSearchFn(value);
+                  brandSearchDebounced(value);
                 }}
               />
               <CommandList className="max-h-64 overflow-auto" onScroll={handleBrandListScroll}>
@@ -512,7 +530,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                         </div>
                         <span className="font-medium">Select All</span>
                       </CommandItem>
-                      {filteredBrandOptions.map((opt) => (
+                      {brandOptions.map((opt) => (
                         <FilterCheckboxItem
                           key={opt.id}
                           id={opt.id}

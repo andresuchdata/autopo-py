@@ -84,7 +84,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isDownloading, setIsDownloading] = useState(false);
-    const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter } = usePODashboardFilter();
+    const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter } = usePODashboardFilter();
 
     const statusColor = status ? getStatusColor(status) : '#6B7280';
 
@@ -110,6 +110,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                     releasedDate: releasedDateFilter || undefined,
                     storeIds: storeIdsFilter,
                     brandIds: brandIdsFilter,
+                    supplierIds: supplierIdsFilter,
                 });
                 setItems(response.items ?? []);
                 setTotal(response.total ?? 0);
@@ -129,7 +130,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                 setLoading(false);
             }
         },
-        [status, poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter]
+        [status, poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter]
     );
 
     useEffect(() => {
@@ -180,6 +181,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             releasedDate: releasedDateFilter || undefined,
             storeIds: storeIdsFilter,
             brandIds: brandIdsFilter,
+            supplierIds: supplierIdsFilter,
         };
 
         // First request gives us totals so we can parallelize remaining pages.
@@ -232,7 +234,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
         }
 
         return aggregated;
-    }, [status, poTypeFilter, releasedDateFilter, sortField, sortDirection, storeIdsFilter, brandIdsFilter]);
+    }, [status, poTypeFilter, releasedDateFilter, sortField, sortDirection, storeIdsFilter, brandIdsFilter, supplierIdsFilter]);
 
     const downloadAsExcel = useCallback((excelItems: POSnapshotItem[], scopeLabel: string) => {
         const headers = [
@@ -242,6 +244,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             'Product Name',
             'Brand',
             'Store',
+            'Supplier',
             'Qty',
             'Total Amount',
             'Released',
@@ -258,6 +261,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
             item.product_name,
             item.brand_name,
             item.store_name,
+            item.supplier_name ?? '',
             item.po_qty,
             item.total_amount,
             formatDate(item.po_released_at),
@@ -295,6 +299,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                 'Product Name',
                 'Brand',
                 'Store',
+                'Supplier',
                 'Qty',
                 'Total Amount',
                 'Released',
@@ -319,6 +324,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                 item.product_name,
                 item.brand_name,
                 item.store_name,
+                item.supplier_name ?? '',
                 item.po_qty,
                 item.total_amount,
                 formatDate(item.po_released_at),
@@ -616,6 +622,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                     <SortableHead field="sku" label="SKU" className="w-[120px] font-semibold text-foreground/80" />
                                     <SortableHead field="product_name" label="Product" className="min-w-[200px] font-semibold text-foreground/80" />
                                     <SortableHead field="store_name" label="Store" className="min-w-[150px] font-semibold text-foreground/80" />
+                                    <TableHead className="min-w-[160px] font-semibold text-foreground/80">Supplier</TableHead>
                                     <SortableHead field="po_qty" label="Qty" align="right" className="text-right font-semibold text-foreground/80" />
                                     <SortableHead field="total_amount" label="Total" align="right" className="text-right font-semibold text-foreground/80" />
                                     <SortableHead field="po_released_at" label="Released" align="right" className="text-right font-semibold text-foreground/80" />
@@ -628,14 +635,14 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                             <TableBody>
                                 {!status && (
                                     <TableRow>
-                                        <TableCell colSpan={12} className="h-48 text-center text-muted-foreground">
+                                        <TableCell colSpan={13} className="h-48 text-center text-muted-foreground">
                                             Select a status card to view details.
                                         </TableCell>
                                     </TableRow>
                                 )}
                                 {status && loading && (
                                     <TableRow>
-                                        <TableCell colSpan={12} className="h-64 text-center">
+                                        <TableCell colSpan={13} className="h-64 text-center">
                                             <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground">
                                                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                                 <p>Loading purchase orders...</p>
@@ -645,14 +652,14 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 )}
                                 {status && !loading && error && (
                                     <TableRow>
-                                        <TableCell colSpan={12} className="h-48 text-center text-destructive">
+                                        <TableCell colSpan={13} className="h-48 text-center text-destructive">
                                             {error}
                                         </TableCell>
                                     </TableRow>
                                 )}
                                 {status && !loading && !error && items.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={12} className="h-48 text-center text-muted-foreground">
+                                        <TableCell colSpan={13} className="h-48 text-center text-muted-foreground">
                                             No purchase orders found for this status.
                                         </TableCell>
                                     </TableRow>
@@ -679,6 +686,13 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                                 <div className="text-xs text-muted-foreground/60 truncate">{item.brand_name}</div>
                                             </TableCell>
                                             <TableCell className="text-sm text-muted-foreground">{item.store_name || '—'}</TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">
+                                                {item.supplier_name ? (
+                                                    <span className="font-medium text-foreground/90">{item.supplier_name}</span>
+                                                ) : (
+                                                    '—'
+                                                )}
+                                            </TableCell>
                                             <TableCell className="text-right font-mono text-sm">{item.po_qty.toLocaleString('id-ID')}</TableCell>
                                             <TableCell className="text-right font-mono text-sm font-medium text-foreground/90">{formatCurrency(item.total_amount)}</TableCell>
                                             <TableCell className="text-right text-xs text-muted-foreground">{formatDate(item.po_released_at)}</TableCell>

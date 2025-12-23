@@ -31,6 +31,9 @@ function PODashboardContent() {
     const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter } = usePODashboardFilter();
 
     useEffect(() => {
+        const controller = new AbortController();
+        let isActive = true;
+
         const fetchData = async () => {
             setLoading(true);
             setError(null);
@@ -51,16 +54,32 @@ function PODashboardContent() {
                 if (supplierIdsFilter.length > 0) {
                     params.supplierIds = supplierIdsFilter;
                 }
-                const result = await getDashboardSummary(params);
+                const result = await getDashboardSummary(params, { signal: controller.signal });
+                if (!isActive) return;
                 setData(result);
             } catch (err) {
+                if (controller.signal.aborted) {
+                    return;
+                }
+                // Ignore abort errors (they're expected when filters change quickly)
+                if (err instanceof Error && err.name === 'CanceledError') {
+                    return;
+                }
                 console.error(err);
                 setError('Failed to load dashboard data');
             } finally {
-                setLoading(false);
+                if (isActive) {
+                    setLoading(false);
+                }
             }
         };
+
         fetchData();
+
+        return () => {
+            isActive = false;
+            controller.abort();
+        };
     }, [poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter]);
 
     if (!loading && (error || !data)) {
