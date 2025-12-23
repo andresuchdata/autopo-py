@@ -17,13 +17,26 @@ import (
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository/postgres"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/telemetry"
 	"github.com/andresuchdata/autopo-py/backend-go/pkg/logger"
 	_ "github.com/lib/pq"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func main() {
 	// Load configuration
 	cfg := config.Load()
+
+	// Initialize tracing if enabled
+	var tp *sdktrace.TracerProvider
+	if cfg.OTel.Enabled {
+		var err error
+		tp, err = telemetry.InitTracer(context.Background(), &cfg.OTel)
+		if err != nil {
+			logger.Log.Fatal().Err(err).Msg("Failed to initialize tracer")
+		}
+		defer telemetry.ShutdownTracer(tp, context.Background())
+	}
 
 	// Initialize database connection
 	db, err := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
@@ -81,6 +94,10 @@ func main() {
 		POService:          poService,
 		StockHealthService: stockHealthService,
 	}, cfg.Server.AllowedOrigins)
+
+	if cfg.OTel.Enabled {
+		telemetry.UseGinTracing(router, cfg.OTel.ServiceName)
+	}
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,

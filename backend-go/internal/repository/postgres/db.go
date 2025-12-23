@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -31,9 +32,17 @@ func NewDB(cfg *config.DatabaseConfig) (*DB, error) {
 		connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
 
-		var db *sqlx.DB
-		db, err = sqlx.Connect("postgres", connStr)
-		if err != nil {
+		sqlDB, wrapErr := otelsql.Open("postgres", connStr, otelsql.WithSQLCommenter(true))
+		if wrapErr != nil {
+			err = wrapErr
+			return
+		}
+
+		db := sqlx.NewDb(sqlDB, "postgres")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if pingErr := db.PingContext(ctx); pingErr != nil {
+			err = pingErr
 			return
 		}
 

@@ -27,3 +27,7 @@ data/pipeline
 data/pipeline/stock_health/raw
 data/pipeline/stock_health/intermediate
 data/pipeline/stock_health/output
+
+# binary api and server (in case generated in root project dir)
+api
+server

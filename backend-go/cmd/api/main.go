@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,8 +11,10 @@ import (
 	"github.com/andresuchdata/autopo-py/backend-go/internal/drive"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository/postgres"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/telemetry"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func main() {
@@ -25,6 +28,17 @@ func main() {
 	driveService, err := drive.NewService(os.Getenv("GOOGLE_DRIVE_CREDENTIALS_JSON"))
 	if err != nil {
 		log.Fatalf("Failed to initialize Google Drive service: %v", err)
+	}
+
+	// Initialize tracing if enabled
+	var tp *sdktrace.TracerProvider
+	if cfg.OTel.Enabled {
+		var err error
+		tp, err = telemetry.InitTracer(context.Background(), &cfg.OTel)
+		if err != nil {
+			log.Fatalf("Failed to initialize tracer: %v", err)
+		}
+		defer telemetry.ShutdownTracer(tp, context.Background())
 	}
 
 	// Create router
@@ -56,5 +70,7 @@ func main() {
 	// Start server
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)
 	log.Printf("Server starting on %s\n", addr)
-	log.Fatal(http.ListenAndServe(addr, r))
+
+	instrumentedRouter := telemetry.WrapMuxWithTracing(r, "api-server")
+	log.Fatal(http.ListenAndServe(addr, instrumentedRouter))
 }

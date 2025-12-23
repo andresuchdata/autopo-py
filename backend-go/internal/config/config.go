@@ -15,6 +15,7 @@ type Config struct {
 	Database DatabaseConfig
 	App      AppConfig
 	Cache    CacheConfig
+	OTel     OTelConfig
 }
 
 type ServerConfig struct {
@@ -50,6 +51,14 @@ type CacheConfig struct {
 	StockHealthTTLSeconds int
 }
 
+type OTelConfig struct {
+	Enabled        bool
+	Endpoint       string
+	ServiceName    string
+	ServiceVersion string
+	Environment    string
+}
+
 var (
 	once     sync.Once
 	instance *Config
@@ -80,6 +89,11 @@ func Load() *Config {
 		viper.SetDefault("REDIS_DB", 0)
 		viper.SetDefault("CACHE_DASHBOARD_TTL_SECONDS", 60)
 		viper.SetDefault("CACHE_STOCK_HEALTH_TTL_SECONDS", 3600)
+		viper.SetDefault("OTEL_ENABLED", false)
+		viper.SetDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+		viper.SetDefault("OTEL_SERVICE_NAME", "backend-go")
+		viper.SetDefault("OTEL_SERVICE_VERSION", "1.0.0")
+		viper.SetDefault("OTEL_ENVIRONMENT", "development")
 
 		// Read from environment variables
 		viper.AutomaticEnv()
@@ -117,6 +131,13 @@ func Load() *Config {
 				RedisDB:               viper.GetInt("REDIS_DB"),
 				DashboardTTLSeconds:   viper.GetInt("CACHE_DASHBOARD_TTL_SECONDS"),
 				StockHealthTTLSeconds: viper.GetInt("CACHE_STOCK_HEALTH_TTL_SECONDS"),
+			},
+			OTel: OTelConfig{
+				Enabled:        viper.GetBool("OTEL_ENABLED"),
+				Endpoint:       viper.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
+				ServiceName:    viper.GetString("OTEL_SERVICE_NAME"),
+				ServiceVersion: viper.GetString("OTEL_SERVICE_VERSION"),
+				Environment:    viper.GetString("OTEL_ENVIRONMENT"),
 			},
 		}
 	})

@@ -65,6 +65,8 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - REDIS_DB=${REDIS_DB:-0}
       - CACHE_DASHBOARD_TTL_SECONDS=${CACHE_DASHBOARD_TTL_SECONDS:-60}
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=host.docker.internal:4317
     entrypoint: ["/app/entrypoint.sh"]
     command: ["/app/server"]
     ports:
