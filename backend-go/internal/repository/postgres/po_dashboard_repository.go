@@ -110,6 +110,7 @@ func (r *poRepository) getStatusSummariesByDate(ctx context.Context, filter *dom
 	        po_values AS (
 	            SELECT
 	                s.po_number,
+	                s.sku,
 	                CONCAT(s.po_number, '::', s.sku) AS po_sku_identifier,
 	                %s AS status_code,
 	                COALESCE(s.quantity_ordered, 0) AS quantity_ordered,
@@ -121,7 +122,7 @@ func (r *poRepository) getStatusSummariesByDate(ctx context.Context, filter *dom
 	        SELECT 
 	            status_code,
 	            COUNT(DISTINCT po_number) as po_count,
-	            COUNT(po_sku_identifier) as sku_count,
+	            COUNT(DISTINCT sku) as sku_count,
 	            COALESCE(SUM(quantity_ordered), 0) as total_qty,
 	            COALESCE(SUM(total_amount), 0) as total_value,
 	            COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400), 0) as avg_days,
@@ -182,7 +183,7 @@ func (r *poRepository) GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter
         SELECT 
             COALESCE(s.status, -1) AS status_code,
             COUNT(DISTINCT s.po_number) as po_count,
-            COUNT(*) as sku_count,
+            COUNT(DISTINCT s.sku) as sku_count,
             COALESCE(SUM(s.quantity_ordered), 0) as total_qty,
             COALESCE(SUM(s.total_amount), 0) as total_value
         FROM po_snapshots s
