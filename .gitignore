@@ -7,3 +7,6 @@ backend-go/data/seeds/
 backend/data/
 notebook/data/
 notebook/output/
+
+# Signoz folder ignored
+signoz

@@ -71,9 +71,10 @@ func (h *POHandler) UploadPO(c *gin.Context) {
 	})
 }
 
-// GetStores returns a list of all stores
+// GetStores returns a list of stores with optional search
 func (h *POHandler) GetStores(c *gin.Context) {
-	stores, err := h.poService.GetStores(c.Request.Context())
+	search := c.Query("search")
+	stores, err := h.poService.GetStores(c.Request.Context(), search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch stores"})
 		return
@@ -82,9 +83,10 @@ func (h *POHandler) GetStores(c *gin.Context) {
 	c.JSON(http.StatusOK, stores)
 }
 
-// GetBrands returns a list of all brands
+// GetBrands returns a list of brands with optional search
 func (h *POHandler) GetBrands(c *gin.Context) {
-	brands, err := h.poService.GetBrands(c.Request.Context())
+	search := c.Query("search")
+	brands, err := h.poService.GetBrands(c.Request.Context(), search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch brands"})
 		return

@@ -186,14 +186,14 @@ func (s *POService) GetStoreResults(ctx context.Context, storeName string) ([]*d
 	return s.repo.GetStoreResults(ctx, storeName)
 }
 
-// GetStores returns a list of all stores
-func (s *POService) GetStores(ctx context.Context) ([]*domain.Store, error) {
-	return s.repo.GetStores(ctx)
+// GetStores returns a list of stores with optional search
+func (s *POService) GetStores(ctx context.Context, search string) ([]*domain.Store, error) {
+	return s.repo.GetStores(ctx, search)
 }
 
-// GetBrands returns a list of all brands
-func (s *POService) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
-	return s.repo.GetBrands(ctx)
+// GetBrands returns a list of brands with optional search
+func (s *POService) GetBrands(ctx context.Context, search string) ([]*domain.Brand, error) {
+	return s.repo.GetBrands(ctx, search)
 }
 
 // GetSuppliers returns a paginated list of suppliers with optional search

@@ -112,15 +112,16 @@ func (r *poRepository) GetStoreResults(ctx context.Context, storeName string) ([
 	return results, nil
 }
 
-func (r *poRepository) GetStores(ctx context.Context) ([]*domain.Store, error) {
+func (r *poRepository) GetStores(ctx context.Context, search string) ([]*domain.Store, error) {
 	query := `
 		SELECT id, name, created_at, updated_at
 		FROM stores
+		WHERE ($1 = '' OR name ILIKE '%' || $1 || '%')
 		ORDER BY name
 	`
 
 	var stores []*domain.Store
-	err := sqlx.SelectContext(ctx, r.db, &stores, query)
+	err := sqlx.SelectContext(ctx, r.db, &stores, query, search)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list stores: %w", err)
 	}
@@ -128,16 +129,20 @@ func (r *poRepository) GetStores(ctx context.Context) ([]*domain.Store, error) {
 	return stores, nil
 }
 
-func (r *poRepository) GetBrands(ctx context.Context) ([]*domain.Brand, error) {
+func (r *poRepository) GetBrands(ctx context.Context, search string) ([]*domain.Brand, error) {
 	query := `
 		SELECT id, name, created_at, updated_at
 		FROM brands
+		WHERE ($1 = '' OR name ILIKE '%' || $1 || '%')
 		ORDER BY name
 	`
 
 	var brands []*domain.Brand
-	if err := sqlx.SelectContext(ctx, r.db, &brands, query); err != nil {
+	if err := sqlx.SelectContext(ctx, r.db, &brands, query, search); err != nil {
 		return nil, fmt.Errorf("failed to list brands: %w", err)
+	}
+	if brands == nil {
+		brands = []*domain.Brand{}
 	}
 
 	return brands, nil
