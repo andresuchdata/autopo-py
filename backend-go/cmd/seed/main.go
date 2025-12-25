@@ -24,6 +24,45 @@ type contextKey string
 
 const resetAppliedKey contextKey = "reset-applied"
 
+type masterSeedTargets struct {
+	Brands                bool
+	Suppliers             bool
+	Stores                bool
+	Products              bool
+	SupplierBrandMappings bool
+	ProductMappings       bool
+
+	brandSet                 bool
+	supplierSet              bool
+	storeSet                 bool
+	productSet               bool
+	supplierBrandMappingsSet bool
+	productMappingsSet       bool
+
+	includeMappingsLegacy bool
+}
+
+func (t *masterSeedTargets) ensureDefaults() {
+	baseExplicit := t.brandSet || t.supplierSet || t.storeSet || t.productSet
+	mappingExplicit := t.supplierBrandMappingsSet || t.productMappingsSet
+	anyExplicit := baseExplicit || mappingExplicit
+
+	if !anyExplicit {
+		t.Brands = true
+		t.Suppliers = true
+		t.Stores = true
+		t.Products = true
+		t.SupplierBrandMappings = t.includeMappingsLegacy
+		t.ProductMappings = t.includeMappingsLegacy
+		return
+	}
+
+	if t.includeMappingsLegacy && !mappingExplicit {
+		t.SupplierBrandMappings = true
+		t.ProductMappings = true
+	}
+}
+
 func newDBURLFlag() *cli.StringFlag {
 	return &cli.StringFlag{
 		Name:     "db-url",
@@ -438,8 +477,39 @@ func main() {
 						EnvVars: []string{"RESET_MASTER_SEED"},
 					},
 					&cli.BoolFlag{
-						Name:  "include-mappings",
-						Usage: "Seed supplier-brand and product mappings (default: skip)",
+						Name:    "include-mappings",
+						Usage:   "Seed supplier-brand and product mappings (default: skip)",
+						EnvVars: []string{"INCLUDE_MAPPINGS"},
+					},
+					&cli.BoolFlag{
+						Name:    "seed-brands",
+						Usage:   "Seed brands table",
+						EnvVars: []string{"MASTER_SEED_BRANDS"},
+					},
+					&cli.BoolFlag{
+						Name:    "seed-suppliers",
+						Usage:   "Seed suppliers table",
+						EnvVars: []string{"MASTER_SEED_SUPPLIERS"},
+					},
+					&cli.BoolFlag{
+						Name:    "seed-stores",
+						Usage:   "Seed stores table",
+						EnvVars: []string{"MASTER_SEED_STORES"},
+					},
+					&cli.BoolFlag{
+						Name:    "seed-products",
+						Usage:   "Seed products table",
+						EnvVars: []string{"MASTER_SEED_PRODUCTS"},
+					},
+					&cli.BoolFlag{
+						Name:    "seed-supplier-brand-mappings",
+						Usage:   "Seed supplier_brand_mappings table",
+						EnvVars: []string{"MASTER_SEED_SUPPLIER_BRAND_MAPPINGS"},
+					},
+					&cli.BoolFlag{
+						Name:    "seed-product-mappings",
+						Usage:   "Seed product_mappings table",
+						EnvVars: []string{"MASTER_SEED_PRODUCT_MAPPINGS"},
 					},
 				},
 				Before: initDB,
@@ -566,11 +636,36 @@ func main() {
 	}
 }
 
+func masterTargetsFromContext(c *cli.Context) masterSeedTargets {
+	targets := masterSeedTargets{
+		includeMappingsLegacy: c.Bool("include-mappings"),
+	}
+
+	set := func(flag string, value *bool, marker *bool) {
+		if c.IsSet(flag) {
+			*value = c.Bool(flag)
+			if marker != nil {
+				*marker = true
+			}
+		}
+	}
+
+	set("seed-brands", &targets.Brands, &targets.brandSet)
+	set("seed-suppliers", &targets.Suppliers, &targets.supplierSet)
+	set("seed-stores", &targets.Stores, &targets.storeSet)
+	set("seed-products", &targets.Products, &targets.productSet)
+	set("seed-supplier-brand-mappings", &targets.SupplierBrandMappings, &targets.supplierBrandMappingsSet)
+	set("seed-product-mappings", &targets.ProductMappings, &targets.productMappingsSet)
+
+	targets.ensureDefaults()
+	return targets
+}
+
 func runSeeder(c *cli.Context) error {
 	dbURL := c.String("db-url")
 	dataDir := c.String("data-dir")
 	resetMaster := c.Bool("reset-master")
-	includeMappings := c.Bool("include-mappings")
+	targets := masterTargetsFromContext(c)
 
 	// Initialize database connection
 	db, err := sql.Open("pgx", dbURL)
@@ -597,7 +692,7 @@ func runSeeder(c *cli.Context) error {
 	log.Println("Starting database seeding...")
 
 	// Seed master data
-	if err := seedMasterData(ctx, tx, dataDir, resetMaster, includeMappings); err != nil {
+	if err := seedMasterData(ctx, tx, dataDir, resetMaster, targets); err != nil {
 		return fmt.Errorf("failed to seed master data: %w", err)
 	}
 
@@ -610,46 +705,61 @@ func runSeeder(c *cli.Context) error {
 	return nil
 }
 
-func seedMasterData(ctx context.Context, tx *sql.Tx, dataDir string, reset bool, includeMappings bool) error {
+func seedMasterData(ctx context.Context, tx *sql.Tx, dataDir string, reset bool, targets masterSeedTargets) error {
 	if reset {
 		if err := resetMasterTables(ctx, tx); err != nil {
 			return fmt.Errorf("failed to reset master tables: %w", err)
 		}
 	}
 
+	targets.ensureDefaults()
+
+	seededProducts := false
+
 	// Seed brands
-	if err := seedTable(ctx, tx, "brands", []string{"name", "original_id"}, filepath.Join(dataDir, "brands.csv")); err != nil {
-		return fmt.Errorf("failed to seed brands: %w", err)
+	if targets.Brands {
+		if err := seedTable(ctx, tx, "brands", []string{"name", "original_id"}, filepath.Join(dataDir, "brands.csv")); err != nil {
+			return fmt.Errorf("failed to seed brands: %w", err)
+		}
 	}
 
 	// Seed suppliers
-	if err := seedTable(ctx, tx, "suppliers",
-		[]string{"name", "original_id"},
-		filepath.Join(dataDir, "suppliers.csv")); err != nil {
-		return fmt.Errorf("failed to seed suppliers: %w", err)
+	if targets.Suppliers {
+		if err := seedTable(ctx, tx, "suppliers",
+			[]string{"name", "original_id"},
+			filepath.Join(dataDir, "suppliers.csv")); err != nil {
+			return fmt.Errorf("failed to seed suppliers: %w", err)
+		}
 	}
 
 	// Seed stores
-	if err := seedTable(ctx, tx, "stores", []string{"name", "original_id"}, filepath.Join(dataDir, "stores.csv")); err != nil {
-		return fmt.Errorf("failed to seed stores: %w", err)
+	if targets.Stores {
+		if err := seedTable(ctx, tx, "stores", []string{"name", "original_id"}, filepath.Join(dataDir, "stores.csv")); err != nil {
+			return fmt.Errorf("failed to seed stores: %w", err)
+		}
 	}
 
 	// Still ensure products table has basic entries even when mappings are skipped
-	if err := seedProductsMaster(ctx, tx, dataDir); err != nil {
-		return fmt.Errorf("failed to seed products: %w", err)
+	if targets.Products {
+		if err := seedProductsMaster(ctx, tx, dataDir); err != nil {
+			return fmt.Errorf("failed to seed products: %w", err)
+		}
+		seededProducts = true
 	}
 
-	if includeMappings {
+	if targets.SupplierBrandMappings {
 		// Seed supplier_brand_mappings
 		if err := seedSupplierBrandMappings(ctx, tx, dataDir); err != nil {
 			return fmt.Errorf("failed to seed supplier brand mappings: %w", err)
 		}
+	}
 
-		// Seed master products from pricing reference before mapping
-		if err := seedProductsMaster(ctx, tx, dataDir); err != nil {
-			return fmt.Errorf("failed to seed products: %w", err)
+	if targets.ProductMappings {
+		if !seededProducts {
+			if err := seedProductsMaster(ctx, tx, dataDir); err != nil {
+				return fmt.Errorf("failed to seed products: %w", err)
+			}
 		}
-
 		// Seed product_mappings
 		if err := seedProductMappings(ctx, tx, dataDir); err != nil {
 			return fmt.Errorf("failed to seed product mappings: %w", err)

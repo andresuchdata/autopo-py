@@ -49,7 +49,7 @@ export function useBrandOptions(initialSearch = '') {
 
       try {
         // Load all brands since API doesn't support pagination
-        const response = await poService.getBrands(searchValue || undefined);
+        const response = await poService.getBrands({ search: searchValue || undefined });
 
         const rawItems = Array.isArray(response)
           ? response
