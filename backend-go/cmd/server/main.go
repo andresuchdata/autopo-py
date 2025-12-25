@@ -80,6 +80,9 @@ func main() {
 	router := api.NewRouter(&api.Services{
 		POService:          poService,
 		StockHealthService: stockHealthService,
+		StockHealthCache:   stockHealthCache,
+		DashboardCache:     dashboardCache,
+		LegacyDBConfig:     cfg.LegacyDatabase,
 	}, cfg.Server.AllowedOrigins)
 
 	srv := &http.Server{
