@@ -15,6 +15,7 @@ import (
 	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/drive"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/legacydb"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
 	stockhealth "github.com/andresuchdata/autopo-py/backend-go/internal/pipeline/stock_health"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -178,6 +179,43 @@ func stockHealthPipelineFlags() []cli.Flag {
 			Usage:   "Directory containing per-store top 100 SKU files (xlsx/csv). If empty, defaults to data/pipeline/stock_health/top_100_sku",
 			EnvVars: []string{"STOCK_HEALTH_TOP100_SKU_DIR"},
 		},
+		&cli.StringFlag{
+			Name:    "legacy-db-host",
+			Usage:   "Legacy CI3 MySQL database host (enables DB mode when provided)",
+			EnvVars: []string{"LEGACY_DB_HOST"},
+		},
+		&cli.StringFlag{
+			Name:    "legacy-db-port",
+			Usage:   "Legacy database port",
+			Value:   "3306",
+			EnvVars: []string{"LEGACY_DB_PORT"},
+		},
+		&cli.StringFlag{
+			Name:    "legacy-db-user",
+			Usage:   "Legacy database user",
+			EnvVars: []string{"LEGACY_DB_USER"},
+		},
+		&cli.StringFlag{
+			Name:    "legacy-db-password",
+			Usage:   "Legacy database password",
+			EnvVars: []string{"LEGACY_DB_PASSWORD"},
+		},
+		&cli.StringFlag{
+			Name:    "legacy-db-name",
+			Usage:   "Legacy database name",
+			EnvVars: []string{"LEGACY_DB_NAME"},
+		},
+		&cli.StringFlag{
+			Name:    "legacy-db-timezone",
+			Usage:   "Legacy database timezone",
+			Value:   "Asia/Jakarta",
+			EnvVars: []string{"LEGACY_DB_TIMEZONE"},
+		},
+		&cli.StringSliceFlag{
+			Name:    "legacy-store-ids",
+			Usage:   "Comma-separated list of store IDs to fetch from legacy DB (e.g. 7,8,9). If empty, fetches all active stores",
+			EnvVars: []string{"LEGACY_STORE_IDS"},
+		},
 	}
 }
 
@@ -209,11 +247,6 @@ func runStockHealthPipeline(c *cli.Context) error {
 		}
 	}
 
-	folderID := c.String("drive-folder-id")
-	if folderID == "" {
-		return fmt.Errorf("drive-folder-id is required")
-	}
-
 	downloadDir := c.String("download-dir")
 	intermediateDir := c.String("intermediate-dir")
 	outputDir := c.String("output-dir")
@@ -222,9 +255,108 @@ func runStockHealthPipeline(c *cli.Context) error {
 	snapshotDate := c.String("snapshot-date")
 	reuseLocal := c.Bool("reuse-local")
 
-	// Initialize Drive service from GOOGLE_DRIVE_CREDENTIALS_JSON env
+	// Check if legacy DB mode is enabled
+	legacyDBHost := c.String("legacy-db-host")
+	useLegacyDB := legacyDBHost != ""
+
 	var localFiles []string
-	if reuseLocal {
+
+	if useLegacyDB {
+		// Legacy DB mode: fetch data directly from CI3 MySQL database
+		if snapshotDate == "" {
+			return fmt.Errorf("snapshot-date is required when using legacy DB mode")
+		}
+
+		log.Printf("Legacy DB mode enabled: fetching stock health data from MySQL database")
+
+		// Build legacy DB config
+		legacyCfg := config.LegacyDatabaseConfig{
+			Host:     legacyDBHost,
+			Port:     c.String("legacy-db-port"),
+			User:     c.String("legacy-db-user"),
+			Password: c.String("legacy-db-password"),
+			DBName:   c.String("legacy-db-name"),
+			Timezone: c.String("legacy-db-timezone"),
+		}
+
+		// Connect to legacy database
+		legacyDB, err := legacydb.NewClient(legacyCfg)
+		if err != nil {
+			return fmt.Errorf("failed to connect to legacy database: %w", err)
+		}
+		defer legacyDB.Close()
+
+		repo := legacydb.NewStockHealthRepository(legacyDB)
+
+		// Parse snapshot date
+		parsedDate, err := time.Parse(inputDateFormat, snapshotDate)
+		if err != nil {
+			return fmt.Errorf("failed to parse snapshot date %s: %w", snapshotDate, err)
+		}
+
+		// Determine which stores to fetch
+		storeIDsFlag := c.StringSlice("legacy-store-ids")
+		var storeIDs []int
+
+		if len(storeIDsFlag) > 0 {
+			// Parse provided store IDs
+			for _, idStr := range storeIDsFlag {
+				var id int
+				if _, err := fmt.Sscanf(idStr, "%d", &id); err != nil {
+					return fmt.Errorf("invalid store ID %s: %w", idStr, err)
+				}
+				storeIDs = append(storeIDs, id)
+			}
+			log.Printf("Fetching data for %d specified stores", len(storeIDs))
+		} else {
+			// Fetch all active stores
+			storeIDs, err = repo.GetActiveStoreIDs(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get active store IDs: %w", err)
+			}
+			log.Printf("Fetching data for %d active stores", len(storeIDs))
+		}
+
+		// Create download directory for this snapshot date
+		dateDownloadDir := filepath.Join(downloadDir, snapshotDate)
+		if err := os.MkdirAll(dateDownloadDir, 0755); err != nil {
+			return fmt.Errorf("failed to create download directory: %w", err)
+		}
+
+		// Fetch and write CSV for each store
+		for _, storeID := range storeIDs {
+			log.Printf("Fetching data for store ID %d...", storeID)
+
+			rows, storeName, err := repo.FetchStoreSnapshot(ctx, storeID, parsedDate)
+			if err != nil {
+				log.Printf("Warning: failed to fetch store %d: %v (skipping)", storeID, err)
+				continue
+			}
+
+			if len(rows) == 0 {
+				log.Printf("Warning: no data found for store %d on %s (skipping)", storeID, snapshotDate)
+				continue
+			}
+
+			// Write CSV file
+			csvPath, err := legacydb.WriteStoreCSV(rows, storeName, snapshotDate, dateDownloadDir)
+			if err != nil {
+				log.Printf("Warning: failed to write CSV for store %d: %v (skipping)", storeID, err)
+				continue
+			}
+
+			localFiles = append(localFiles, csvPath)
+			log.Printf("Generated CSV for store %d (%s): %d rows -> %s", storeID, storeName, len(rows), filepath.Base(csvPath))
+		}
+
+		if len(localFiles) == 0 {
+			return fmt.Errorf("no data fetched from legacy database")
+		}
+
+		log.Printf("Successfully generated %d CSV files from legacy database", len(localFiles))
+
+	} else if reuseLocal {
+		// Reuse existing local files
 		log.Printf("Reusing existing files in %s (skip Drive download)", downloadDir)
 		var err error
 		localFiles, err = filepath.Glob(filepath.Join(downloadDir, "*.csv"))
@@ -232,6 +364,12 @@ func runStockHealthPipeline(c *cli.Context) error {
 			return fmt.Errorf("failed to list local files: %w", err)
 		}
 	} else {
+		// Drive mode: download from Google Drive
+		folderID := c.String("drive-folder-id")
+		if folderID == "" {
+			return fmt.Errorf("drive-folder-id is required (or use legacy DB mode with --legacy-db-host)")
+		}
+
 		credsJSON := os.Getenv("GOOGLE_DRIVE_CREDENTIALS_JSON")
 		if strings.TrimSpace(credsJSON) == "" {
 			return fmt.Errorf("GOOGLE_DRIVE_CREDENTIALS_JSON env is required")

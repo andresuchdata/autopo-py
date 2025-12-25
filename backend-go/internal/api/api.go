@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/api/handlers"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -15,6 +17,9 @@ import (
 type Services struct {
 	POService          *service.POService
 	StockHealthService *service.StockHealthService
+	StockHealthCache   cache.StockHealthCache
+	DashboardCache     cache.DashboardCache
+	LegacyDBConfig     config.LegacyDatabaseConfig
 }
 
 func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
@@ -81,6 +86,18 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 					dashboardGroup.GET("/items", poHandler.GetPOSnapshotItems)
 					dashboardGroup.GET("/supplier_items", poHandler.GetSupplierPOItems)
 				}
+			}
+		}
+
+		// ETL operations endpoints
+		if services.StockHealthCache != nil && services.DashboardCache != nil {
+			etlHandler := handlers.NewETLHandler(services.StockHealthCache, services.DashboardCache, services.LegacyDBConfig)
+			etlGroup := apiGroup.Group("/etl")
+			{
+				etlGroup.POST("/cache/invalidate/stock_health", etlHandler.InvalidateStockHealthCache)
+				etlGroup.POST("/cache/invalidate/po_snapshot", etlHandler.InvalidatePOSnapshotCache)
+				etlGroup.POST("/jobs/stock_data", etlHandler.TriggerStockDataETL)
+				etlGroup.GET("/status", etlHandler.GetETLStatus)
 			}
 		}
 	}

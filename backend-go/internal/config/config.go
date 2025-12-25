@@ -11,10 +11,11 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	App      AppConfig
-	Cache    CacheConfig
+	Server         ServerConfig
+	Database       DatabaseConfig
+	LegacyDatabase LegacyDatabaseConfig
+	App            AppConfig
+	Cache          CacheConfig
 }
 
 type ServerConfig struct {
@@ -32,6 +33,15 @@ type DatabaseConfig struct {
 	Password string
 	DBName   string
 	SSLMode  string
+}
+
+type LegacyDatabaseConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	DBName   string
+	Timezone string
 }
 
 type AppConfig struct {
@@ -80,6 +90,12 @@ func Load() *Config {
 		viper.SetDefault("REDIS_DB", 0)
 		viper.SetDefault("CACHE_DASHBOARD_TTL_SECONDS", 60)
 		viper.SetDefault("CACHE_STOCK_HEALTH_TTL_SECONDS", 3600)
+		viper.SetDefault("LEGACY_DB_HOST", "")
+		viper.SetDefault("LEGACY_DB_PORT", "3306")
+		viper.SetDefault("LEGACY_DB_USER", "")
+		viper.SetDefault("LEGACY_DB_PASSWORD", "")
+		viper.SetDefault("LEGACY_DB_NAME", "")
+		viper.SetDefault("LEGACY_DB_TIMEZONE", "Asia/Jakarta")
 
 		// Read from environment variables
 		viper.AutomaticEnv()
@@ -103,6 +119,14 @@ func Load() *Config {
 				Password: viper.GetString("DB_PASSWORD"),
 				DBName:   viper.GetString("DB_NAME"),
 				SSLMode:  viper.GetString("DB_SSLMODE"),
+			},
+			LegacyDatabase: LegacyDatabaseConfig{
+				Host:     viper.GetString("LEGACY_DB_HOST"),
+				Port:     viper.GetString("LEGACY_DB_PORT"),
+				User:     viper.GetString("LEGACY_DB_USER"),
+				Password: viper.GetString("LEGACY_DB_PASSWORD"),
+				DBName:   viper.GetString("LEGACY_DB_NAME"),
+				Timezone: viper.GetString("LEGACY_DB_TIMEZONE"),
 			},
 			App: AppConfig{
 				UploadDir: viper.GetString("APP_UPLOAD_DIR"),
