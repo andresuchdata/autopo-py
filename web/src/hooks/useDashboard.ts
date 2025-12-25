@@ -130,10 +130,9 @@ export function useDashboard() {
 
     const fetchMasterData = async () => {
       try {
-        const [brandsRes, storesRes, kategoriRes] = await Promise.all([
+        const [brandsRes, storesRes] = await Promise.all([
           poService.getBrands(),
           poService.getStores(),
-          stockHealthService.getKategoriBrands(),
         ]);
 
         if (!isMounted) return;
@@ -166,6 +165,31 @@ export function useDashboard() {
       isMounted = false;
     };
   }, [mapToOptions]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchBrandsByKategori = async () => {
+      try {
+        const params =
+          filters.kategoriBrands.length > 0
+            ? { kategoriBrand: filters.kategoriBrands }
+            : undefined;
+        const response = await poService.getBrands(params);
+        if (!isMounted) return;
+        const brandOpts = mapToOptions(response ?? []);
+        setMasterBrandOptions(brandOpts);
+      } catch (err) {
+        console.error('Failed to fetch brands for kategori filters:', err);
+      }
+    };
+
+    fetchBrandsByKategori();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [filters.kategoriBrands, mapToOptions]);
 
   const loadInitialData = useCallback(async () => {
     try {

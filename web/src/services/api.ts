@@ -94,9 +94,14 @@ export const poService = {
         }
     },
 
-    getBrands: async (search?: string) => {
+    getBrands: async (params?: { search?: string; kategoriBrand?: string[] }) => {
         try {
-            const query = buildQueryParams({ search });
+            const query = buildQueryParams({
+                search: params?.search,
+                kategori_brand: params?.kategoriBrand && params.kategoriBrand.length > 0
+                    ? params.kategoriBrand.join(',')
+                    : undefined,
+            });
             const response = await api.get('/po/brands', { params: query });
             return response.data;
         } catch (error) {
