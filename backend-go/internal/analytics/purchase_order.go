@@ -14,6 +14,13 @@ import (
 )
 
 func makePOSnapshotKey(rec poSnapshotRecord) poSnapshotKey {
+	var brandID int64
+	var brandValid bool
+	if rec.brandID.Valid {
+		brandID = rec.brandID.Int64
+		brandValid = true
+	}
+
 	var supplierID int64
 	var supplierValid bool
 	if rec.supplierID.Valid {
@@ -24,7 +31,8 @@ func makePOSnapshotKey(rec poSnapshotRecord) poSnapshotKey {
 		snapshotTime:  rec.snapshotTime,
 		poNumber:      rec.poNumber,
 		sku:           rec.sku,
-		brandID:       rec.brandID,
+		brandID:       brandID,
+		brandValid:    brandValid,
 		storeID:       rec.storeID,
 		supplierID:    supplierID,
 		supplierValid: supplierValid,
@@ -163,10 +171,9 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 		}
 
 		brandName := strings.TrimSpace(record[colMap["Brand"]])
-		if brandName == "" {
-			return fmt.Errorf("record missing brand name")
+		if brandName != "" {
+			brandNames[strings.ToLower(brandName)] = brandName
 		}
-		brandNames[strings.ToLower(brandName)] = brandName
 
 		storeName := strings.TrimSpace(record[colMap["Store"]])
 		if storeName == "" {
@@ -242,9 +249,13 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 			return fmt.Errorf("store %s not resolved", raw.storeName)
 		}
 
-		brandID, ok := brandIDs[strings.ToLower(raw.brandName)]
-		if !ok {
-			return fmt.Errorf("brand %s not resolved", raw.brandName)
+		var brandID sql.NullInt64
+		if raw.brandName != "" {
+			if id, ok := brandIDs[strings.ToLower(raw.brandName)]; ok {
+				brandID = sql.NullInt64{Int64: int64(id), Valid: true}
+			} else {
+				return fmt.Errorf("brand %s not resolved", raw.brandName)
+			}
 		}
 
 		var supplierID sql.NullInt64

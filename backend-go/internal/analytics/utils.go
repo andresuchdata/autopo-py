@@ -176,6 +176,7 @@ func toNullableInt64(v sql.NullInt64) interface{} {
 	if v.Valid {
 		return v.Int64
 	}
+
 	return nil
 }
 

@@ -103,6 +103,7 @@ type SupplierPerformanceResponse struct {
 // DashboardSummary aggregates all dashboard data
 type DashboardSummary struct {
 	StatusSummaries     []POStatusSummary     `json:"status_summaries"`
+	Totals              *PODashboardTotals    `json:"totals,omitempty"`
 	LifecycleFunnel     []POLifecycleFunnel   `json:"lifecycle_funnel"`
 	Trends              []POTrend             `json:"trends"`
 	Aging               []POAging             `json:"aging"`
@@ -116,6 +117,14 @@ type DashboardFilter struct {
 	StoreIDs     []int64 `json:"store_ids"`
 	BrandIDs     []int64 `json:"brand_ids"`
 	SupplierIDs  []int64 `json:"supplier_ids"`
+}
+
+// PODashboardTotals represents aggregated counts across latest snapshot
+type PODashboardTotals struct {
+	TotalPOs   int     `json:"total_pos"`
+	TotalSKU   int     `json:"total_sku"`
+	TotalQty   int     `json:"total_qty"`
+	TotalValue float64 `json:"total_value"`
 }
 
 // POSnapshotItem represents a single PO snapshot item for the detail dialog

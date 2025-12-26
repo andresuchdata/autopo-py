@@ -32,34 +32,31 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	baseQuery := fmt.Sprintf(`
-        WITH latest_snapshot AS (
-            SELECT
+        WITH filtered_snapshots AS (
+            SELECT *
+            FROM po_snapshots s
+            WHERE s.po_number <> '' %s
+        ),
+        latest_day AS (
+            SELECT MAX(time::date) AS latest_date
+            FROM filtered_snapshots
+        ),
+        latest_snapshot AS (
+            SELECT 
                 po_number,
                 sku,
-                status,
-                quantity_ordered,
-                COALESCE(total_amount, 0) as total_amount,
-                po_released_at,
-                po_sent_at,
-                po_approved_at,
-                po_arrived_at,
-                po_received_at,
-                supplier_id,
-                GREATEST(
-                    COALESCE(po_released_at, TIMESTAMP 'epoch'),
-                    COALESCE(po_sent_at, TIMESTAMP 'epoch'),
-                    COALESCE(po_approved_at, TIMESTAMP 'epoch'),
-                    COALESCE(po_arrived_at, TIMESTAMP 'epoch'),
-                    COALESCE(po_received_at, TIMESTAMP 'epoch'),
-                    time
-                ) as last_status_change_at
-            FROM (
-                SELECT *,
-                    ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
-                FROM po_snapshots s
-                WHERE po_number <> '' %s
-            ) s
-            WHERE rn = 1
+                MAX(time) AS latest_time
+            FROM filtered_snapshots
+            WHERE time::date = (SELECT latest_date FROM latest_day)
+            GROUP BY po_number, sku
+        ),
+        current_snapshots AS (
+            SELECT fs.*
+            FROM filtered_snapshots fs
+            JOIN latest_snapshot ls 
+              ON fs.po_number = ls.po_number 
+             AND fs.sku = ls.sku 
+             AND fs.time = ls.latest_time
         ),
         po_aggregate AS (
             SELECT
@@ -74,7 +71,7 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
                 MAX(po_received_at) as po_received_at,
                 MAX(last_status_change_at) as last_status_change_at,
                 MAX(supplier_id) as supplier_id
-            FROM latest_snapshot
+            FROM current_snapshots
             GROUP BY po_number
         ),
         po_days AS (

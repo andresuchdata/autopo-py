@@ -92,7 +92,7 @@ type poSnapshotRecord struct {
 	productID        int
 	sku              string
 	productName      string
-	brandID          int
+	brandID          sql.NullInt64
 	storeID          int
 	supplierID       sql.NullInt64
 	quantityOrdered  int
@@ -120,7 +120,8 @@ type poSnapshotKey struct {
 	snapshotTime  time.Time
 	poNumber      string
 	sku           string
-	brandID       int
+	brandID       int64
+	brandValid    bool
 	storeID       int
 	supplierID    int64
 	supplierValid bool

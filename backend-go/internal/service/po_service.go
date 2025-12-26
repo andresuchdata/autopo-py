@@ -214,7 +214,7 @@ func (s *POService) GetDashboardSummary(ctx context.Context, filter *domain.Dash
 		log.Warn().Err(err).Msg("po service: dashboard cache get failed")
 	}
 
-	summary, err := s.repo.GetDashboardSummary(ctx, filter)
+	summary, err := s.repo.GetDashboardSummaryV2(ctx, filter)
 	if err != nil {
 		return nil, err
 	}

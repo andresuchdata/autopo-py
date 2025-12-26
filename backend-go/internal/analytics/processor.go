@@ -90,7 +90,7 @@ func (p *AnalyticsProcessor) flushPOSnapshotBatch(ctx context.Context, tx *sql.T
 			rec.productID,
 			rec.sku,
 			rec.productName,
-			rec.brandID,
+			toNullableInt64(rec.brandID),
 			rec.storeID,
 			toNullableInt64(rec.supplierID),
 			rec.quantityOrdered,
