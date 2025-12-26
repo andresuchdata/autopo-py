@@ -147,12 +147,13 @@ func (r *StockHealthRepository) FetchStoreSnapshot(ctx context.Context, storeID 
 	return results, storeName, nil
 }
 
-// GetActiveStoreIDs returns a list of active store IDs from the legacy database
+// GetActiveStoreIDs returns a list of store IDs from the legacy database
+// Returns all stores without filtering by status (matching the original query behavior)
 func (r *StockHealthRepository) GetActiveStoreIDs(ctx context.Context) ([]int, error) {
-	query := `SELECT id_store FROM ap_store WHERE status = 1 ORDER BY id_store`
+	query := `SELECT id_store FROM ap_store ORDER BY id_store`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query active stores: %w", err)
+		return nil, fmt.Errorf("failed to query stores: %w", err)
 	}
 	defer rows.Close()
 
