@@ -154,6 +154,7 @@ export function EnhancedDashboard() {
   const overstockBreakdown = data?.overstockBreakdown ?? EMPTY_OVERSTOCK_BREAKDOWN;
 
   const isInitialLoading = loading && !data;
+  const isLoading = loading || refreshing;
 
   if (error) {
     return <div className="text-destructive p-6 border border-destructive/20 rounded-xl bg-destructive/10 max-w-2xl mx-auto mt-20 text-center font-medium">Error: {error}</div>;
@@ -181,7 +182,7 @@ export function EnhancedDashboard() {
         <div className="flex items-center gap-3">
           <Button
             onClick={handleRefresh}
-            disabled={loading || refreshing}
+            disabled={isLoading}
             variant="outline"
             size="sm"
             className="gap-2"
@@ -222,7 +223,7 @@ export function EnhancedDashboard() {
 
       <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <section>
-          <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={loading} />
+          <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={isLoading} />
         </section>
 
         <section>
@@ -230,7 +231,7 @@ export function EnhancedDashboard() {
             <div className="h-6 w-1 bg-primary rounded-full" />
             <h3 className="text-xl font-semibold tracking-tight text-foreground">Overstock Deep Dive</h3>
           </div>
-          <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} />
+          <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} isLoading={isLoading} />
         </section>
 
         <section>
@@ -242,7 +243,7 @@ export function EnhancedDashboard() {
             charts={charts}
             brandBreakdown={brandBreakdown}
             storeBreakdown={storeBreakdown}
-            isLoading={loading}
+            isLoading={isLoading}
           />
         </section>
       </div>

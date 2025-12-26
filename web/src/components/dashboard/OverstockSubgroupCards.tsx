@@ -3,6 +3,7 @@ import type { DashboardOverstockSummary, OverstockCategory } from "@/services/da
 import type { SummaryGrouping } from "@/types/stockHealth";
 import { formatCurrencyIDR, formatNumberID, formatPercentage } from "@/utils/formatters";
 import { Scale, Weight, Feather } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const CATEGORY_CONFIG: Record<OverstockCategory, { label: string; description: string; color: string; borderColor: string, icon: any }> = {
   ringan: {
@@ -33,6 +34,7 @@ const CATEGORY_ORDER: OverstockCategory[] = ["ringan", "sedang", "berat"];
 interface OverstockSubgroupCardsProps {
   breakdown: DashboardOverstockSummary;
   onCardClick?: (category: OverstockCategory, grouping: SummaryGrouping) => void;
+  isLoading?: boolean;
 }
 
 interface RowConfig {
@@ -59,7 +61,31 @@ const formatValue = (value: number, type: RowConfig["type"]) => {
   return formatNumberID(value);
 };
 
-export function OverstockSubgroupCards({ breakdown, onCardClick }: OverstockSubgroupCardsProps) {
+export function OverstockSubgroupCards({ breakdown, onCardClick, isLoading }: OverstockSubgroupCardsProps) {
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-[140px_repeat(3,1fr)] items-stretch">
+          {/* Header Skeletons */}
+          <div className="hidden md:block" />
+          {CATEGORY_ORDER.map((category) => (
+            <Skeleton key={category} className="h-24 w-full rounded-xl bg-muted/40" />
+          ))}
+          
+          {/* Row Skeletons */}
+          {[1, 2, 3].map((row) => (
+            <div key={row} className="contents">
+              <Skeleton className="h-20 w-full rounded-xl" />
+              {CATEGORY_ORDER.map((_, idx) => (
+                <Skeleton key={idx} className="h-32 w-full rounded-xl bg-card/40" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-[140px_repeat(3,1fr)] items-stretch">

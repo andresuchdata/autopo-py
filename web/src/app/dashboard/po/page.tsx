@@ -36,6 +36,8 @@ function PODashboardContent() {
     const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
     const [statusModalOpen, setStatusModalOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    
+    const isLoading = loading || refreshing;
     const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter } = usePODashboardFilter();
 
     useEffect(() => {
@@ -120,7 +122,7 @@ function PODashboardContent() {
         }
     };
 
-    if (!loading && (error || !data)) {
+    if (!isLoading && (error || !data)) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
                 <div className="text-red-500">{error || 'No data available'}</div>
@@ -201,7 +203,7 @@ function PODashboardContent() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end lg:justify-end w-full lg:w-auto">
                     <Button
                         onClick={handleRefresh}
-                        disabled={loading || refreshing}
+                        disabled={isLoading}
                         variant="outline"
                         size="sm"
                         className="gap-2"
@@ -209,13 +211,13 @@ function PODashboardContent() {
                         <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                         {refreshing ? 'Refreshing...' : 'Refresh Data'}
                     </Button>
-                    <PODashboardFilter loading={loading} />
+                    <PODashboardFilter loading={isLoading} />
                 </div>
                 </div>
 
             {/* 1. Status Summary Cards */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                {loading
+                {isLoading
                     ? Array.from({ length: 6 }).map((_, idx) => (
                           <div key={idx} className="space-y-3 rounded-xl border border-border bg-card p-4">
                               <Skeleton className="h-4 w-24" />
@@ -258,7 +260,7 @@ function PODashboardContent() {
                     </div>
                 </div>
 
-                {loading ? (
+                {isLoading ? (
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                         {Array.from({ length: 4 }).map((_, idx) => (
                             <div key={idx} className="rounded-2xl border border-border/60 bg-card/60 p-4">
@@ -326,12 +328,12 @@ function PODashboardContent() {
 
             {/* 2. Charts Row 1: Funnel & Trend */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {loading ? (
+                {isLoading ? (
                     <Skeleton className="h-[320px] w-full rounded-xl" />
                 ) : (
                     <POFunnelChart data={funnelData} />
                 )}
-                {loading ? (
+                {isLoading ? (
                     <Skeleton className="h-[320px] w-full rounded-xl" />
                 ) : (
                     <POTrendChart data={trendData} />
@@ -341,12 +343,12 @@ function PODashboardContent() {
 
             {/* 3. Charts Row 2: Aging & Supplier Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {loading ? (
+                {isLoading ? (
                     <Skeleton className="h-[360px] w-full rounded-xl" />
                 ) : (
                     <POAgingTable initialItems={agingData} />
                 )}
-                {loading ? (
+                {isLoading ? (
                     <Skeleton className="h-[360px] w-full rounded-xl" />
                 ) : (
                     <SupplierPerformanceChart initialItems={supplierPerformanceData} />
