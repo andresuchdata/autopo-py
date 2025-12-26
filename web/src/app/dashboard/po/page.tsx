@@ -17,6 +17,12 @@ import { Button } from '@/components/ui/button';
 
 interface DashboardData {
     status_summaries: any[];
+    totals?: {
+        total_pos: number;
+        total_sku: number;
+        total_qty: number;
+        total_value: number;
+    };
     lifecycle_funnel: any[];
     trends: any[];
     aging: any[];
@@ -155,6 +161,15 @@ function PODashboardContent() {
     const supplierPerformanceData = data?.supplier_performance ?? [];
 
     const totals = useMemo(() => {
+        if (data?.totals) {
+            return {
+                totalPOs: data.totals.total_pos ?? 0,
+                totalValue: data.totals.total_value ?? 0,
+                totalQty: data.totals.total_qty ?? 0,
+                totalSku: data.totals.total_sku ?? 0,
+            };
+        }
+
         if (!statusSummaries.length) {
             return { totalPOs: 0, totalValue: 0, totalQty: 0, totalSku: 0 };
         }
@@ -169,7 +184,7 @@ function PODashboardContent() {
             },
             { totalPOs: 0, totalValue: 0, totalQty: 0, totalSku: 0 }
         );
-    }, [statusSummaries]);
+    }, [data?.totals, statusSummaries]);
 
     return (
         <div className="min-h-screen bg-background text-foreground p-6 space-y-6 overflow-x-hidden">
