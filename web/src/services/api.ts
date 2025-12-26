@@ -409,3 +409,41 @@ export const invalidatePOSnapshotCache = async () => {
         throw error;
     }
 };
+
+export const storageService = {
+    getFiles: async (prefix?: string) => {
+        const response = await api.get('/storage/files', { params: { prefix } });
+        return response.data;
+    },
+
+    downloadFile: async (key: string) => {
+        const response = await api.get('/storage/download', {
+            params: { key },
+            responseType: 'blob',
+        });
+        return response.data;
+    },
+
+    downloadAll: async (prefix: string) => {
+        const response = await api.get('/storage/download_all', {
+            params: { prefix },
+            responseType: 'blob',
+        });
+        return response.data;
+    },
+
+    getFileContent: async (key: string) => {
+        const response = await api.get('/storage/content', { params: { key } });
+        return response.data;
+    },
+
+    deleteFile: async (key: string) => {
+        const response = await api.delete('/storage/file', { params: { key } });
+        return response.data;
+    },
+
+    deletePrefix: async (prefix: string) => {
+        const response = await api.delete('/storage/prefix', { params: { prefix } });
+        return response.data;
+    },
+};

@@ -15,6 +15,7 @@ import (
 
 // generateAndUploadM2Format creates M2 format CSV from the complete output and uploads it
 // M2 format: Toko, SKU, HPP, final_updated_regular_po_qty (filtered for qty > 0)
+// Creates both a global file and per-store files
 func (p *StockHealthPipeline) generateAndUploadM2Format(ctx context.Context, snapshotDate time.Time, completeCSVPath string) error {
 	if p.storageClient == nil || p.cloudLayout == nil {
 		return nil
@@ -52,14 +53,19 @@ func (p *StockHealthPipeline) generateAndUploadM2Format(ctx context.Context, sna
 		return fmt.Errorf("missing required columns for M2 format")
 	}
 
-	// Build M2 CSV in memory
+	// Build M2 CSV in memory (global file)
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
+	w.Comma = ';' // Use semicolon as separator for Indonesian locale
 
 	// Write M2 header
 	if err := w.Write([]string{"Toko", "SKU", "HPP", "final_updated_regular_po_qty"}); err != nil {
 		return err
 	}
+
+	// Store-based buffers
+	storeBuffers := make(map[string]*bytes.Buffer)
+	storeWriters := make(map[string]*csv.Writer)
 
 	// Filter and write rows where final_updated_regular_po_qty > 0
 	for {
@@ -79,7 +85,7 @@ func (p *StockHealthPipeline) generateAndUploadM2Format(ctx context.Context, sna
 			continue
 		}
 
-		// Write filtered row
+		// Get field values
 		get := func(idx int) string {
 			if idx < 0 || idx >= len(record) {
 				return ""
@@ -87,22 +93,51 @@ func (p *StockHealthPipeline) generateAndUploadM2Format(ctx context.Context, sna
 			return strings.TrimSpace(record[idx])
 		}
 
-		if err := w.Write([]string{
-			get(idxStore),
+		storeName := get(idxStore)
+		rowData := []string{
+			storeName,
 			get(idxSKU),
 			get(idxHPP),
 			get(idxFinalQty),
-		}); err != nil {
+		}
+
+		// Write to global file
+		if err := w.Write(rowData); err != nil {
 			return err
+		}
+
+		// Write to store-specific file
+		if storeName != "" {
+			if _, exists := storeBuffers[storeName]; !exists {
+				storeBuffers[storeName] = &bytes.Buffer{}
+				storeWriters[storeName] = csv.NewWriter(storeBuffers[storeName])
+				storeWriters[storeName].Comma = ';'
+				// Write header for store file
+				if err := storeWriters[storeName].Write([]string{"Toko", "SKU", "HPP", "final_updated_regular_po_qty"}); err != nil {
+					return err
+				}
+			}
+			if err := storeWriters[storeName].Write(rowData); err != nil {
+				return err
+			}
 		}
 	}
 
+	// Flush global writer
 	w.Flush()
 	if err := w.Error(); err != nil {
 		return err
 	}
 
-	// Upload to cloud storage under output/m2/ folder
+	// Flush all store writers
+	for storeName, writer := range storeWriters {
+		writer.Flush()
+		if err := writer.Error(); err != nil {
+			return fmt.Errorf("failed to flush store writer for %s: %w", storeName, err)
+		}
+	}
+
+	// Upload global M2 file to cloud storage
 	baseName := filepath.Base(completeCSVPath)
 	key := p.cloudLayout.Path("output", "m2", fmt.Sprintf("%04d", snapshotDate.Year()),
 		fmt.Sprintf("%02d", int(snapshotDate.Month())),
@@ -113,11 +148,28 @@ func (p *StockHealthPipeline) generateAndUploadM2Format(ctx context.Context, sna
 	}
 
 	log.Printf("[%s] Uploaded M2 format to %s", p.Name(), key)
+
+	// Upload store-based M2 files
+	for storeName, storeBuf := range storeBuffers {
+		// Create store-specific filename
+		storeFileName := strings.TrimSuffix(baseName, filepath.Ext(baseName)) + "_" + normalizeStoreNameForFile(storeName) + filepath.Ext(baseName)
+		storeKey := p.cloudLayout.Path("output", "m2", fmt.Sprintf("%04d", snapshotDate.Year()),
+			fmt.Sprintf("%02d", int(snapshotDate.Month())),
+			fmt.Sprintf("%02d", snapshotDate.Day()), storeFileName)
+
+		if err := p.storageClient.UploadObject(ctx, storeKey, storeBuf.Bytes()); err != nil {
+			log.Printf("Warning: failed to upload M2 format for store %s: %v", storeName, err)
+			continue
+		}
+		log.Printf("[%s] Uploaded M2 format for store %s to %s", p.Name(), storeName, storeKey)
+	}
+
 	return nil
 }
 
 // generateAndUploadEmergencyFormat creates Emergency PO format CSV and uploads it
 // Emergency format: Brand, SKU, Nama, Toko, HPP, emergency_po_qty, emergency_po_cost (filtered for qty > 0)
+// Creates both a global file and per-store files
 func (p *StockHealthPipeline) generateAndUploadEmergencyFormat(ctx context.Context, snapshotDate time.Time, completeCSVPath string) error {
 	if p.storageClient == nil || p.cloudLayout == nil {
 		return nil
@@ -159,14 +211,19 @@ func (p *StockHealthPipeline) generateAndUploadEmergencyFormat(ctx context.Conte
 		return fmt.Errorf("missing required columns for Emergency format")
 	}
 
-	// Build Emergency CSV in memory
+	// Build Emergency CSV in memory (global file)
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
+	w.Comma = ';' // Use semicolon as separator for Indonesian locale
 
 	// Write Emergency header
 	if err := w.Write([]string{"Brand", "SKU", "Nama", "Toko", "HPP", "emergency_po_qty", "emergency_po_cost"}); err != nil {
 		return err
 	}
+
+	// Store-based buffers
+	storeBuffers := make(map[string]*bytes.Buffer)
+	storeWriters := make(map[string]*csv.Writer)
 
 	// Filter and write rows where emergency_po_qty > 0
 	for {
@@ -186,7 +243,7 @@ func (p *StockHealthPipeline) generateAndUploadEmergencyFormat(ctx context.Conte
 			continue
 		}
 
-		// Write filtered row
+		// Get field values
 		get := func(idx int) string {
 			if idx < 0 || idx >= len(record) {
 				return ""
@@ -194,25 +251,54 @@ func (p *StockHealthPipeline) generateAndUploadEmergencyFormat(ctx context.Conte
 			return strings.TrimSpace(record[idx])
 		}
 
-		if err := w.Write([]string{
+		storeName := get(idxStore)
+		rowData := []string{
 			get(idxBrand),
 			get(idxSKU),
 			get(idxNama),
-			get(idxStore),
+			storeName,
 			get(idxHPP),
 			get(idxEmergencyQty),
 			get(idxEmergencyCost),
-		}); err != nil {
+		}
+
+		// Write to global file
+		if err := w.Write(rowData); err != nil {
 			return err
+		}
+
+		// Write to store-specific file
+		if storeName != "" {
+			if _, exists := storeBuffers[storeName]; !exists {
+				storeBuffers[storeName] = &bytes.Buffer{}
+				storeWriters[storeName] = csv.NewWriter(storeBuffers[storeName])
+				storeWriters[storeName].Comma = ';'
+				// Write header for store file
+				if err := storeWriters[storeName].Write([]string{"Brand", "SKU", "Nama", "Toko", "HPP", "emergency_po_qty", "emergency_po_cost"}); err != nil {
+					return err
+				}
+			}
+			if err := storeWriters[storeName].Write(rowData); err != nil {
+				return err
+			}
 		}
 	}
 
+	// Flush global writer
 	w.Flush()
 	if err := w.Error(); err != nil {
 		return err
 	}
 
-	// Upload to cloud storage under output/emergency/ folder
+	// Flush all store writers
+	for storeName, writer := range storeWriters {
+		writer.Flush()
+		if err := writer.Error(); err != nil {
+			return fmt.Errorf("failed to flush store writer for %s: %w", storeName, err)
+		}
+	}
+
+	// Upload global Emergency file to cloud storage
 	baseName := filepath.Base(completeCSVPath)
 	key := p.cloudLayout.Path("output", "emergency", fmt.Sprintf("%04d", snapshotDate.Year()),
 		fmt.Sprintf("%02d", int(snapshotDate.Month())),
@@ -223,5 +309,21 @@ func (p *StockHealthPipeline) generateAndUploadEmergencyFormat(ctx context.Conte
 	}
 
 	log.Printf("[%s] Uploaded Emergency format to %s", p.Name(), key)
+
+	// Upload store-based Emergency files
+	for storeName, storeBuf := range storeBuffers {
+		// Create store-specific filename
+		storeFileName := strings.TrimSuffix(baseName, filepath.Ext(baseName)) + "_" + normalizeStoreNameForFile(storeName) + filepath.Ext(baseName)
+		storeKey := p.cloudLayout.Path("output", "emergency", fmt.Sprintf("%04d", snapshotDate.Year()),
+			fmt.Sprintf("%02d", int(snapshotDate.Month())),
+			fmt.Sprintf("%02d", snapshotDate.Day()), storeFileName)
+
+		if err := p.storageClient.UploadObject(ctx, storeKey, storeBuf.Bytes()); err != nil {
+			log.Printf("Warning: failed to upload Emergency format for store %s: %v", storeName, err)
+			continue
+		}
+		log.Printf("[%s] Uploaded Emergency format for store %s to %s", p.Name(), storeName, storeKey)
+	}
+
 	return nil
 }

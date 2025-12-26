@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	stockhealth "github.com/andresuchdata/autopo-py/backend-go/internal/pipeline/stock_health"
 )
@@ -28,6 +29,7 @@ func WriteStoreCSV(rows []stockhealth.RawStockRow, storeName, snapshotDate, outp
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
+	writer.Comma = ';' // Use semicolon for Indonesian locale
 	defer writer.Flush()
 
 	// Write header matching the subset of columns needed for PO calculation
@@ -81,17 +83,50 @@ func WriteStoreCSV(rows []stockhealth.RawStockRow, storeName, snapshotDate, outp
 	return filePath, nil
 }
 
-func formatFloat(f float64) string {
-	// Format with 2 decimal places, removing trailing zeros
-	s := strconv.FormatFloat(f, 'f', 2, 64)
-	// Remove trailing zeros after decimal point
-	if len(s) > 0 && s[len(s)-1] == '0' {
-		for len(s) > 0 && s[len(s)-1] == '0' {
-			s = s[:len(s)-1]
-		}
-		if len(s) > 0 && s[len(s)-1] == '.' {
-			s = s[:len(s)-1]
-		}
+func formatFloat(v float64) string {
+	// Use Indonesian locale conventions: thousands separator as dot and decimal separator as comma.
+	// Matching the logic from stock_health/util.go but simplified if needed.
+	s := strconv.FormatFloat(v, 'f', 2, 64)
+	parts := strings.Split(s, ".")
+	intPart := parts[0]
+	fracPart := ""
+	if len(parts) > 1 {
+		fracPart = parts[1]
 	}
-	return s
+
+	// Format integer part with dot as thousands separator
+	if len(intPart) > 3 {
+		var buf []byte
+		count := 0
+		for i := len(intPart) - 1; i >= 0; i-- {
+			buf = append(buf, intPart[i])
+			count++
+			if count == 3 && i != 0 {
+				buf = append(buf, '.')
+				count = 0
+			}
+		}
+		// Reverse buf
+		for i, j := 0, len(buf)-1; i < j; i, j = i+1, j-1 {
+			buf[i], buf[j] = buf[j], buf[i]
+		}
+		intPart = string(buf)
+	}
+
+	res := intPart
+	if v < 0 {
+		// handle negative if needed, though unlikely for these fields
+	}
+
+	// For legacy compatibility, we might want to strip trailing zeros, but the request says "comma as decimal".
+	// Let's keep 2 decimals for consistency unless it's .00
+	if fracPart == "00" {
+		return res
+	}
+	// Strip one trailing zero if it's there
+	if strings.HasSuffix(fracPart, "0") {
+		fracPart = fracPart[:1]
+	}
+
+	return res + "," + fracPart
 }

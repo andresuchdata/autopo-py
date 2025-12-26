@@ -35,6 +35,28 @@ func normalizeStoreNameForSupplier(name string) string {
 	return strings.TrimSpace(upper)
 }
 
+// normalizeStoreNameForFile creates a filesystem-safe version of store name for file naming
+func normalizeStoreNameForFile(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "unknown"
+	}
+	// Replace spaces and special characters with underscores
+	replacer := strings.NewReplacer(
+		" ", "_",
+		"/", "_",
+		"\\", "_",
+		":", "_",
+		"*", "_",
+		"?", "_",
+		"\"", "_",
+		"<", "_",
+		">", "_",
+		"|", "_",
+	)
+	return strings.ToLower(replacer.Replace(name))
+}
+
 // getStoreNameFromGenericFilename extracts store name from filename
 func getStoreNameFromGenericFilename(path string, inputDateFormat string) string {
 	base := filepath.Base(path)

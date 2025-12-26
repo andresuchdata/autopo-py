@@ -33,6 +33,9 @@ type ObjectStorage interface {
 	ListObjects(ctx context.Context, prefix string) ([]ObjectInfo, error)
 	DownloadObject(ctx context.Context, key string, destPath string) error
 	UploadObject(ctx context.Context, key string, content []byte) error
+	DeleteObject(ctx context.Context, key string) error
+	DeletePrefix(ctx context.Context, prefix string) error
+	GetObjectContent(ctx context.Context, key string) ([]byte, error)
 }
 
 type s3Client struct {
@@ -84,6 +87,37 @@ func (s *s3Client) UploadObject(ctx context.Context, key string, content []byte)
 		return fmt.Errorf("failed to upload %s: %w", key, err)
 	}
 	return nil
+}
+
+// DeleteObject implements [ObjectStorage].
+func (s *s3Client) DeleteObject(ctx context.Context, key string) error {
+	if err := s.backend.DeleteObject(key); err != nil {
+		return fmt.Errorf("failed to delete %s: %w", key, err)
+	}
+	return nil
+}
+
+// DeletePrefix implements [ObjectStorage].
+func (s *s3Client) DeletePrefix(ctx context.Context, prefix string) error {
+	objects, err := s.ListObjects(ctx, prefix)
+	if err != nil {
+		return err
+	}
+	for _, obj := range objects {
+		if err := s.DeleteObject(ctx, obj.Key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetObjectContent implements [ObjectStorage].
+func (s *s3Client) GetObjectContent(ctx context.Context, key string) ([]byte, error) {
+	obj, err := s.backend.GetObject(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get content of %s: %w", key, err)
+	}
+	return obj.Content, nil
 }
 
 // NewS3Client builds a chartmuseum-backed S3 client using the provided configuration.

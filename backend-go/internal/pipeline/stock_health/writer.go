@@ -15,6 +15,7 @@ import (
 func serializeRawStockRows(header []string, rows []RawStockRow) ([]byte, error) {
 	var buf bytes.Buffer
 	writer := csv.NewWriter(&buf)
+	writer.Comma = ';' // Use semicolon as separator for Indonesian locale
 	if err := writer.Write(header); err != nil {
 		return nil, err
 	}
@@ -32,25 +33,25 @@ func serializeRawStockRows(header []string, rows []RawStockRow) ([]byte, error) 
 			case "store":
 				record[i] = r.Toko
 			case "stock":
-				record[i] = fmt.Sprintf("%v", r.Stock)
+				record[i] = formatIDFloat(r.Stock, 2)
 			case "daily_sales":
-				record[i] = fmt.Sprintf("%v", r.DailySales)
+				record[i] = formatIDFloat(r.DailySales, 2)
 			case "max_daily_sales":
-				record[i] = fmt.Sprintf("%v", r.MaxDailySales)
+				record[i] = formatIDFloat(r.MaxDailySales, 2)
 			case "lead_time":
-				record[i] = fmt.Sprintf("%v", r.LeadTime)
+				record[i] = formatIDFloat(r.LeadTime, 2)
 			case "max_lead_time":
-				record[i] = fmt.Sprintf("%v", r.MaxLeadTime)
+				record[i] = formatIDFloat(r.MaxLeadTime, 2)
 			case "sedang_po":
-				record[i] = fmt.Sprintf("%v", r.SedangPO)
+				record[i] = formatIDFloat(r.SedangPO, 2)
 			case "hpp":
-				record[i] = fmt.Sprintf("%v", r.HPP)
+				record[i] = formatIDFloat(r.HPP, 2)
 			case "harga":
-				record[i] = fmt.Sprintf("%v", r.Harga)
+				record[i] = formatIDFloat(r.Harga, 2)
 			case "min_order":
-				record[i] = fmt.Sprintf("%v", r.MinOrder)
+				record[i] = formatIDFloat(r.MinOrder, 2)
 			case "contribution_pct":
-				record[i] = fmt.Sprintf("%v", r.Contribution)
+				record[i] = formatIDFloat(r.Contribution, 2)
 			}
 		}
 		if err := writer.Write(record); err != nil {
@@ -105,6 +106,7 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 	// Serialize to CSV bytes
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
+	w.Comma = ';' // Use semicolon as separator for Indonesian locale
 
 	headers := []string{
 		"date",

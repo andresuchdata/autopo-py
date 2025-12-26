@@ -9,6 +9,7 @@ import (
 	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/storage"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -20,6 +21,7 @@ type Services struct {
 	StockHealthCache   cache.StockHealthCache
 	DashboardCache     cache.DashboardCache
 	LegacyDBConfig     config.LegacyDatabaseConfig
+	Storage            storage.ObjectStorage
 }
 
 func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
@@ -98,6 +100,19 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 				etlGroup.POST("/cache/invalidate/po_snapshot", etlHandler.InvalidatePOSnapshotCache)
 				etlGroup.POST("/jobs/stock_data", etlHandler.TriggerStockDataETL)
 				etlGroup.GET("/status", etlHandler.GetETLStatus)
+			}
+		}
+
+		if services.Storage != nil {
+			storageHandler := handlers.NewStorageHandler(services.Storage)
+			storageGroup := apiGroup.Group("/storage")
+			{
+				storageGroup.GET("/files", storageHandler.ListFiles)
+				storageGroup.GET("/download", storageHandler.DownloadFile)
+				storageGroup.GET("/download_all", storageHandler.DownloadAll)
+				storageGroup.GET("/content", storageHandler.GetFileContent)
+				storageGroup.DELETE("/file", storageHandler.DeleteFile)
+				storageGroup.DELETE("/prefix", storageHandler.DeletePrefix)
 			}
 		}
 	}
