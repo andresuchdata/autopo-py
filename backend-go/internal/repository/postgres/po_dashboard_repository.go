@@ -408,7 +408,15 @@ func (r *poRepository) getStatusSummariesByStatusColumnV2(ctx context.Context, f
                 COALESCE(fs.status, -1) AS status_code,
                 COALESCE(fs.quantity_ordered, 0) AS quantity_ordered,
                 COALESCE(fs.total_amount, 0) AS total_amount,
-                fs.time AS status_change_at
+                CASE 
+                    WHEN COALESCE(fs.status, -1) = 0 THEN fs.po_released_at
+                    WHEN COALESCE(fs.status, -1) = 1 THEN fs.po_approved_at
+                    WHEN COALESCE(fs.status, -1) = 2 THEN fs.po_approved_at
+                    WHEN COALESCE(fs.status, -1) = 3 THEN fs.po_received_at
+                    WHEN COALESCE(fs.status, -1) = 4 THEN fs.po_sent_at
+                    WHEN COALESCE(fs.status, -1) = 5 THEN fs.po_arrived_at
+                    ELSE fs.time
+                END AS status_change_at
             FROM filtered_snapshots fs
             JOIN latest_snapshot ls ON fs.po_number = ls.po_number AND fs.sku = ls.sku AND fs.time = ls.latest_time
         )
