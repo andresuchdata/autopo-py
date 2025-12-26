@@ -405,7 +405,6 @@ func (r *poRepository) getStatusSummariesByStatusColumnV2(ctx context.Context, f
             SELECT
                 fs.po_number,
                 fs.sku,
-                CONCAT(fs.po_number, '::', fs.sku) AS po_sku_identifier,
                 COALESCE(fs.status, -1) AS status_code,
                 COALESCE(fs.quantity_ordered, 0) AS quantity_ordered,
                 COALESCE(fs.total_amount, 0) AS total_amount,
@@ -416,7 +415,7 @@ func (r *poRepository) getStatusSummariesByStatusColumnV2(ctx context.Context, f
         SELECT 
             status_code,
             COUNT(DISTINCT po_number) as po_count,
-            COUNT(DISTINCT po_sku_identifier) as sku_count,
+            COUNT(DISTINCT sku) as sku_count,
             COALESCE(SUM(quantity_ordered), 0) as total_qty,
             COALESCE(SUM(total_amount), 0) as total_value,
             COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400), 0) as avg_days,

@@ -4,7 +4,7 @@ package domain
 type POStatusSummary struct {
 	Status     string  `json:"status" db:"status"`
 	Count      int     `json:"count" db:"count"`             // Number of unique PO numbers in this status
-	SKUCount   int     `json:"sku_count" db:"sku_count"`     // Number of unique PO+SKU combinations
+	SKUCount   int     `json:"sku_count" db:"sku_count"`     // Number of unique SKUs in this status
 	TotalQty   int     `json:"total_qty" db:"total_qty"`     // Sum of ordered quantity
 	TotalValue float64 `json:"total_value" db:"total_value"` // Sum of total amount
 	AvgDays    float64 `json:"avg_days" db:"avg_days"`
