@@ -1,4 +1,10 @@
-import { stockHealthService, StockHealthDashboardResponse, ConditionBreakdownResponse } from './stockHealthService';
+import {
+  stockHealthService,
+  type ConditionBreakdownResponse,
+  type OverstockBreakdownResponse,
+  type StockHealthFilterParams,
+  type StockHealthSummary,
+} from './stockHealthService';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 const CONDITION_KEYS = [
@@ -93,15 +99,20 @@ export class DashboardService {
 
   async getDashboardData(date: string, filters?: DashboardFilters): Promise<DashboardData> {
     try {
-      const response = await stockHealthService.getDashboard({
-        stockDate: date,
-        brandIds: filters?.brandIds,
-        kategoriBrands: filters?.kategoriBrands,
-        storeIds: filters?.storeIds,
-        skuCodes: filters?.skuCodes,
-      });
+      const params = this.buildFilterParams(date, filters);
+      const [summary, brandBreakdown, storeBreakdown, overstockBreakdown] = await Promise.all([
+        stockHealthService.getSummary(params),
+        stockHealthService.getBrandBreakdown(params),
+        stockHealthService.getStoreBreakdown(params),
+        stockHealthService.getOverstockBreakdown(params),
+      ]);
 
-      return this.transformDashboardResponse(response);
+      return this.transformDashboardResponse({
+        summary,
+        brand_breakdown: brandBreakdown,
+        store_breakdown: storeBreakdown,
+        overstock_breakdown: overstockBreakdown,
+      });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       throw error;
@@ -112,8 +123,13 @@ export class DashboardService {
     return stockHealthService.getAvailableDates();
   }
 
-  private transformDashboardResponse(response: StockHealthDashboardResponse): DashboardData {
-    const normalizedResponse: StockHealthDashboardResponse = {
+  private transformDashboardResponse(response: {
+    summary: StockHealthSummary[];
+    brand_breakdown: ConditionBreakdownResponse[];
+    store_breakdown: ConditionBreakdownResponse[];
+    overstock_breakdown: OverstockBreakdownResponse[];
+  }): DashboardData {
+    const normalizedResponse = {
       summary: Array.isArray(response.summary) ? response.summary : [],
       brand_breakdown: Array.isArray(response.brand_breakdown) ? response.brand_breakdown : [],
       store_breakdown: Array.isArray(response.store_breakdown) ? response.store_breakdown : [],
@@ -134,7 +150,7 @@ export class DashboardService {
     };
   }
 
-  private calculateSummary(summaryRows: StockHealthDashboardResponse['summary']): DashboardSummary {
+  private calculateSummary(summaryRows: StockHealthSummary[]): DashboardSummary {
     const baseRecord = () => CONDITION_KEYS.reduce((acc, key) => {
       acc[key] = 0;
       return acc;
@@ -187,9 +203,7 @@ export class DashboardService {
     };
   }
 
-  private calculateOverstockSummary(
-    breakdown: StockHealthDashboardResponse['overstock_breakdown'] | any[]
-  ): DashboardOverstockSummary {
+  private calculateOverstockSummary(breakdown: OverstockBreakdownResponse[] | any[]): DashboardOverstockSummary {
     const initRecord = () =>
       OVERSTOCK_CATEGORIES.reduce((acc, category) => {
         acc[category] = 0;
@@ -214,6 +228,16 @@ export class DashboardService {
       byCategory,
       stockByCategory,
       valueByCategory,
+    };
+  }
+
+  private buildFilterParams(date: string, filters?: DashboardFilters): StockHealthFilterParams {
+    return {
+      stockDate: date,
+      brandIds: filters?.brandIds,
+      kategoriBrands: filters?.kategoriBrands,
+      storeIds: filters?.storeIds,
+      skuCodes: filters?.skuCodes,
     };
   }
 }

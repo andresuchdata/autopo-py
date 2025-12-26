@@ -180,6 +180,36 @@ func (h *StockHealthHandler) GetItems(c *gin.Context) {
 	})
 }
 
+func (h *StockHealthHandler) GetBrandBreakdown(c *gin.Context) {
+	filter := h.parseFilter(c)
+	data, err := h.service.GetBrandBreakdown(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch brand breakdown", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *StockHealthHandler) GetStoreBreakdown(c *gin.Context) {
+	filter := h.parseFilter(c)
+	data, err := h.service.GetStoreBreakdown(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch store breakdown", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *StockHealthHandler) GetOverstockBreakdown(c *gin.Context) {
+	filter := h.parseFilter(c)
+	data, err := h.service.GetOverstockBreakdown(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch overstock breakdown", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
 func (h *StockHealthHandler) GetTimeSeries(c *gin.Context) {
 	filter := h.parseFilter(c)
 	days, _ := strconv.Atoi(c.DefaultQuery("days", "30"))

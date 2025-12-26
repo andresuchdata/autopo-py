@@ -31,11 +31,7 @@ interface AvailableDatesResponse {
   dates: string[];
 }
 
-interface StockHealthSummaryResponse {
-  summary: StockHealthSummary[];
-}
-
-interface StockHealthSummary {
+export interface StockHealthSummary {
   condition: string;
   count: number;
   total_stock: number;
@@ -53,16 +49,11 @@ export interface ConditionBreakdownResponse {
   total_value: number;
 }
 
-export interface StockHealthDashboardResponse {
-  summary: StockHealthSummary[];
-  brand_breakdown: ConditionBreakdownResponse[];
-  store_breakdown: ConditionBreakdownResponse[];
-  overstock_breakdown: {
-    category: string;
-    count: number;
-    total_stock: number;
-    total_value: number;
-  }[];
+export interface OverstockBreakdownResponse {
+  category: string;
+  count: number;
+  total_stock: number;
+  total_value: number;
 }
 
 export interface StockHealthFilterParams {
@@ -83,22 +74,26 @@ export interface StockHealthFilterParams {
 const serializeIds = (ids?: number[]) => (ids && ids.length > 0 ? ids.join(',') : undefined);
 const serializeStrings = (values?: string[]) => (values && values.length > 0 ? values.join(',') : undefined);
 
+const buildFilterQuery = (params: StockHealthFilterParams) => ({
+  stock_date: params.stockDate,
+  condition: params.condition,
+  brand_ids: serializeIds(params.brandIds),
+  store_ids: serializeIds(params.storeIds),
+  sku_ids: serializeStrings(params.skuCodes),
+  kategori_brand: serializeStrings(params.kategoriBrands),
+  overstock_group: params.overstockGroup,
+});
+
 export const stockHealthService = {
   async getItems(params: StockHealthFilterParams): Promise<StockHealthItemsResponse> {
     const response = await api.get<StockHealthItemsResponse>(`${ANALYTICS_BASE}/items`, {
       params: {
-        stock_date: params.stockDate,
+        ...buildFilterQuery(params),
         page: params.page ?? 1,
         page_size: params.pageSize ?? 2000,
-        condition: params.condition,
-        brand_ids: serializeIds(params.brandIds),
-        kategori_brand: serializeStrings(params.kategoriBrands),
-        store_ids: serializeIds(params.storeIds),
-        sku_ids: serializeStrings(params.skuCodes),
         grouping: params.grouping,
         sort_field: params.sortField,
         sort_direction: params.sortDirection,
-        overstock_group: params.overstockGroup,
       },
     });
 
@@ -124,28 +119,32 @@ export const stockHealthService = {
     return dates;
   },
 
-  async getSummary(params: { stockDate: string }): Promise<StockHealthSummaryResponse> {
-    const response = await api.get<StockHealthSummaryResponse>(`${ANALYTICS_BASE}/summary`, {
-      params: {
-        stock_date: params.stockDate,
-      },
+  async getSummary(params: StockHealthFilterParams): Promise<StockHealthSummary[]> {
+    const response = await api.get<StockHealthSummary[]>(`${ANALYTICS_BASE}/summary`, {
+      params: buildFilterQuery(params),
     });
-
-    return response.data;
+    return response.data ?? [];
   },
 
-  async getDashboard(params: { stockDate: string; brandIds?: number[]; kategoriBrands?: string[]; storeIds?: number[]; skuCodes?: string[]; days?: number }): Promise<StockHealthDashboardResponse> {
-    const response = await api.get<StockHealthDashboardResponse>(`${ANALYTICS_BASE}/dashboard`, {
-      params: {
-        stock_date: params.stockDate,
-        days: params.days ?? 30,
-        brand_ids: serializeIds(params.brandIds),
-        kategori_brand: serializeStrings(params.kategoriBrands),
-        store_ids: serializeIds(params.storeIds),
-        sku_ids: serializeStrings(params.skuCodes),
-      },
+  async getBrandBreakdown(params: StockHealthFilterParams): Promise<ConditionBreakdownResponse[]> {
+    const response = await api.get<ConditionBreakdownResponse[]>(`${ANALYTICS_BASE}/breakdown/brands`, {
+      params: buildFilterQuery(params),
     });
-    return response.data;
+    return response.data ?? [];
+  },
+
+  async getStoreBreakdown(params: StockHealthFilterParams): Promise<ConditionBreakdownResponse[]> {
+    const response = await api.get<ConditionBreakdownResponse[]>(`${ANALYTICS_BASE}/breakdown/stores`, {
+      params: buildFilterQuery(params),
+    });
+    return response.data ?? [];
+  },
+
+  async getOverstockBreakdown(params: StockHealthFilterParams): Promise<OverstockBreakdownResponse[]> {
+    const response = await api.get<OverstockBreakdownResponse[]>(`${ANALYTICS_BASE}/breakdown/overstock`, {
+      params: buildFilterQuery(params),
+    });
+    return response.data ?? [];
   },
 
   async getKategoriBrands(): Promise<string[]> {

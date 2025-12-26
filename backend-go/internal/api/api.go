@@ -59,6 +59,9 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 				stockHealthGroup.GET("/items", stockHealthHandler.GetItems)
 				stockHealthGroup.GET("/time_series", stockHealthHandler.GetTimeSeries)
 				stockHealthGroup.GET("/dashboard", stockHealthHandler.GetDashboard)
+				stockHealthGroup.GET("/breakdown/brands", stockHealthHandler.GetBrandBreakdown)
+				stockHealthGroup.GET("/breakdown/stores", stockHealthHandler.GetStoreBreakdown)
+				stockHealthGroup.GET("/breakdown/overstock", stockHealthHandler.GetOverstockBreakdown)
 				stockHealthGroup.GET("/available_dates", stockHealthHandler.GetAvailableDates)
 				stockHealthGroup.GET("/kategori_brands", stockHealthHandler.GetKategoriBrands)
 			}

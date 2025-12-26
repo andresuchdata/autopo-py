@@ -96,7 +96,7 @@ func (s *StockHealthService) GetStoreBreakdown(ctx context.Context, filter domai
 	return breakdown, nil
 }
 
-func (s *StockHealthService) getOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.OverstockBreakdown, error) {
+func (s *StockHealthService) GetOverstockBreakdown(ctx context.Context, filter domain.StockHealthFilter) ([]domain.OverstockBreakdown, error) {
 	if breakdown, ok, err := s.cache.GetOverstockBreakdown(ctx, filter); err == nil && ok {
 		log.Debug().Msg("stock health: cache HIT for overstock breakdown")
 		return breakdown, nil
@@ -148,7 +148,7 @@ func (s *StockHealthService) GetDashboard(ctx context.Context, days int, filter 
 		storeBreakdown = make([]domain.ConditionBreakdown, 0)
 	}
 
-	overstockBreakdown, err := s.getOverstockBreakdown(ctx, filter)
+	overstockBreakdown, err := s.GetOverstockBreakdown(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
