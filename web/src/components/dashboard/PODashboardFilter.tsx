@@ -256,8 +256,8 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
   }, [loading, applyFilters, setDraftSupplierIdsFilter, setSupplierPopoverOpen, setSupplierSearch]);
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
-      <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end sm:gap-x-3 sm:gap-y-3">
+      <div className="flex flex-col gap-1 w-full sm:w-auto">
         <Label htmlFor="po-type-select" className="text-xs font-medium uppercase text-muted-foreground">PO Type</Label>
         <Select
           value={draftPOTypeFilter}
@@ -269,7 +269,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           }}
           disabled={loading}
         >
-          <SelectTrigger id="po-type-select" className="w-40 h-10 bg-background border-border rounded-lg">
+          <SelectTrigger id="po-type-select" className="w-full sm:w-40 h-10 bg-background border-border rounded-lg">
             <SelectValue placeholder="Select type" />
           </SelectTrigger>
           <SelectContent>
@@ -280,9 +280,9 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           </SelectContent>
         </Select>
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-full sm:w-auto">
         <Label className="text-xs font-medium uppercase text-muted-foreground">PO Released Date</Label>
-        <div className={loading ? "pointer-events-none opacity-60" : ""}>
+        <div className={loading ? "pointer-events-none opacity-60 w-full" : "w-full"}>
           <DatePicker
             value={draftReleasedDateFilter || undefined}
             onChange={(value) => {
@@ -296,7 +296,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           />
         </div>
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-full sm:w-auto">
         <Label htmlFor="store-popover-trigger" className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
           <StoreIcon className="h-3 w-3 text-primary/70" /> Store
         </Label>
@@ -305,7 +305,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
             <Button
               id="store-popover-trigger"
               variant="outline"
-              className="w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
+              className="w-full sm:w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
               disabled={loading}
             >
               <span className="truncate text-left text-sm">{selectedStoresLabel}</span>
@@ -391,7 +391,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           </PopoverContent>
         </Popover>
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-full sm:w-auto">
         <Label htmlFor="supplier-popover-trigger" className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
           <Tag className="h-3 w-3 text-primary/70" /> Supplier
         </Label>
@@ -400,7 +400,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
             <Button
               id="supplier-popover-trigger"
               variant="outline"
-              className="w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
+              className="w-full sm:w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
               disabled={loading || supplierSearchLoading}
             >
               <span className="truncate text-left text-sm">{selectedSuppliersLabel}</span>
@@ -478,7 +478,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           </PopoverContent>
         </Popover>
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-full sm:w-auto">
         <Label htmlFor="brand-popover-trigger" className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1.5">
           <Tag className="h-3 w-3 text-primary/70" /> Brand
         </Label>
@@ -487,7 +487,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
             <Button
               id="brand-popover-trigger"
               variant="outline"
-              className="w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
+              className="w-full sm:w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
               disabled={loading}
             >
               <span className="truncate text-left text-sm">{selectedBrandsLabel}</span>

@@ -388,3 +388,23 @@ export const getResults = async () => {
     const response = await api.get('/po/results');
     return response.data;
 };
+
+export const invalidateStockHealthCache = async () => {
+    try {
+        const response = await api.post('/etl/cache/invalidate/stock_health');
+        return response.data;
+    } catch (error) {
+        console.error('Error invalidating stock health cache:', error);
+        throw error;
+    }
+};
+
+export const invalidatePOSnapshotCache = async () => {
+    try {
+        const response = await api.post('/etl/cache/invalidate/po_snapshot');
+        return response.data;
+    } catch (error) {
+        console.error('Error invalidating PO snapshot cache:', error);
+        throw error;
+    }
+};

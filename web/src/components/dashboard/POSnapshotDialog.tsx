@@ -519,7 +519,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 Detailed breakdown of purchase orders currently in <span className="font-medium text-foreground">{status}</span> status.
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="flex gap-2 mt-1">
+                        <div className="flex flex-wrap justify-end gap-2 mt-1">
                             <Button
                                 variant="secondary"
                                 size="sm"
@@ -528,7 +528,12 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 disabled={loading || isDownloading || items.length === 0}
                             >
                                 <Download className="h-4 w-4" />
-                                {isDownloading ? 'Downloading…' : 'Download page'}
+                                {isDownloading ? 'Downloading…' : (
+                                    <>
+                                        <span className="hidden sm:inline">Download page</span>
+                                        <span className="sm:hidden">Page</span>
+                                    </>
+                                )}
                             </Button>
                             <Button
                                 variant="secondary"
@@ -538,7 +543,12 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 disabled={loading || isDownloading || items.length === 0}
                             >
                                 <Download className="h-4 w-4" />
-                                {isDownloading ? 'Downloading…' : 'Download Excel'}
+                                {isDownloading ? 'Downloading…' : (
+                                    <>
+                                        <span className="hidden sm:inline">Download Excel</span>
+                                        <span className="sm:hidden">Excel</span>
+                                    </>
+                                )}
                             </Button>
                             <Button
                                 variant="outline"
@@ -548,7 +558,12 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 disabled={loading || isDownloading || (total === 0)}
                             >
                                 <Download className="h-4 w-4" />
-                                {isDownloading ? 'Downloading…' : 'Download all'}
+                                {isDownloading ? 'Downloading…' : (
+                                    <>
+                                        <span className="hidden sm:inline">Download all</span>
+                                        <span className="sm:hidden">All</span>
+                                    </>
+                                )}
                             </Button>
                             <Button
                                 variant="outline"
@@ -558,7 +573,12 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                 disabled={loading || isDownloading || (total === 0)}
                             >
                                 <Download className="h-4 w-4" />
-                                {isDownloading ? 'Downloading…' : 'Download all (Excel)'}
+                                {isDownloading ? 'Downloading…' : (
+                                    <>
+                                        <span className="hidden sm:inline">Download all (Excel)</span>
+                                        <span className="sm:hidden">All Excel</span>
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </div>

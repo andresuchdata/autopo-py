@@ -1,18 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { DollarSign, Filter as FilterIcon, Layers, Package, ShoppingCart } from 'lucide-react';
+import { DollarSign, Filter as FilterIcon, Layers, Package, ShoppingCart, RefreshCw } from 'lucide-react';
 import { POStatusCard } from '@/components/dashboard/POStatusCard';
 import { POFunnelChart } from '@/components/dashboard/POFunnelChart';
 import { POTrendChart } from '@/components/dashboard/POTrendChart';
 import { POAgingTable } from '@/components/dashboard/POAgingTable';
 import { SupplierPerformanceChart } from '@/components/dashboard/SupplierPerformanceChart';
-import { getDashboardSummary, type DashboardSummaryParams, poService } from '@/services/api';
+import { getDashboardSummary, type DashboardSummaryParams, poService, invalidatePOSnapshotCache } from '@/services/api';
 import { POSnapshotDialog } from '@/components/dashboard/POSnapshotDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PODashboardFilterProvider, usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
 import { PODashboardFilter } from '@/components/dashboard/PODashboardFilter';
 import { formatCurrencyIDR, formatNumberID } from '@/utils/formatters';
+import { Button } from '@/components/ui/button';
 
 interface DashboardData {
     status_summaries: any[];
@@ -28,6 +29,7 @@ function PODashboardContent() {
     const [error, setError] = useState<string | null>(null);
     const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
     const [statusModalOpen, setStatusModalOpen] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter } = usePODashboardFilter();
 
     useEffect(() => {
@@ -81,6 +83,36 @@ function PODashboardContent() {
             controller.abort();
         };
     }, [poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter]);
+
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        try {
+            await invalidatePOSnapshotCache();
+            const params: DashboardSummaryParams = {};
+            if (poTypeFilter !== 'ALL') {
+                params.poType = poTypeFilter;
+            }
+            if (releasedDateFilter) {
+                params.releasedDate = releasedDateFilter;
+            }
+            if (storeIdsFilter.length > 0) {
+                params.storeIds = storeIdsFilter;
+            }
+            if (brandIdsFilter.length > 0) {
+                params.brandIds = brandIdsFilter;
+            }
+            if (supplierIdsFilter.length > 0) {
+                params.supplierIds = supplierIdsFilter;
+            }
+            const result = await getDashboardSummary(params);
+            setData(result);
+        } catch (err) {
+            console.error('Failed to refresh dashboard:', err);
+            setError('Failed to refresh dashboard data');
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
     if (!loading && (error || !data)) {
         return (
@@ -140,7 +172,7 @@ function PODashboardContent() {
     }, [statusSummaries]);
 
     return (
-        <div className="min-h-screen bg-background text-foreground p-6 space-y-6">
+        <div className="min-h-screen bg-background text-foreground p-6 space-y-6 overflow-x-hidden">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div className="flex items-start gap-3">
                     <div className="hidden sm:flex items-center justify-center w-9 h-9 rounded-lg bg-muted text-muted-foreground border border-border/60">
@@ -151,7 +183,19 @@ function PODashboardContent() {
                         <p className="text-sm text-muted-foreground">Filter by PO type, store, brand, and released date to focus the insights.</p>
                     </div>
                 </div>
-                <PODashboardFilter loading={loading} />
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end lg:justify-end w-full lg:w-auto">
+                    <Button
+                        onClick={handleRefresh}
+                        disabled={loading || refreshing}
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                    >
+                        <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                        {refreshing ? 'Refreshing...' : 'Refresh Data'}
+                    </Button>
+                    <PODashboardFilter loading={loading} />
+                </div>
                 </div>
 
             {/* 1. Status Summary Cards */}

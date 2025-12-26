@@ -12,6 +12,8 @@ import { StockItemsDialog } from './dashboard/StockItemsDialog';
 import { OverstockSubgroupCards } from './dashboard/OverstockSubgroupCards';
 import { type SummaryGrouping, type SortDirection, type StockItemsSortField } from '@/types/stockHealth';
 import { RefreshCw, LayoutDashboard } from "lucide-react";
+import { Button } from './ui/button';
+import { invalidateStockHealthCache } from '@/services/api';
 
 const CONDITION_KEYS: ConditionKey[] = ['overstock', 'healthy', 'low', 'nearly_out', 'out_of_stock', 'no_sales', 'negative_stock'];
 const OVERSTOCK_CATEGORIES = ['ringan', 'sedang', 'berat'] as const;
@@ -77,12 +79,14 @@ export function EnhancedDashboard() {
     skuLoadMoreLoading,
     resolveSkuOption,
     fetchItems,
+    refresh,
   } = useDashboard();
 
   const [selectedCondition, setSelectedCondition] = useState<ConditionKey | null>(null);
   const [selectedGrouping, setSelectedGrouping] = useState<SummaryGrouping | null>(null);
   const [selectedOverstockGroup, setSelectedOverstockGroup] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleCardClick = useCallback((condition: ConditionKey, grouping: SummaryGrouping) => {
     setSelectedCondition(condition);
@@ -105,6 +109,18 @@ export function EnhancedDashboard() {
       setSelectedOverstockGroup(null);
     }
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await invalidateStockHealthCache();
+      await refresh();
+    } catch (err) {
+      console.error('Failed to refresh dashboard:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
 
   const fetchItemsForDialog = useCallback(
     async (params: {
@@ -162,12 +178,18 @@ export function EnhancedDashboard() {
           </div>
         </div>
 
-        {lastUpdated && (
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/50 px-4 py-2 rounded-full border border-border/50 shadow-sm backdrop-blur-sm">
-            <RefreshCw size={12} className="text-primary animate-[spin_8s_linear_infinite]" />
-            <span>Updated: {lastUpdated.toLocaleString()}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleRefresh}
+            disabled={loading || refreshing}
+            variant="outline"
+            size="sm"
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh Data'}
+          </Button>
+        </div>
       </div>
 
       {isInitialLoading && (
