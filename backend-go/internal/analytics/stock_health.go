@@ -18,19 +18,36 @@ import (
 )
 
 func makeStockHealthKey(rec stockHealthRecord) stockHealthKey {
+	var storeID int64
+	var storeValid bool
+	if rec.storeID.Valid {
+		storeID = rec.storeID.Int64
+		storeValid = true
+	}
+
+	var productID int64
+	var productValid bool
+	if rec.productID.Valid {
+		productID = rec.productID.Int64
+		productValid = true
+	}
+
 	var brandID int64
-	var valid bool
+	var brandValid bool
 	if rec.brandID.Valid {
 		brandID = rec.brandID.Int64
-		valid = true
+		brandValid = true
 	}
+
 	return stockHealthKey{
 		snapshotTime: rec.snapshotTime,
 		sku:          rec.sku,
-		storeID:      rec.storeID,
-		productID:    rec.productID,
+		storeID:      storeID,
+		storeValid:   storeValid,
+		productID:    productID,
+		productValid: productValid,
 		brandID:      brandID,
-		brandValid:   valid,
+		brandValid:   brandValid,
 	}
 }
 
@@ -164,6 +181,20 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 				argPos+18, argPos+19, argPos+20, argPos+21, argPos+22, argPos+23,
 				argPos+24, argPos+25, argPos+26, argPos+27))
 
+			var storeIDVal interface{}
+			if rec.storeID.Valid {
+				storeIDVal = rec.storeID.Int64
+			} else {
+				storeIDVal = nil
+			}
+
+			var productIDVal interface{}
+			if rec.productID.Valid {
+				productIDVal = rec.productID.Int64
+			} else {
+				productIDVal = nil
+			}
+
 			var brandIDVal interface{}
 			if rec.brandID.Valid {
 				brandIDVal = rec.brandID.Int64
@@ -173,8 +204,8 @@ func copyStockHealthToStaging(ctx context.Context, tx *sql.Tx, tableName string,
 
 			valueArgs = append(valueArgs,
 				rec.snapshotTime,
-				rec.storeID,
-				rec.productID,
+				storeIDVal,
+				productIDVal,
 				brandIDVal,
 				rec.sku,
 				rec.kategoriBrand,
@@ -326,13 +357,11 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 
 		sku := getValue("sku")
 		if sku == "" {
-			skippedRows++
-			log.Printf("warning: skipping row %d in %s: empty SKU", rowNumber+1, filepath.Base(filePath))
-			continue
+			log.Printf("warning: row %d in %s has empty SKU; preserving row with NULL product mapping", rowNumber+1, filepath.Base(filePath))
 		}
 
 		hppValue := getFloat("hpp")
-		if hppValue > 0 {
+		if hppValue > 0 && sku != "" {
 			if _, exists := skuHPP[sku]; !exists {
 				skuHPP[sku] = hppValue
 			}
@@ -345,7 +374,11 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 			return fmt.Errorf("record missing store name")
 		}
 
-		dedupKey := strings.ToLower(storeName) + "|" + strings.ToLower(sku)
+		dedupSKUComponent := strings.ToLower(sku)
+		if dedupSKUComponent == "" {
+			dedupSKUComponent = fmt.Sprintf("row_%d", rowNumber)
+		}
+		dedupKey := strings.ToLower(storeName) + "|" + dedupSKUComponent
 		if _, exists := seenRows[dedupKey]; exists {
 			continue
 		}
@@ -392,7 +425,9 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 
 		dailyStockCover := metrics.CurrentDaysStockCover
 
-		productSKUs[sku] = struct{}{}
+		if sku != "" {
+			productSKUs[sku] = struct{}{}
+		}
 		storeNames[strings.ToLower(storeName)] = storeName
 		if brandName != "" {
 			brandNames[strings.ToLower(brandName)] = brandName
@@ -449,26 +484,48 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	records := make([]stockHealthRecord, 0, len(rawRows))
 	seen := make(map[stockHealthKey]int)
 	log.Printf("[DEBUG] Building %d stockHealthRecords from rawRows", len(rawRows))
+	var skippedUnresolvedProduct int
+	var skippedUnresolvedStore int
+	var skippedUnresolvedBrand int
+
 	for i, raw := range rawRows {
 		if i < 3 || raw.sku == "51300243348" {
 			log.Printf("[DEBUG] RawRow %d - SKU: %s, dailySales: %f, maxDailySales: %f, isOpenPO: %v",
 				i, raw.sku, raw.dailySales, raw.maxDailySales, raw.isOpenPO)
 		}
-		storeID, ok := storeIDs[strings.ToLower(raw.storeName)]
-		if !ok {
-			return fmt.Errorf("store %s not resolved", raw.storeName)
-		}
-		productID, ok := productIDs[raw.sku]
-		if !ok {
-			return fmt.Errorf("product %s not resolved", raw.sku)
+
+		// Resolve store - use NULL if not found
+		var storeID sql.NullInt64
+		if id, ok := storeIDs[strings.ToLower(raw.storeName)]; ok {
+			storeID = sql.NullInt64{Int64: int64(id), Valid: true}
+		} else {
+			if skippedUnresolvedStore < 3 {
+				log.Printf("[WARN] Store %s not resolved for SKU %s - using NULL", raw.storeName, raw.sku)
+			}
+			skippedUnresolvedStore++
 		}
 
+		// Resolve product - use NULL if not found
+		var productID sql.NullInt64
+		if id, ok := productIDs[raw.sku]; ok {
+			productID = sql.NullInt64{Int64: int64(id), Valid: true}
+		} else {
+			if skippedUnresolvedProduct < 3 {
+				log.Printf("[WARN] Product %s not resolved - using NULL", raw.sku)
+			}
+			skippedUnresolvedProduct++
+		}
+
+		// Resolve brand - use NULL if not found or empty
 		var brandID sql.NullInt64
 		if raw.brandName != "" {
 			if id, ok := brandIDs[strings.ToLower(raw.brandName)]; ok {
 				brandID = sql.NullInt64{Int64: int64(id), Valid: true}
 			} else {
-				return fmt.Errorf("brand %s not resolved", raw.brandName)
+				if skippedUnresolvedBrand < 3 {
+					log.Printf("[WARN] Brand %s not resolved for SKU %s - using NULL", raw.brandName, raw.sku)
+				}
+				skippedUnresolvedBrand++
 			}
 		}
 
@@ -531,6 +588,17 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 	} else {
 		log.Printf("Successfully processed %d stock health records from %s", len(records), filePath)
 	}
+
+	if skippedUnresolvedProduct > 0 {
+		log.Printf("[WARN] Total unresolved products: %d (using NULL product_id)", skippedUnresolvedProduct)
+	}
+	if skippedUnresolvedStore > 0 {
+		log.Printf("[WARN] Total unresolved stores: %d (using NULL store_id)", skippedUnresolvedStore)
+	}
+	if skippedUnresolvedBrand > 0 {
+		log.Printf("[WARN] Total unresolved brands: %d (using NULL brand_id)", skippedUnresolvedBrand)
+	}
+
 	return nil
 }
 

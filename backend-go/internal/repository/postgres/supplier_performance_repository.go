@@ -106,7 +106,7 @@ func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pa
 }
 
 func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
-	return r.getSupplierPerformanceWithFilter(ctx, nil, defaultSupplierPerformanceLimit)
+	return r.GetSupplierPerformanceWithFilter(ctx, nil, defaultSupplierPerformanceLimit)
 }
 
 // GetSupplierPOItems fetches PO items filtered by supplier with pagination and sorting
@@ -161,29 +161,43 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
               AND po_sent_at > '2000-01-01'
               AND po_arrived_at > '2000-01-01'
             GROUP BY po_number, sku
+        ),
+        paginated_snapshots AS (
+            SELECT
+                s.po_number,
+                s.sku,
+                s.product_name,
+                s.brand_id,
+                s.supplier_id,
+                s.po_released_at,
+                s.po_sent_at,
+                s.po_approved_at,
+                s.po_arrived_at,
+                s.po_received_at
+            FROM po_snapshots s
+            JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+            WHERE s.po_sent_at IS NOT NULL
+              AND s.po_arrived_at IS NOT NULL
+              AND s.po_sent_at > '2000-01-01'
+              AND s.po_arrived_at > '2000-01-01'
+            %s
+            LIMIT $2 OFFSET $3
         )
         SELECT
-            s.po_number,
-            s.sku,
-            s.product_name,
+            p.po_number,
+            p.sku,
+            p.product_name,
             COALESCE(b.name, '') AS brand_name,
-            s.supplier_id,
+            p.supplier_id,
             COALESCE(sup.name, '') AS supplier_name,
-            TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') AS po_released_at,
-            TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') AS po_sent_at,
-            TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') AS po_approved_at,
-            TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') AS po_arrived_at,
-            TO_CHAR(s.po_received_at, 'YYYY-MM-DD HH24:MI:SS') AS po_received_at
-        FROM po_snapshots s
-        JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-        LEFT JOIN brands b ON s.brand_id = b.id
-        LEFT JOIN suppliers sup ON s.supplier_id = sup.id
-        WHERE s.po_sent_at IS NOT NULL
-          AND s.po_arrived_at IS NOT NULL
-          AND s.po_sent_at > '2000-01-01'
-          AND s.po_arrived_at > '2000-01-01'
-        %s
-        LIMIT $2 OFFSET $3
+            TO_CHAR(p.po_released_at, 'YYYY-MM-DD HH24:MI:SS') AS po_released_at,
+            TO_CHAR(p.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') AS po_sent_at,
+            TO_CHAR(p.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') AS po_approved_at,
+            TO_CHAR(p.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') AS po_arrived_at,
+            TO_CHAR(p.po_received_at, 'YYYY-MM-DD HH24:MI:SS') AS po_received_at
+        FROM paginated_snapshots p
+        LEFT JOIN brands b ON p.brand_id = b.id
+        LEFT JOIN suppliers sup ON p.supplier_id = sup.id
     `, orderClause)
 
 	countQuery := `
@@ -245,7 +259,7 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 	return resp, nil
 }
 
-func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, filter *domain.DashboardFilter, limit int) ([]domain.SupplierPerformance, error) {
+func (r *poRepository) GetSupplierPerformanceWithFilter(ctx context.Context, filter *domain.DashboardFilter, limit int) ([]domain.SupplierPerformance, error) {
 	if limit <= 0 {
 		limit = defaultSupplierPerformanceLimit
 	}

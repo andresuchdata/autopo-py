@@ -234,6 +234,59 @@ func (s *POService) GetDashboardSummary(ctx context.Context, filter *domain.Dash
 	return summary, nil
 }
 
+// GetDashboardCore returns core dashboard data (status summaries + totals)
+func (s *POService) GetDashboardCore(ctx context.Context, filter *domain.DashboardFilter) (map[string]interface{}, error) {
+	statusSummaries, err := s.repo.GetStatusSummariesByStatusColumnV2(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get status summaries: %w", err)
+	}
+
+	totals, err := s.repo.GetLatestSnapshotTotals(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get totals: %w", err)
+	}
+
+	return map[string]interface{}{
+		"status_summaries": statusSummaries,
+		"totals":           totals,
+	}, nil
+}
+
+// GetDashboardTrends returns trends and lifecycle funnel data
+func (s *POService) GetDashboardTrends(ctx context.Context, interval string, filter *domain.DashboardFilter) (map[string]interface{}, error) {
+	trends, err := s.repo.GetPOTrendWithFilterV2(ctx, interval, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get trends: %w", err)
+	}
+
+	lifecycleFunnel := make([]domain.POLifecycleFunnel, 0)
+	statusSummaries, err := s.repo.GetStatusSummariesByStatusColumnV2(ctx, filter)
+	if err == nil {
+		for _, s := range statusSummaries {
+			lifecycleFunnel = append(lifecycleFunnel, domain.POLifecycleFunnel{
+				Stage:      s.Status,
+				Count:      s.Count,
+				TotalValue: s.TotalValue,
+			})
+		}
+	}
+
+	return map[string]interface{}{
+		"trends":           trends,
+		"lifecycle_funnel": lifecycleFunnel,
+	}, nil
+}
+
+// GetDashboardAging returns aging summary data
+func (s *POService) GetDashboardAging(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POAging, error) {
+	return s.repo.GetPOAgingWithFilterV2(ctx, filter, 10)
+}
+
+// GetDashboardSuppliers returns supplier performance data
+func (s *POService) GetDashboardSuppliers(ctx context.Context, filter *domain.DashboardFilter) ([]domain.SupplierPerformance, error) {
+	return s.repo.GetSupplierPerformanceWithFilter(ctx, filter, 10)
+}
+
 // GetPOSnapshotStatusSummaryRaw returns PO snapshot summaries grouped directly by stored status
 func (s *POService) GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
 	if summary, ok, err := s.dashboardCache.GetStatusSummaryRaw(ctx, filter); err == nil && ok {

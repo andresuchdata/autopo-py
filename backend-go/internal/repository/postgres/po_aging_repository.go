@@ -31,7 +31,7 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
-	baseQuery := fmt.Sprintf(`
+	query := fmt.Sprintf(`
         WITH filtered_snapshots AS (
             SELECT *
             FROM po_snapshots s
@@ -99,43 +99,39 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
                 ))), 0)::int as days_in_status
             FROM po_aggregate
             WHERE status_code < 6
+        ),
+        limited_po_days AS (
+            SELECT 
+                po_number,
+                status_code,
+                supplier_id,
+                po_qty,
+                total_amount,
+                days_in_status,
+                po_released_at,
+                po_sent_at,
+                po_arrived_at,
+                po_received_at
+            FROM po_days
+            ORDER BY days_in_status DESC, po_number ASC
+            LIMIT %d
         )
         SELECT 
-            po_number,
-            status_code,
-            supplier_id,
-            po_qty,
-            total_amount,
-            days_in_status,
-            po_released_at,
-            po_sent_at,
-            po_arrived_at,
-            po_received_at
-        FROM po_days
-        ORDER BY days_in_status DESC, po_number ASC
-        LIMIT %d
-    `, filterClause, limit)
-
-	query := fmt.Sprintf(`
-        WITH ranked_data AS (
-            %s
-        )
-        SELECT 
-            rd.po_number,
-            rd.status_code,
-            rd.supplier_id,
-            rd.po_qty,
-            rd.total_amount,
-            rd.days_in_status,
-            rd.po_released_at,
-            rd.po_sent_at,
-            rd.po_arrived_at,
-            rd.po_received_at,
+            lpd.po_number,
+            lpd.status_code,
+            lpd.supplier_id,
+            lpd.po_qty,
+            lpd.total_amount,
+            lpd.days_in_status,
+            lpd.po_released_at,
+            lpd.po_sent_at,
+            lpd.po_arrived_at,
+            lpd.po_received_at,
             COALESCE(s.name, '') as supplier_name
-        FROM ranked_data rd
-        LEFT JOIN suppliers s ON rd.supplier_id = s.id
-        ORDER BY rd.days_in_status DESC, rd.po_number ASC
-    `, baseQuery)
+        FROM limited_po_days lpd
+        LEFT JOIN suppliers s ON lpd.supplier_id = s.id
+        ORDER BY lpd.days_in_status DESC, lpd.po_number ASC
+    `, filterClause, limit)
 
 	if filterClause != "" {
 		log.Debug().Msg("po dashboard: aging applying filter")
@@ -249,13 +245,18 @@ func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, 
 	countQuery := cte + fmt.Sprintf(` SELECT COUNT(*) FROM po_days pd WHERE 1=1 %s`, statusClause)
 
 	query := cte + fmt.Sprintf(`
-        SELECT pd.po_number, pd.status_code, pd.po_qty, pd.total_amount, pd.days_in_status, COALESCE(s.name, '') as supplier_name,
-               pd.po_released_at, pd.po_sent_at, pd.po_arrived_at, pd.po_received_at
-        FROM po_days pd
-        LEFT JOIN suppliers s ON pd.supplier_id = s.id
-        WHERE 1=1 %s
-        ORDER BY %s %s
-        LIMIT $%d OFFSET $%d
+        , paginated_po_days AS (
+            SELECT pd.po_number, pd.status_code, pd.supplier_id, pd.po_qty, pd.total_amount, pd.days_in_status,
+                   pd.po_released_at, pd.po_sent_at, pd.po_arrived_at, pd.po_received_at
+            FROM po_days pd
+            WHERE 1=1 %s
+            ORDER BY %s %s
+            LIMIT $%d OFFSET $%d
+        )
+        SELECT ppd.po_number, ppd.status_code, ppd.po_qty, ppd.total_amount, ppd.days_in_status, COALESCE(s.name, '') as supplier_name,
+               ppd.po_released_at, ppd.po_sent_at, ppd.po_arrived_at, ppd.po_received_at
+        FROM paginated_po_days ppd
+        LEFT JOIN suppliers s ON ppd.supplier_id = s.id
     `, statusClause, sortCol, sortDirection, idx, idx+1)
 
 	var total int

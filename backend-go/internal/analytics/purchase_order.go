@@ -14,11 +14,25 @@ import (
 )
 
 func makePOSnapshotKey(rec poSnapshotRecord) poSnapshotKey {
+	var productID int64
+	var productValid bool
+	if rec.productID.Valid {
+		productID = rec.productID.Int64
+		productValid = true
+	}
+
 	var brandID int64
 	var brandValid bool
 	if rec.brandID.Valid {
 		brandID = rec.brandID.Int64
 		brandValid = true
+	}
+
+	var storeID int64
+	var storeValid bool
+	if rec.storeID.Valid {
+		storeID = rec.storeID.Int64
+		storeValid = true
 	}
 
 	var supplierID int64
@@ -27,13 +41,17 @@ func makePOSnapshotKey(rec poSnapshotRecord) poSnapshotKey {
 		supplierID = rec.supplierID.Int64
 		supplierValid = true
 	}
+
 	return poSnapshotKey{
 		snapshotTime:  rec.snapshotTime,
 		poNumber:      rec.poNumber,
 		sku:           rec.sku,
+		productID:     productID,
+		productValid:  productValid,
 		brandID:       brandID,
 		brandValid:    brandValid,
-		storeID:       rec.storeID,
+		storeID:       storeID,
+		storeValid:    storeValid,
 		supplierID:    supplierID,
 		supplierValid: supplierValid,
 	}
@@ -176,10 +194,9 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 		}
 
 		storeName := strings.TrimSpace(record[colMap["Store"]])
-		if storeName == "" {
-			return fmt.Errorf("record missing store name")
+		if storeName != "" {
+			storeNames[strings.ToLower(storeName)] = storeName
 		}
-		storeNames[strings.ToLower(storeName)] = storeName
 
 		supplierName := strings.TrimSpace(record[colMap["Supplier"]])
 		if supplierName != "" {
@@ -238,32 +255,59 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	}
 
 	records := make([]poSnapshotRecord, 0, len(rawRows))
+	var skippedUnresolvedProduct int
+	var skippedUnresolvedStore int
+	var skippedUnresolvedBrand int
+	var skippedUnresolvedSupplier int
+
 	for _, raw := range rawRows {
-		productID, ok := productIDs[raw.sku]
-		if !ok {
-			return fmt.Errorf("product %s not resolved", raw.sku)
+		// Resolve product - use NULL if not found
+		var productID sql.NullInt64
+		if id, ok := productIDs[raw.sku]; ok {
+			productID = sql.NullInt64{Int64: int64(id), Valid: true}
+		} else {
+			if skippedUnresolvedProduct < 3 {
+				log.Printf("[WARN] Product %s not resolved for PO %s - using NULL", raw.sku, raw.poNumber)
+			}
+			skippedUnresolvedProduct++
 		}
 
-		storeID, ok := storeIDs[strings.ToLower(raw.storeName)]
-		if !ok {
-			return fmt.Errorf("store %s not resolved", raw.storeName)
+		// Resolve store - use NULL if not found
+		var storeID sql.NullInt64
+		if raw.storeName != "" {
+			if id, ok := storeIDs[strings.ToLower(raw.storeName)]; ok {
+				storeID = sql.NullInt64{Int64: int64(id), Valid: true}
+			} else {
+				if skippedUnresolvedStore < 3 {
+					log.Printf("[WARN] Store %s not resolved for PO %s - using NULL", raw.storeName, raw.poNumber)
+				}
+				skippedUnresolvedStore++
+			}
 		}
 
+		// Resolve brand - use NULL if not found or empty
 		var brandID sql.NullInt64
 		if raw.brandName != "" {
 			if id, ok := brandIDs[strings.ToLower(raw.brandName)]; ok {
 				brandID = sql.NullInt64{Int64: int64(id), Valid: true}
 			} else {
-				return fmt.Errorf("brand %s not resolved", raw.brandName)
+				if skippedUnresolvedBrand < 3 {
+					log.Printf("[WARN] Brand %s not resolved for PO %s SKU %s - using NULL", raw.brandName, raw.poNumber, raw.sku)
+				}
+				skippedUnresolvedBrand++
 			}
 		}
 
+		// Resolve supplier - use NULL if not found or empty
 		var supplierID sql.NullInt64
 		if raw.supplierName != "" {
 			if id, ok := supplierIDs[strings.ToLower(raw.supplierName)]; ok {
 				supplierID = sql.NullInt64{Int64: int64(id), Valid: true}
 			} else {
-				return fmt.Errorf("supplier %s not resolved", raw.supplierName)
+				if skippedUnresolvedSupplier < 3 {
+					log.Printf("[WARN] Supplier %s not resolved for PO %s - using NULL", raw.supplierName, raw.poNumber)
+				}
+				skippedUnresolvedSupplier++
 			}
 		}
 
@@ -304,5 +348,19 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	}
 
 	log.Printf("Successfully processed %d PO snapshot records from %s", len(records), filePath)
+
+	if skippedUnresolvedProduct > 0 {
+		log.Printf("[WARN] Total unresolved products: %d (using NULL product_id)", skippedUnresolvedProduct)
+	}
+	if skippedUnresolvedStore > 0 {
+		log.Printf("[WARN] Total unresolved stores: %d (using NULL store_id)", skippedUnresolvedStore)
+	}
+	if skippedUnresolvedBrand > 0 {
+		log.Printf("[WARN] Total unresolved brands: %d (using NULL brand_id)", skippedUnresolvedBrand)
+	}
+	if skippedUnresolvedSupplier > 0 {
+		log.Printf("[WARN] Total unresolved suppliers: %d (using NULL supplier_id)", skippedUnresolvedSupplier)
+	}
+
 	return nil
 }

@@ -227,7 +227,7 @@ func (h *POHandler) GetStoreResults(c *gin.Context) {
 	c.JSON(http.StatusOK, results)
 }
 
-// GetDashboardSummary returns the aggregated dashboard data
+// GetDashboardSummary returns the aggregated dashboard data (legacy endpoint)
 func (h *POHandler) GetDashboardSummary(c *gin.Context) {
 	filter := h.parseDashboardFilter(c)
 	summary, err := h.poService.GetDashboardSummary(c.Request.Context(), filter)
@@ -236,6 +236,51 @@ func (h *POHandler) GetDashboardSummary(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, summary)
+}
+
+// GetDashboardCore returns core dashboard data (status summaries + totals)
+func (h *POHandler) GetDashboardCore(c *gin.Context) {
+	filter := h.parseDashboardFilter(c)
+	core, err := h.poService.GetDashboardCore(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch dashboard core"})
+		return
+	}
+	c.JSON(http.StatusOK, core)
+}
+
+// GetDashboardTrends returns trends and lifecycle funnel data
+func (h *POHandler) GetDashboardTrends(c *gin.Context) {
+	filter := h.parseDashboardFilter(c)
+	interval := c.DefaultQuery("interval", "day")
+	trends, err := h.poService.GetDashboardTrends(c.Request.Context(), interval, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch dashboard trends"})
+		return
+	}
+	c.JSON(http.StatusOK, trends)
+}
+
+// GetDashboardAging returns aging summary data
+func (h *POHandler) GetDashboardAging(c *gin.Context) {
+	filter := h.parseDashboardFilter(c)
+	aging, err := h.poService.GetDashboardAging(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch dashboard aging"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"aging": aging})
+}
+
+// GetDashboardSuppliers returns supplier performance data
+func (h *POHandler) GetDashboardSuppliers(c *gin.Context) {
+	filter := h.parseDashboardFilter(c)
+	suppliers, err := h.poService.GetDashboardSuppliers(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch dashboard suppliers"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"supplier_performance": suppliers})
 }
 
 // GetStatusSummaryRaw returns PO status summary grouped directly by stored status codes

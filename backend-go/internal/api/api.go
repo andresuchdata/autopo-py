@@ -78,7 +78,16 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 				// Dashboard routes
 				dashboardGroup := poGroup.Group("/analytics")
 				{
+					// Granular endpoints for parallel loading
+					dashboardGroup.GET("/summary/core", poHandler.GetDashboardCore)
+					dashboardGroup.GET("/summary/trends", poHandler.GetDashboardTrends)
+					dashboardGroup.GET("/summary/aging", poHandler.GetDashboardAging)
+					dashboardGroup.GET("/summary/suppliers", poHandler.GetDashboardSuppliers)
+
+					// Legacy combined endpoint
 					dashboardGroup.GET("/summary", poHandler.GetDashboardSummary)
+
+					// Other endpoints
 					dashboardGroup.GET("/trend", poHandler.GetPOTrend)
 					dashboardGroup.GET("/aging", poHandler.GetPOAging)
 					dashboardGroup.GET("/performance", poHandler.GetSupplierPerformance)

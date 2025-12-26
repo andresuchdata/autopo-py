@@ -80,7 +80,7 @@ func readRawRows(path string) ([]RawRow, error) {
 		}
 
 		row := RawRow{
-			SKU:         get(record, "sku"),
+			SKU:         normalizeSKU(get(record, "sku"), get(record, "namaproduk")),
 			NamaProduk:  get(record, "namaproduk"),
 			NoPO:        get(record, "nopo"),
 			Brand:       get(record, "brand"),

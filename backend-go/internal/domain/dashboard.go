@@ -134,6 +134,8 @@ type POSnapshotItem struct {
 	SKU          string  `json:"sku" db:"sku"`
 	ProductName  string  `json:"product_name" db:"product_name"`
 	StoreName    string  `json:"store_name" db:"store_name"`
+	SupplierID   int64   `json:"supplier_id" db:"supplier_id"`
+	SupplierName string  `json:"supplier_name" db:"supplier_name"`
 	UnitPrice    float64 `json:"unit_price" db:"unit_price"`
 	TotalAmount  float64 `json:"total_amount" db:"total_amount"`
 	POQty        int     `json:"po_qty" db:"po_qty"`

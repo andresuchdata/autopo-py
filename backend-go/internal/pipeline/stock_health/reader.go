@@ -155,7 +155,7 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 
 		row := RawStockRow{
 			Brand:             get(idxBrand),
-			SKU:               get(idxSKU),
+			SKU:               NormalizeSKU(get(idxSKU), get(idxNama)),
 			Nama:              get(idxNama),
 			Toko:              get(idxToko),
 			Stock:             parseFloat(idxStock),

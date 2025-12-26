@@ -7,8 +7,8 @@ import (
 
 type stockHealthRecord struct {
 	snapshotTime              time.Time
-	storeID                   int
-	productID                 int
+	storeID                   sql.NullInt64
+	productID                 sql.NullInt64
 	brandID                   sql.NullInt64
 	sku                       string
 	kategoriBrand             string
@@ -89,11 +89,11 @@ type rawStockHealthRow struct {
 type poSnapshotRecord struct {
 	snapshotTime     time.Time
 	poNumber         string
-	productID        int
+	productID        sql.NullInt64
 	sku              string
 	productName      string
 	brandID          sql.NullInt64
-	storeID          int
+	storeID          sql.NullInt64
 	supplierID       sql.NullInt64
 	quantityOrdered  int
 	unitPrice        float64
@@ -110,8 +110,10 @@ type poSnapshotRecord struct {
 type stockHealthKey struct {
 	snapshotTime time.Time
 	sku          string
-	storeID      int
-	productID    int
+	storeID      int64
+	storeValid   bool
+	productID    int64
+	productValid bool
 	brandID      int64
 	brandValid   bool
 }
@@ -120,9 +122,12 @@ type poSnapshotKey struct {
 	snapshotTime  time.Time
 	poNumber      string
 	sku           string
+	productID     int64
+	productValid  bool
 	brandID       int64
 	brandValid    bool
-	storeID       int
+	storeID       int64
+	storeValid    bool
 	supplierID    int64
 	supplierValid bool
 }

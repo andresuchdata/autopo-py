@@ -36,7 +36,7 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context, filter *domain.D
 	summary.StatusSummaries = statusSummaries
 
 	// Totals across all statuses (global unique aggregates)
-	totals, err := r.getLatestSnapshotTotals(ctx, filter)
+	totals, err := r.GetLatestSnapshotTotals(ctx, filter)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch totals")
 		return nil, fmt.Errorf("failed to get totals: %w", err)
@@ -53,7 +53,7 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context, filter *domain.D
 	}
 
 	// 3. Trends (default interval day)
-	trends, err := r.getPOTrendWithFilter(ctx, "day", filter)
+	trends, err := r.GetPOTrendWithFilter(ctx, "day", filter)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch trends")
 		return nil, fmt.Errorf("failed to get trends: %w", err)
@@ -69,7 +69,7 @@ func (r *poRepository) GetDashboardSummary(ctx context.Context, filter *domain.D
 	summary.Aging = aging
 
 	// 5. Supplier Performance
-	perf, err := r.getSupplierPerformanceWithFilter(ctx, filter, defaultSupplierPerformanceLimit)
+	perf, err := r.GetSupplierPerformanceWithFilter(ctx, filter, defaultSupplierPerformanceLimit)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard: failed to fetch supplier performance")
 		return nil, fmt.Errorf("failed to get supplier performance: %w", err)
@@ -174,7 +174,7 @@ func (r *poRepository) getStatusSummariesByDate(ctx context.Context, filter *dom
 	return results, nil
 }
 
-func (r *poRepository) getLatestSnapshotTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, error) {
+func (r *poRepository) GetLatestSnapshotTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, error) {
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
@@ -327,7 +327,7 @@ func (r *poRepository) GetDashboardSummaryV2(ctx context.Context, filter *domain
 	}
 
 	// 1. Status Summaries - using pure status column
-	statusSummaries, err := r.getStatusSummariesByStatusColumnV2(ctx, filter)
+	statusSummaries, err := r.GetStatusSummariesByStatusColumnV2(ctx, filter)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard v2: failed to fetch status summaries")
 		return nil, fmt.Errorf("failed to get status summaries: %w", err)
@@ -335,7 +335,7 @@ func (r *poRepository) GetDashboardSummaryV2(ctx context.Context, filter *domain
 	summary.StatusSummaries = statusSummaries
 
 	// Totals across all statuses (global unique aggregates)
-	totals, err := r.getLatestSnapshotTotals(ctx, filter)
+	totals, err := r.GetLatestSnapshotTotals(ctx, filter)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard v2: failed to fetch totals")
 		return nil, fmt.Errorf("failed to get totals: %w", err)
@@ -352,7 +352,7 @@ func (r *poRepository) GetDashboardSummaryV2(ctx context.Context, filter *domain
 	}
 
 	// 3. Trends (default interval day) - using pure status column
-	trends, err := r.getPOTrendWithFilterV2(ctx, "day", filter)
+	trends, err := r.GetPOTrendWithFilterV2(ctx, "day", filter)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard v2: failed to fetch trends")
 		return nil, fmt.Errorf("failed to get trends: %w", err)
@@ -360,7 +360,7 @@ func (r *poRepository) GetDashboardSummaryV2(ctx context.Context, filter *domain
 	summary.Trends = trends
 
 	// 4. Aging - using pure status column
-	aging, err := r.getPOAgingWithFilterV2(ctx, filter, defaultAgingSummaryLimit)
+	aging, err := r.GetPOAgingWithFilterV2(ctx, filter, defaultAgingSummaryLimit)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard v2: failed to fetch aging data")
 		return nil, fmt.Errorf("failed to get aging: %w", err)
@@ -368,7 +368,7 @@ func (r *poRepository) GetDashboardSummaryV2(ctx context.Context, filter *domain
 	summary.Aging = aging
 
 	// 5. Supplier Performance
-	perf, err := r.getSupplierPerformanceWithFilter(ctx, filter, defaultSupplierPerformanceLimit)
+	perf, err := r.GetSupplierPerformanceWithFilter(ctx, filter, defaultSupplierPerformanceLimit)
 	if err != nil {
 		log.Error().Err(err).Msg("po dashboard v2: failed to fetch supplier performance")
 		return nil, fmt.Errorf("failed to get supplier performance: %w", err)
@@ -378,8 +378,8 @@ func (r *poRepository) GetDashboardSummaryV2(ctx context.Context, filter *domain
 	return summary, nil
 }
 
-// getStatusSummariesByStatusColumnV2 groups purely by status column (0-5, 9) without deriving from timestamps
-func (r *poRepository) getStatusSummariesByStatusColumnV2(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
+// GetStatusSummariesByStatusColumnV2 groups purely by status column (0-5, 9) without deriving from timestamps
+func (r *poRepository) GetStatusSummariesByStatusColumnV2(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
@@ -470,8 +470,8 @@ func (r *poRepository) getStatusSummariesByStatusColumnV2(ctx context.Context, f
 	return results, nil
 }
 
-// getPOTrendWithFilterV2 uses pure status column instead of derived status
-func (r *poRepository) getPOTrendWithFilterV2(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error) {
+// GetPOTrendWithFilterV2 uses pure status column instead of derived status
+func (r *poRepository) GetPOTrendWithFilterV2(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error) {
 	type trendRow struct {
 		Date       string `db:"date"`
 		StatusCode int    `db:"status_code"`
@@ -544,8 +544,8 @@ func (r *poRepository) getPOTrendWithFilterV2(ctx context.Context, interval stri
 	return results, nil
 }
 
-// getPOAgingWithFilterV2 uses pure status column instead of derived status
-func (r *poRepository) getPOAgingWithFilterV2(ctx context.Context, filter *domain.DashboardFilter, limit int) ([]domain.POAging, error) {
+// GetPOAgingWithFilterV2 uses pure status column instead of derived status
+func (r *poRepository) GetPOAgingWithFilterV2(ctx context.Context, filter *domain.DashboardFilter, limit int) ([]domain.POAging, error) {
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
@@ -571,7 +571,7 @@ func (r *poRepository) getPOAgingWithFilterV2(ctx context.Context, filter *domai
             SELECT
                 fs.po_number,
                 COALESCE(fs.status, -1) AS status_code,
-                COALESCE(sup.name, '') as supplier_name,
+                fs.supplier_id,
                 COALESCE(SUM(fs.quantity_ordered), 0) as po_qty,
                 COALESCE(SUM(fs.total_amount), 0) as total_amount,
                 COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - fs.time))/86400)::int, 0) as days_in_status,
@@ -581,24 +581,39 @@ func (r *poRepository) getPOAgingWithFilterV2(ctx context.Context, filter *domai
                 MAX(TO_CHAR(fs.po_received_at, 'YYYY-MM-DD HH24:MI:SS')) as po_received_at
             FROM filtered_snapshots fs
             JOIN latest_snapshot ls ON fs.po_number = ls.po_number AND fs.sku = ls.sku AND fs.time = ls.latest_time
-            LEFT JOIN suppliers sup ON fs.supplier_id = sup.id
             WHERE COALESCE(fs.status, -1) IN (0,1,2,3,4,5,9)
-            GROUP BY fs.po_number, fs.status, sup.name
+            GROUP BY fs.po_number, fs.status, fs.supplier_id
+        ),
+        limited_po_aging AS (
+            SELECT 
+                po_number,
+                status_code,
+                supplier_id,
+                po_qty,
+                total_amount,
+                days_in_status,
+                po_released_at,
+                po_sent_at,
+                po_arrived_at,
+                po_received_at
+            FROM po_aging
+            ORDER BY days_in_status DESC
+            LIMIT $%d
         )
         SELECT 
-            po_number,
-            status_code,
-            supplier_name,
-            po_qty,
-            total_amount,
-            days_in_status,
-            po_released_at,
-            po_sent_at,
-            po_arrived_at,
-            po_received_at
-        FROM po_aging
-        ORDER BY days_in_status DESC
-        LIMIT $%d
+            lpa.po_number,
+            lpa.status_code,
+            COALESCE(sup.name, '') as supplier_name,
+            lpa.po_qty,
+            lpa.total_amount,
+            lpa.days_in_status,
+            lpa.po_released_at,
+            lpa.po_sent_at,
+            lpa.po_arrived_at,
+            lpa.po_received_at
+        FROM limited_po_aging lpa
+        LEFT JOIN suppliers sup ON lpa.supplier_id = sup.id
+        ORDER BY lpa.days_in_status DESC
     `, filterClause, len(filterArgs)+1)
 
 	if filterClause != "" {
@@ -649,10 +664,10 @@ func (r *poRepository) getPOAgingWithFilterV2(ctx context.Context, filter *domai
 }
 
 func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error) {
-	return r.getPOTrendWithFilterV2(ctx, interval, nil)
+	return r.GetPOTrendWithFilterV2(ctx, interval, nil)
 }
 
-func (r *poRepository) getPOTrendWithFilter(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error) {
+func (r *poRepository) GetPOTrendWithFilter(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error) {
 	type trendRow struct {
 		Date       string `db:"date"`
 		StatusCode int    `db:"status_code"`
@@ -660,7 +675,7 @@ func (r *poRepository) getPOTrendWithFilter(ctx context.Context, interval string
 	}
 
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
-	statusExpr := buildDerivedStatusCase("s.")
+	statusExpr := "COALESCE(s.status, -1)"
 
 	bucketExpr := "date_trunc('day', s.time)"
 	timeWindow := "30 days"
@@ -756,7 +771,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	offset := (page - 1) * pageSize
 
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 2)
-	statusExpr := buildDerivedStatusCase("s.")
+	statusExpr := "COALESCE(s.status, -1)"
 	useLatestDay := filter == nil || filter.ReleasedDate == ""
 
 	if filterClause != "" {
@@ -783,29 +798,51 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				JOIN latest_day d ON s.time::date = d.latest_date
 				WHERE s.po_number <> '' %s
 				GROUP BY po_number, sku
+			),
+			paginated_snapshots AS (
+				SELECT
+					s.po_number,
+					s.sku,
+					s.product_name,
+					s.brand_id,
+					s.store_id,
+					s.supplier_id,
+					s.unit_price,
+					s.total_amount,
+					s.quantity_ordered,
+					s.quantity_received,
+					s.po_released_at,
+					s.po_sent_at,
+					s.po_approved_at,
+					s.po_arrived_at,
+					s.time
+				FROM po_snapshots s
+				JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+				WHERE %s = $1
+				ORDER BY %s %s
+				LIMIT $%d OFFSET $%d
 			)
 			SELECT
-				s.po_number,
+				p.po_number,
 				COALESCE(b.name, '') as brand_name,
-				s.sku,
-				s.product_name,
+				p.sku,
+				p.product_name,
 				COALESCE(st.name, '') as store_name,
-				s.unit_price,
-				s.total_amount,
-				s.quantity_ordered as po_qty,
-				s.quantity_received as received_qty,
-				TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
-				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
-				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
-				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
-				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time
-			FROM po_snapshots s
-			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			LEFT JOIN brands b ON s.brand_id = b.id
-			LEFT JOIN stores st ON s.store_id = st.id
-			WHERE %s = $1
-			ORDER BY %s %s
-			LIMIT $%d OFFSET $%d
+				p.supplier_id,
+				COALESCE(sup.name, '') as supplier_name,
+				p.unit_price,
+				p.total_amount,
+				p.quantity_ordered as po_qty,
+				p.quantity_received as received_qty,
+				TO_CHAR(p.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
+				TO_CHAR(p.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
+				TO_CHAR(p.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
+				TO_CHAR(p.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
+				TO_CHAR(p.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time
+			FROM paginated_snapshots p
+			LEFT JOIN brands b ON p.brand_id = b.id
+			LEFT JOIN stores st ON p.store_id = st.id
+			LEFT JOIN suppliers sup ON p.supplier_id = sup.id
 		`, filterClause, statusExpr, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
 	} else {
 		query = fmt.Sprintf(`
@@ -817,29 +854,51 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				FROM po_snapshots s
 				WHERE s.po_number <> '' %s
 				GROUP BY po_number, sku
+			),
+			paginated_snapshots AS (
+				SELECT
+					s.po_number,
+					s.sku,
+					s.product_name,
+					s.brand_id,
+					s.store_id,
+					s.supplier_id,
+					s.unit_price,
+					s.total_amount,
+					s.quantity_ordered,
+					s.quantity_received,
+					s.po_released_at,
+					s.po_sent_at,
+					s.po_approved_at,
+					s.po_arrived_at,
+					s.time
+				FROM po_snapshots s
+				JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+				WHERE %s = $1
+				ORDER BY %s %s
+				LIMIT $%d OFFSET $%d
 			)
 			SELECT
-				s.po_number,
+				p.po_number,
 				COALESCE(b.name, '') as brand_name,
-				s.sku,
-				s.product_name,
+				p.sku,
+				p.product_name,
 				COALESCE(st.name, '') as store_name,
-				s.unit_price,
-				s.total_amount,
-				s.quantity_ordered as po_qty,
-				s.quantity_received as received_qty,
-				TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
-				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
-				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
-				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
-				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time
-			FROM po_snapshots s
-			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			LEFT JOIN brands b ON s.brand_id = b.id
-			LEFT JOIN stores st ON s.store_id = st.id
-			WHERE %s = $1
-			ORDER BY %s %s
-			LIMIT $%d OFFSET $%d
+				p.supplier_id,
+				COALESCE(sup.name, '') as supplier_name,
+				p.unit_price,
+				p.total_amount,
+				p.quantity_ordered as po_qty,
+				p.quantity_received as received_qty,
+				TO_CHAR(p.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
+				TO_CHAR(p.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
+				TO_CHAR(p.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
+				TO_CHAR(p.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
+				TO_CHAR(p.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time
+			FROM paginated_snapshots p
+			LEFT JOIN brands b ON p.brand_id = b.id
+			LEFT JOIN stores st ON p.store_id = st.id
+			LEFT JOIN suppliers sup ON p.supplier_id = sup.id
 		`, filterClause, statusExpr, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
 	}
 
@@ -863,7 +922,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT COUNT(*)
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE %s = $1
+			WHERE %s = COALESCE(NULLIF($1, -1), s.status)
 		`, filterClause, statusExpr)
 	} else {
 		countQuery = fmt.Sprintf(`
@@ -879,11 +938,12 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT COUNT(*)
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE %s = $1
+			WHERE %s = COALESCE(NULLIF($1, -1), s.status)
 		`, filterClause, statusExpr)
 	}
 
-	countArgs := []interface{}{statusCode}
+	countArgs := make([]interface{}, 0, len(filterArgs)+1)
+	countArgs = append(countArgs, statusCode)
 	countArgs = append(countArgs, filterArgs...)
 
 	var total int
@@ -892,7 +952,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 		return nil, fmt.Errorf("failed to count items: %w", err)
 	}
 
-	queryArgs := []interface{}{statusCode}
+	queryArgs := make([]interface{}, 0, len(filterArgs)+2)
 	queryArgs = append(queryArgs, filterArgs...)
 	queryArgs = append(queryArgs, pageSize, offset)
 
@@ -920,7 +980,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				COALESCE(SUM(s.total_amount), 0) as total_value
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE %s = $1
+			WHERE %s = COALESCE(NULLIF($1, -1), s.status)
 		`, filterClause, statusExpr)
 	} else {
 		totalsQuery = fmt.Sprintf(`
@@ -940,7 +1000,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				COALESCE(SUM(s.total_amount), 0) as total_value
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE %s = $1
+			WHERE %s = COALESCE(NULLIF($1, -1), s.status)
 		`, filterClause, statusExpr)
 	}
 
@@ -983,7 +1043,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	return resp, nil
 }
 
-// GetDashboardTotals returns aggregated totals from the latest snapshot
+// GetDashboardTotals returns aggregated totals frxwom the latest snapshot
 func (r *poRepository) GetDashboardTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, error) {
-	return r.getLatestSnapshotTotals(ctx, filter)
+	return r.GetLatestSnapshotTotals(ctx, filter)
 }
