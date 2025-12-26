@@ -14,6 +14,12 @@ import { PODashboardFilterProvider, usePODashboardFilter } from '@/contexts/PODa
 import { PODashboardFilter } from '@/components/dashboard/PODashboardFilter';
 import { formatCurrencyIDR, formatNumberID } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
+import { 
+    POFunnelChartSkeleton, 
+    POTrendChartSkeleton, 
+    POAgingTableSkeleton, 
+    SupplierPerformanceChartSkeleton 
+} from '@/components/dashboard/ChartSkeletons';
 
 interface DashboardData {
     status_summaries: any[];
@@ -329,12 +335,12 @@ function PODashboardContent() {
             {/* 2. Charts Row 1: Funnel & Trend */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {isLoading ? (
-                    <Skeleton className="h-[320px] w-full rounded-xl" />
+                    <POFunnelChartSkeleton />
                 ) : (
                     <POFunnelChart data={funnelData} />
                 )}
                 {isLoading ? (
-                    <Skeleton className="h-[320px] w-full rounded-xl" />
+                    <POTrendChartSkeleton />
                 ) : (
                     <POTrendChart data={trendData} />
                 )}
@@ -344,12 +350,12 @@ function PODashboardContent() {
             {/* 3. Charts Row 2: Aging & Supplier Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {isLoading ? (
-                    <Skeleton className="h-[360px] w-full rounded-xl" />
+                    <POAgingTableSkeleton />
                 ) : (
                     <POAgingTable initialItems={agingData} />
                 )}
                 {isLoading ? (
-                    <Skeleton className="h-[360px] w-full rounded-xl" />
+                    <SupplierPerformanceChartSkeleton />
                 ) : (
                     <SupplierPerformanceChart initialItems={supplierPerformanceData} />
                 )}
