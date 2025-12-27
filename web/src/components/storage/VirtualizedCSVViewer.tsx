@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+
+// Module-level map to track active loads per fileKey (survives React Strict Mode remounts)
+const activeLoads = new Map<string, boolean>();
 import { useVirtualizer } from '@tanstack/react-virtual';
 import Papa from 'papaparse';
 import { Loader2, AlertCircle, Download, X, ArrowUpDown, ArrowUp, ArrowDown, Filter, Maximize2, Minimize2 } from 'lucide-react';
@@ -47,7 +50,6 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
   const rafScheduledRef = useRef(false);
   const headersRef = useRef<string[]>([]);
   const viewRecalcTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isLoadingRef = useRef(false);
 
   const hasActiveFilters = useMemo(() => {
     return Object.values(columnFilters).some((s) => s && s.size > 0);
@@ -59,11 +61,12 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
 
   const loadCSVStream = useCallback(async () => {
     // Prevent double requests (React Strict Mode / fast remount)
-    if (isLoadingRef.current) {
-      console.log('[CSV] Already loading, skipping duplicate request');
+    // Use module-level map that survives component remounts
+    if (activeLoads.get(fileKey)) {
+      console.log('[CSV] Already loading this file, skipping duplicate request');
       return;
     }
-    isLoadingRef.current = true;
+    activeLoads.set(fileKey, true);
 
     setLoading(true);
     setError(null);
@@ -90,7 +93,8 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8080/api/v1';
-      const url = `${apiUrl}/storage/stream_csv?key=${encodeURIComponent(fileKey)}&compress=true`;
+      // Note: compress=false to avoid ERR_CONTENT_DECODING_FAILED on aborted requests
+      const url = `${apiUrl}/storage/stream_csv?key=${encodeURIComponent(fileKey)}`;
 
       setIsLoadingChunk(true);
 
@@ -138,7 +142,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
           }
         },
         complete: () => {
-          isLoadingRef.current = false;
+          activeLoads.delete(fileKey);
           setIsLoadingChunk(false);
           setRowCount(rowsRef.current.length);
           setProgress((prev) => ({ ...prev, loaded: rowsRef.current.length }));
@@ -146,14 +150,14 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
           setLoading(false);
         },
         error: (err: any) => {
-          isLoadingRef.current = false;
+          activeLoads.delete(fileKey);
           setIsLoadingChunk(false);
           setError(err?.message || 'Failed to parse CSV');
           setLoading(false);
         },
       });
     } catch (err: any) {
-      isLoadingRef.current = false;
+      activeLoads.delete(fileKey);
       if (err.name === 'AbortError') {
         console.log('Stream aborted by user');
       } else {
@@ -169,7 +173,8 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
     loadCSVStream();
 
     return () => {
-      isLoadingRef.current = false;
+      // Don't clear activeLoads here - let the second mount reuse the in-flight request
+      // Only abort if we're actually unmounting for real (not Strict Mode)
       if (papaParserRef.current) {
         try {
           papaParserRef.current.abort();
@@ -178,6 +183,13 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
         }
         papaParserRef.current = null;
       }
+      // Clear the active load flag after a small delay to handle Strict Mode remount
+      setTimeout(() => {
+        // Only clear if component didn't remount (i.e., truly unmounted)
+        if (!document.querySelector(`[data-csv-viewer="${fileKey}"]`)) {
+          activeLoads.delete(fileKey);
+        }
+      }, 100);
     };
   }, [fileKey]);
 
@@ -340,7 +352,10 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+    <div 
+      data-csv-viewer={fileKey}
+      className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden"
+    >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
         <div className="flex-1 min-w-0">
