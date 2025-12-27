@@ -20,8 +20,8 @@ type poAgingRow struct {
 	DaysInStatus int     `db:"days_in_status"`
 }
 
-func (r *poRepository) GetPOAging(ctx context.Context) ([]domain.POAging, error) {
-	return r.getPOAgingWithFilter(ctx, nil, defaultAgingSummaryLimit)
+func (r *poRepository) GetPOAging(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POAging, error) {
+	return r.getPOAgingWithFilter(ctx, filter, defaultAgingSummaryLimit)
 }
 
 func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.DashboardFilter, limit int) ([]domain.POAging, error) {
@@ -31,7 +31,7 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
-	baseQuery := fmt.Sprintf(`
+	query := fmt.Sprintf(`
         WITH filtered_snapshots AS (
             SELECT *
             FROM po_snapshots s
@@ -50,60 +50,30 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
             WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         ),
-        current_snapshots AS (
-            SELECT fs.*
-            FROM filtered_snapshots fs
-            JOIN latest_snapshot ls 
-              ON fs.po_number = ls.po_number 
-             AND fs.sku = ls.sku 
-             AND fs.time = ls.latest_time
-        ),
-        po_aggregate AS (
+        po_aging AS (
             SELECT
-                po_number,
-                MAX(status) as status_code,
-                SUM(quantity_ordered) as po_qty,
-                SUM(total_amount) as total_amount,
-                MAX(po_released_at) as po_released_at,
-                MAX(po_sent_at) as po_sent_at,
-                MAX(po_approved_at) as po_approved_at,
-                MAX(po_arrived_at) as po_arrived_at,
-                MAX(po_received_at) as po_received_at,
-                MAX(last_status_change_at) as last_status_change_at,
-                MAX(supplier_id) as supplier_id
-            FROM current_snapshots
-            GROUP BY po_number
-        ),
-        po_days AS (
-            SELECT 
-                po_number,
-                status_code,
-                supplier_id,
-                po_qty,
-                total_amount,
-                po_released_at,
-                po_sent_at,
-                po_arrived_at,
-                po_received_at,
-                COALESCE(EXTRACT(DAY FROM (NOW() - COALESCE(
-                    CASE status_code
-                        WHEN 2 THEN po_released_at
-                        WHEN 3 THEN po_sent_at
-                        WHEN 4 THEN po_approved_at
-                        WHEN 5 THEN po_arrived_at
-                        WHEN 6 THEN po_received_at
-                        ELSE last_status_change_at
-                    END,
-                    last_status_change_at,
-                    NOW()
-                ))), 0)::int as days_in_status
-            FROM po_aggregate
-            WHERE status_code < 6
+                fs.po_number,
+                COALESCE(fs.status, -1) AS status_code,
+                COALESCE(sup.name, '') as supplier_name,
+                COALESCE(fs.supplier_id, 0) as supplier_id,
+                COALESCE(SUM(fs.quantity_ordered), 0) as po_qty,
+                COALESCE(SUM(fs.total_amount), 0) as total_amount,
+                COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - fs.time))/86400)::int, 0) as days_in_status,
+                MAX(fs.po_released_at) as po_released_at,
+                MAX(fs.po_sent_at) as po_sent_at,
+                MAX(fs.po_arrived_at) as po_arrived_at,
+                MAX(fs.po_received_at) as po_received_at
+            FROM filtered_snapshots fs
+            JOIN latest_snapshot ls ON fs.po_number = ls.po_number AND fs.sku = ls.sku AND fs.time = ls.latest_time
+            LEFT JOIN suppliers sup ON fs.supplier_id = sup.id
+            WHERE COALESCE(fs.status, -1) IN (0,1,2,3,4,5,9)
+            GROUP BY fs.po_number, fs.status, sup.name, fs.supplier_id
         )
         SELECT 
             po_number,
             status_code,
             supplier_id,
+            supplier_name,
             po_qty,
             total_amount,
             days_in_status,
@@ -111,31 +81,10 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
             po_sent_at,
             po_arrived_at,
             po_received_at
-        FROM po_days
-        ORDER BY days_in_status DESC, po_number ASC
-        LIMIT %d
-    `, filterClause, limit)
-
-	query := fmt.Sprintf(`
-        WITH ranked_data AS (
-            %s
-        )
-        SELECT 
-            rd.po_number,
-            rd.status_code,
-            rd.supplier_id,
-            rd.po_qty,
-            rd.total_amount,
-            rd.days_in_status,
-            rd.po_released_at,
-            rd.po_sent_at,
-            rd.po_arrived_at,
-            rd.po_received_at,
-            COALESCE(s.name, '') as supplier_name
-        FROM ranked_data rd
-        LEFT JOIN suppliers s ON rd.supplier_id = s.id
-        ORDER BY rd.days_in_status DESC, rd.po_number ASC
-    `, baseQuery)
+        FROM po_aging
+        ORDER BY days_in_status DESC
+        LIMIT $%d
+    `, filterClause, len(filterArgs)+1)
 
 	if filterClause != "" {
 		log.Debug().Msg("po dashboard: aging applying filter")
@@ -152,7 +101,9 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	}
 
 	var rows []summaryRow
-	if err := sqlx.SelectContext(ctx, r.db, &rows, query, filterArgs...); err != nil {
+	args := append(filterArgs, limit)
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query, args...); err != nil {
+		log.Error().Err(err).Msg("po repository: get aging with filter failed")
 		return nil, err
 	}
 

@@ -252,7 +252,8 @@ func (h *POHandler) GetStatusSummaryRaw(c *gin.Context) {
 // GetPOTrend returns the trend data
 func (h *POHandler) GetPOTrend(c *gin.Context) {
 	interval := c.DefaultQuery("interval", "day")
-	trends, err := h.poService.GetPOTrend(c.Request.Context(), interval)
+	filter := h.parseDashboardFilter(c)
+	trends, err := h.poService.GetPOTrend(c.Request.Context(), interval, filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch trends"})
 		return
@@ -281,7 +282,8 @@ func (h *POHandler) GetPOAging(c *gin.Context) {
 	}
 
 	// Summary request (legacy)
-	aging, err := h.poService.GetPOAging(c.Request.Context())
+	filter := h.parseDashboardFilter(c)
+	aging, err := h.poService.GetPOAging(c.Request.Context(), filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch aging data"})
 		return
@@ -309,7 +311,8 @@ func (h *POHandler) GetSupplierPerformance(c *gin.Context) {
 	}
 
 	// Legacy summary request
-	perf, err := h.poService.GetSupplierPerformance(c.Request.Context())
+	filter := h.parseDashboardFilter(c)
+	perf, err := h.poService.GetSupplierPerformance(c.Request.Context(), filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier performance"})
 		return

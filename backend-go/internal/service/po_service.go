@@ -263,19 +263,19 @@ func (s *POService) GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter *d
 }
 
 // GetPOTrend returns the trend data
-func (s *POService) GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error) {
-	if trends, ok, err := s.dashboardCache.GetTrend(ctx, interval, nil); err == nil && ok {
+func (s *POService) GetPOTrend(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error) {
+	if trends, ok, err := s.dashboardCache.GetTrend(ctx, interval, filter); err == nil && ok {
 		return trends, nil
 	} else if err != nil {
 		log.Warn().Err(err).Msg("po service: dashboard trend cache get failed")
 	}
 
-	trends, err := s.repo.GetPOTrend(ctx, interval)
+	trends, err := s.repo.GetPOTrend(ctx, interval, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.dashboardCache.SetTrend(ctx, interval, nil, trends); err != nil {
+	if err := s.dashboardCache.SetTrend(ctx, interval, filter, trends); err != nil {
 		log.Warn().Err(err).Msg("po service: dashboard trend cache set failed")
 	}
 
@@ -283,19 +283,19 @@ func (s *POService) GetPOTrend(ctx context.Context, interval string) ([]domain.P
 }
 
 // GetPOAging returns the aging data
-func (s *POService) GetPOAging(ctx context.Context) ([]domain.POAging, error) {
-	if aging, ok, err := s.dashboardCache.GetAging(ctx, nil); err == nil && ok {
+func (s *POService) GetPOAging(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POAging, error) {
+	if aging, ok, err := s.dashboardCache.GetAging(ctx, filter); err == nil && ok {
 		return aging, nil
 	} else if err != nil {
 		log.Warn().Err(err).Msg("po service: dashboard aging cache get failed")
 	}
 
-	aging, err := s.repo.GetPOAging(ctx)
+	aging, err := s.repo.GetPOAging(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.dashboardCache.SetAging(ctx, nil, aging); err != nil {
+	if err := s.dashboardCache.SetAging(ctx, filter, aging); err != nil {
 		log.Warn().Err(err).Msg("po service: dashboard aging cache set failed")
 	}
 
@@ -303,19 +303,19 @@ func (s *POService) GetPOAging(ctx context.Context) ([]domain.POAging, error) {
 }
 
 // GetSupplierPerformance returns the supplier performance data
-func (s *POService) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
-	if perf, ok, err := s.dashboardCache.GetSupplierPerformance(ctx, nil); err == nil && ok {
+func (s *POService) GetSupplierPerformance(ctx context.Context, filter *domain.DashboardFilter) ([]domain.SupplierPerformance, error) {
+	if perf, ok, err := s.dashboardCache.GetSupplierPerformance(ctx, filter); err == nil && ok {
 		return perf, nil
 	} else if err != nil {
 		log.Warn().Err(err).Msg("po service: dashboard supplier perf cache get failed")
 	}
 
-	perf, err := s.repo.GetSupplierPerformance(ctx)
+	perf, err := s.repo.GetSupplierPerformance(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.dashboardCache.SetSupplierPerformance(ctx, nil, perf); err != nil {
+	if err := s.dashboardCache.SetSupplierPerformance(ctx, filter, perf); err != nil {
 		log.Warn().Err(err).Msg("po service: dashboard supplier perf cache set failed")
 	}
 

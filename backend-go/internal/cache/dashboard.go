@@ -348,6 +348,9 @@ func buildFilterHash(filter *domain.DashboardFilter) string {
 	if len(filter.BrandIDs) > 0 {
 		parts = append(parts, "brand_ids="+joinInt64s(filter.BrandIDs))
 	}
+	if len(filter.SupplierIDs) > 0 {
+		parts = append(parts, "supplier_ids="+joinInt64s(filter.SupplierIDs))
+	}
 
 	if len(parts) == 0 {
 		return "default"

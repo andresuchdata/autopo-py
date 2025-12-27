@@ -648,8 +648,8 @@ func (r *poRepository) getPOAgingWithFilterV2(ctx context.Context, filter *domai
 	return results, nil
 }
 
-func (r *poRepository) GetPOTrend(ctx context.Context, interval string) ([]domain.POTrend, error) {
-	return r.getPOTrendWithFilterV2(ctx, interval, nil)
+func (r *poRepository) GetPOTrend(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error) {
+	return r.getPOTrendWithFilterV2(ctx, interval, filter)
 }
 
 func (r *poRepository) getPOTrendWithFilter(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error) {

@@ -105,8 +105,8 @@ func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pa
 	}, nil
 }
 
-func (r *poRepository) GetSupplierPerformance(ctx context.Context) ([]domain.SupplierPerformance, error) {
-	return r.getSupplierPerformanceWithFilter(ctx, nil, defaultSupplierPerformanceLimit)
+func (r *poRepository) GetSupplierPerformance(ctx context.Context, filter *domain.DashboardFilter) ([]domain.SupplierPerformance, error) {
+	return r.getSupplierPerformanceWithFilter(ctx, filter, defaultSupplierPerformanceLimit)
 }
 
 // GetSupplierPOItems fetches PO items filtered by supplier with pagination and sorting
