@@ -730,6 +730,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	if page < 1 {
 		page = 1
 	}
+
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}
@@ -738,6 +739,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 		"snapshot_time": true,
 		"po_number":     true,
 		"brand_name":    true,
+		"supplier_name": true,
 		"sku":           true,
 		"product_name":  true,
 		"store_name":    true,
@@ -787,6 +789,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT
 				s.po_number,
 				COALESCE(b.name, '') as brand_name,
+				COALESCE(sup.name, '') as supplier_name,
 				s.sku,
 				s.product_name,
 				COALESCE(st.name, '') as store_name,
@@ -802,11 +805,12 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 			LEFT JOIN brands b ON s.brand_id = b.id
+			LEFT JOIN suppliers sup ON s.supplier_id = sup.id
 			LEFT JOIN stores st ON s.store_id = st.id
-			WHERE %s = $1
+			WHERE (%s) = $1%s
 			ORDER BY %s %s
 			LIMIT $%d OFFSET $%d
-		`, filterClause, statusExpr, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
+		`, filterClause, statusExpr, filterClause, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
 	} else {
 		query = fmt.Sprintf(`
 			WITH latest_snapshot AS (
@@ -821,6 +825,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT
 				s.po_number,
 				COALESCE(b.name, '') as brand_name,
+				COALESCE(sup.name, '') as supplier_name,
 				s.sku,
 				s.product_name,
 				COALESCE(st.name, '') as store_name,
@@ -836,11 +841,12 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 			LEFT JOIN brands b ON s.brand_id = b.id
+			LEFT JOIN suppliers sup ON s.supplier_id = sup.id
 			LEFT JOIN stores st ON s.store_id = st.id
-			WHERE %s = $1
+			WHERE (%s) = $1%s
 			ORDER BY %s %s
 			LIMIT $%d OFFSET $%d
-		`, filterClause, statusExpr, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
+		`, filterClause, statusExpr, filterClause, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
 	}
 
 	var countQuery string
@@ -863,8 +869,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT COUNT(*)
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE %s = $1
-		`, filterClause, statusExpr)
+			WHERE (%s) = $1%s
+		`, filterClause, statusExpr, filterClause)
 	} else {
 		countQuery = fmt.Sprintf(`
 			WITH latest_snapshot AS (
@@ -879,8 +885,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT COUNT(*)
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE %s = $1
-		`, filterClause, statusExpr)
+			WHERE (%s) = $1%s
+		`, filterClause, statusExpr, filterClause)
 	}
 
 	countArgs := []interface{}{statusCode}
@@ -920,8 +926,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				COALESCE(SUM(s.total_amount), 0) as total_value
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE %s = $1
-		`, filterClause, statusExpr)
+			WHERE (%s) = $1%s
+		`, filterClause, statusExpr, filterClause)
 	} else {
 		totalsQuery = fmt.Sprintf(`
 			WITH latest_snapshot AS (
@@ -940,8 +946,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				COALESCE(SUM(s.total_amount), 0) as total_value
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE %s = $1
-		`, filterClause, statusExpr)
+			WHERE (%s) = $1%s
+		`, filterClause, statusExpr, filterClause)
 	}
 
 	var totals poSnapshotTotals

@@ -131,6 +131,7 @@ type PODashboardTotals struct {
 type POSnapshotItem struct {
 	PONumber     string  `json:"po_number" db:"po_number"`
 	BrandName    string  `json:"brand_name" db:"brand_name"`
+	SupplierName string  `json:"supplier_name" db:"supplier_name"`
 	SKU          string  `json:"sku" db:"sku"`
 	ProductName  string  `json:"product_name" db:"product_name"`
 	StoreName    string  `json:"store_name" db:"store_name"`
