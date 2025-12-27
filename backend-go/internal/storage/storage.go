@@ -12,6 +12,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	cmstorage "github.com/chartmuseum/storage"
 )
 
@@ -51,6 +55,8 @@ type ObjectStorage interface {
 
 type s3Client struct {
 	backend cmstorage.Backend
+	s3      *s3.S3
+	bucket  string
 }
 
 // DownloadObject implements [ObjectStorage].
@@ -214,13 +220,24 @@ func (s *s3Client) GetObjectContent(ctx context.Context, key string) ([]byte, er
 }
 
 // GetObjectStream implements [ObjectStorage].
-// Note: chartmuseum backend does not expose a streaming reader, so this wraps the full content.
 func (s *s3Client) GetObjectStream(ctx context.Context, key string) (io.ReadCloser, error) {
-	obj, err := s.backend.GetObject(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get object %s: %w", key, err)
+	if s.s3 == nil {
+		// Fallback to byte-buffering if native s3 client is not available
+		obj, err := s.backend.GetObject(key)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get object %s: %w", key, err)
+		}
+		return io.NopCloser(bytes.NewReader(obj.Content)), nil
 	}
-	return io.NopCloser(bytes.NewReader(obj.Content)), nil
+
+	out, err := s.s3.GetObjectWithContext(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to stream object %s: %w", key, err)
+	}
+	return out.Body, nil
 }
 
 // NewS3Client builds a chartmuseum-backed S3 client using the provided configuration.
@@ -266,7 +283,25 @@ func NewS3Client(cfg Config) (ObjectStorage, error) {
 		},
 	)
 
-	return &s3Client{backend: backend}, nil
+	// Also initialize a native S3 client for streaming
+	awsCfg := aws.NewConfig().
+		WithRegion(region).
+		WithEndpoint(endpoint).
+		WithCredentials(credentials.NewStaticCredentials(cfg.AccessKey, cfg.SecretKey, "")).
+		WithS3ForcePathStyle(true).
+		WithDisableSSL(!cfg.UseSSL)
+
+	sess, err := session.NewSession(awsCfg)
+	var s3Svc *s3.S3
+	if err == nil {
+		s3Svc = s3.New(sess)
+	}
+
+	return &s3Client{
+		backend: backend,
+		s3:      s3Svc,
+		bucket:  cfg.Bucket,
+	}, nil
 }
 
 func boolPtr(b bool) *bool {

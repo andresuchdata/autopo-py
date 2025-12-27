@@ -105,15 +105,13 @@ func (h *CSVStreamHandler) StreamCSV(c *gin.Context) {
 				return
 			}
 
-			// Flush roughly every 512KB
-			if bytesWritten%(512*1024) == 0 {
-				_ = buf.Flush()
-				if gzipWriter != nil {
-					_ = gzipWriter.Flush()
-				}
-				if f, ok := c.Writer.(http.Flusher); ok {
-					f.Flush()
-				}
+			// Flush every write to ensure true streaming
+			_ = buf.Flush()
+			if gzipWriter != nil {
+				_ = gzipWriter.Flush()
+			}
+			if f, ok := c.Writer.(http.Flusher); ok {
+				f.Flush()
 			}
 		}
 		if rerr == io.EOF {
