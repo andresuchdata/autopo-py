@@ -234,7 +234,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
     };
 
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+        <div className="flex flex-col h-full min-h-0 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
             {/* Toolbar */}
             <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2 text-sm">
@@ -275,7 +275,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-auto p-2 flex flex-col gap-3" ref={listRef}>
+            <div className="flex-1 min-h-0 overflow-auto p-2 flex flex-col gap-3" ref={listRef}>
                 {error && (
                     <div className="flex items-start justify-between gap-4 rounded-lg border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700">
                         <div className="flex-1">
