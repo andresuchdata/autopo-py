@@ -3,16 +3,35 @@ package handlers
 import (
 	"bufio"
 	"compress/gzip"
-	"encoding/csv"
+	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
-	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/storage"
 	"github.com/gin-gonic/gin"
 )
+
+// isClientDisconnect checks if the error indicates the client disconnected.
+func isClientDisconnect(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	// Also check error message for "broken pipe" or "connection reset"
+	msg := err.Error()
+	return strings.Contains(msg, "broken pipe") || strings.Contains(msg, "connection reset")
+}
 
 type CSVStreamHandler struct {
 	storage storage.ObjectStorage
@@ -26,7 +45,6 @@ func NewCSVStreamHandler(s storage.ObjectStorage) *CSVStreamHandler {
 // Query params:
 //   - key: the object key to stream
 //   - compress: optional, set to "true" to enable gzip compression
-//   - chunk_rows: optional, number of rows per chunk (default 1000)
 func (h *CSVStreamHandler) StreamCSV(c *gin.Context) {
 	key := c.Query("key")
 	if key == "" {
@@ -35,19 +53,14 @@ func (h *CSVStreamHandler) StreamCSV(c *gin.Context) {
 	}
 
 	compress := c.Query("compress") == "true"
-	chunkRows := 1000
-	if chunkRowsStr := c.Query("chunk_rows"); chunkRowsStr != "" {
-		if parsed, err := strconv.Atoi(chunkRowsStr); err == nil && parsed > 0 {
-			chunkRows = parsed
-		}
-	}
 
-	// Get object content from storage
-	content, err := h.storage.GetObjectContent(c.Request.Context(), key)
+	// Get object stream from storage
+	stream, err := h.storage.GetObjectStream(c.Request.Context(), key)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get file: %v", err)})
 		return
 	}
+	defer stream.Close()
 
 	// Set headers for streaming
 	c.Header("Content-Type", "text/csv; charset=utf-8")
@@ -64,75 +77,66 @@ func (h *CSVStreamHandler) StreamCSV(c *gin.Context) {
 		f.Flush()
 	}
 
-	// Create CSV reader from content
-	csvReader := csv.NewReader(strings.NewReader(string(content)))
-	csvReader.LazyQuotes = true
-	csvReader.TrimLeadingSpace = true
-
-	var writer io.Writer = c.Writer
+	var out io.Writer = c.Writer
 	var gzipWriter *gzip.Writer
-
 	if compress {
 		gzipWriter = gzip.NewWriter(c.Writer)
-		writer = gzipWriter
+		out = gzipWriter
 		defer gzipWriter.Close()
 	}
 
-	bufWriter := bufio.NewWriter(writer)
-	csvWriter := csv.NewWriter(bufWriter)
+	buf := bufio.NewWriterSize(out, 256*1024)
+	defer buf.Flush()
 
-	rowCount := 0
+	// Copy bytes in a loop so we can periodically flush to the client.
+	copyBuf := make([]byte, 256*1024)
+	bytesWritten := int64(0)
 	for {
-		record, err := csvReader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			// Log error but continue to avoid breaking the stream
-			fmt.Printf("[WARN] CSV read error at row %d: %v\n", rowCount, err)
-			continue
-		}
-
-		if err := csvWriter.Write(record); err != nil {
-			fmt.Printf("[ERROR] CSV write error at row %d: %v\n", rowCount, err)
-			return
-		}
-
-		rowCount++
-
-		// Flush every chunkRows rows
-		if rowCount%chunkRows == 0 {
-			csvWriter.Flush()
-			if err := bufWriter.Flush(); err != nil {
-				fmt.Printf("[ERROR] Buffer flush error: %v\n", err)
-				return
-			}
-			if gzipWriter != nil {
-				if err := gzipWriter.Flush(); err != nil {
-					fmt.Printf("[ERROR] Gzip flush error: %v\n", err)
+		n, rerr := stream.Read(copyBuf)
+		if n > 0 {
+			wn, werr := buf.Write(copyBuf[:n])
+			bytesWritten += int64(wn)
+			if werr != nil {
+				if isClientDisconnect(werr) {
+					fmt.Printf("[DEBUG] stream write canceled for key=%s: %v\n", key, werr)
 					return
 				}
+				fmt.Printf("[ERROR] stream write error: %v\n", werr)
+				return
 			}
-			if f, ok := c.Writer.(http.Flusher); ok {
-				f.Flush()
+
+			// Flush roughly every 512KB
+			if bytesWritten%(512*1024) == 0 {
+				_ = buf.Flush()
+				if gzipWriter != nil {
+					_ = gzipWriter.Flush()
+				}
+				if f, ok := c.Writer.(http.Flusher); ok {
+					f.Flush()
+				}
 			}
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			if isClientDisconnect(rerr) {
+				fmt.Printf("[DEBUG] stream read canceled for key=%s: %v\n", key, rerr)
+				return
+			}
+
+			fmt.Printf("[ERROR] stream read error: %v\n", rerr)
+			return
 		}
 	}
 
-	// Final flush
-	csvWriter.Flush()
-	if err := bufWriter.Flush(); err != nil {
-		fmt.Printf("[ERROR] Final buffer flush error: %v\n", err)
-		return
-	}
+	_ = buf.Flush()
 	if gzipWriter != nil {
-		if err := gzipWriter.Close(); err != nil {
-			fmt.Printf("[ERROR] Gzip close error: %v\n", err)
-		}
+		_ = gzipWriter.Close()
 	}
 	if f, ok := c.Writer.(http.Flusher); ok {
 		f.Flush()
 	}
 
-	fmt.Printf("[INFO] Streamed %d rows for key: %s\n", rowCount, key)
+	fmt.Printf("[INFO] Streamed %d bytes for key: %s\n", bytesWritten, key)
 }

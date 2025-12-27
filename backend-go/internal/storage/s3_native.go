@@ -179,6 +179,23 @@ func (c *nativeS3Client) GetObjectContent(ctx context.Context, key string) ([]by
 	return content, nil
 }
 
+func (c *nativeS3Client) GetObjectStream(ctx context.Context, key string) (io.ReadCloser, error) {
+	fullKey := c.applyBasePrefix(key, false)
+
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(fullKey),
+	}
+
+	result, err := c.client.GetObject(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object %s: %w", key, err)
+	}
+
+	// Caller must close.
+	return result.Body, nil
+}
+
 func (c *nativeS3Client) DownloadObject(ctx context.Context, key string, destPath string) error {
 	_, err := c.GetObjectContent(ctx, key)
 	if err != nil {

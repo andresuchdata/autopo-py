@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -44,6 +46,7 @@ type ObjectStorage interface {
 	DeleteObject(ctx context.Context, key string) error
 	DeletePrefix(ctx context.Context, prefix string) error
 	GetObjectContent(ctx context.Context, key string) ([]byte, error)
+	GetObjectStream(ctx context.Context, key string) (io.ReadCloser, error)
 }
 
 type s3Client struct {
@@ -208,6 +211,16 @@ func (s *s3Client) GetObjectContent(ctx context.Context, key string) ([]byte, er
 		return nil, fmt.Errorf("failed to get content of %s: %w", key, err)
 	}
 	return obj.Content, nil
+}
+
+// GetObjectStream implements [ObjectStorage].
+// Note: chartmuseum backend does not expose a streaming reader, so this wraps the full content.
+func (s *s3Client) GetObjectStream(ctx context.Context, key string) (io.ReadCloser, error) {
+	obj, err := s.backend.GetObject(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object %s: %w", key, err)
+	}
+	return io.NopCloser(bytes.NewReader(obj.Content)), nil
 }
 
 // NewS3Client builds a chartmuseum-backed S3 client using the provided configuration.

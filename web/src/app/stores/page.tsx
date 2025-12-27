@@ -167,8 +167,17 @@ export default function StoresPage() {
         </div>
 
         {/* File Viewer Dialog */}
-        <Dialog open={!!viewingFile} onOpenChange={(open) => !open && setViewingFile(null)}>
-          <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 gap-0" aria-describedby={undefined}>
+        <Dialog
+          open={!!viewingFile}
+          onOpenChange={(open) => {
+            if (!open) setViewingFile(null);
+          }}
+        >
+          <DialogContent
+            className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 gap-0"
+            aria-describedby={undefined}
+            showCloseButton={false}
+          >
             <DialogTitle className="sr-only">CSV File Viewer</DialogTitle>
             {viewingFile && (
               <VirtualizedCSVViewer
