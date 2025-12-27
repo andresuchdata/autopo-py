@@ -9,15 +9,13 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { StorageExplorer } from '@/components/storage/StorageExplorer';
-import { DataViewer } from '@/components/DataViewer';
+import { VirtualizedCSVViewer } from '@/components/storage/VirtualizedCSVViewer';
 import { storageService } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
-  DialogTrigger
 } from '@/components/ui/dialog';
 import { clsx } from 'clsx';
 import type { StoragePrefix } from '@/services/api';
@@ -28,38 +26,9 @@ export default function StoresPage() {
   const [sidebarLoading, setSidebarLoading] = useState(false);
   const [sidebarError, setSidebarError] = useState<string | null>(null);
   const [viewingFile, setViewingFile] = useState<{ key: string; name: string } | null>(null);
-  const [fileData, setFileData] = useState<any[] | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const handleViewFile = async (key: string) => {
+  const handleViewFile = (key: string) => {
     setViewingFile({ key, name: key.split('/').pop() || 'File' });
-    setLoading(true);
-    try {
-      const content = await storageService.getFileContent(key);
-      // Simple CSV parser for the preview
-      const lines = content.split('\n').filter(Boolean);
-      if (lines.length > 0) {
-        // Detect separator (semicolon or comma)
-        const header = lines[0];
-        const separator = header.includes(';') ? ';' : ',';
-        const headers = header.split(separator).map((h: string) => h.trim().replace(/^"|"$/g, ''));
-
-        const data = lines.slice(1).map((line: string) => {
-          const values = line.split(separator).map((v: string) => v.trim().replace(/^"|"$/g, ''));
-          const row: any = {};
-          headers.forEach((h: string, i: number) => {
-            row[h] = values[i] || '';
-          });
-          return row;
-        });
-        setFileData(data);
-      }
-    } catch (error) {
-      console.error('Failed to view file:', error);
-      alert('Failed to load file content');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const loadRootFolders = useCallback(async () => {
@@ -199,34 +168,15 @@ export default function StoresPage() {
 
         {/* File Viewer Dialog */}
         <Dialog open={!!viewingFile} onOpenChange={(open) => !open && setViewingFile(null)}>
-          <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-6 gap-4">
-            <DialogHeader className="flex flex-row items-center justify-between border-b pb-4 shrink-0">
-              <div>
-                <DialogTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-primary" />
-                  {viewingFile?.name}
-                </DialogTitle>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Full Path: {viewingFile?.key}
-                </p>
-              </div>
-            </DialogHeader>
-
-            <div className="flex-1 overflow-hidden min-h-0 bg-gray-50 dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
-              {loading ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : fileData ? (
-                <div className="h-full p-4">
-                  <DataViewer data={fileData} />
-                </div>
-              ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  Failed to load file content
-                </div>
-              )}
-            </div>
+          <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 gap-0" aria-describedby={undefined}>
+            <DialogTitle className="sr-only">CSV File Viewer</DialogTitle>
+            {viewingFile && (
+              <VirtualizedCSVViewer
+                fileKey={viewingFile.key}
+                fileName={viewingFile.name}
+                onClose={() => setViewingFile(null)}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </main>
