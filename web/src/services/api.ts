@@ -414,9 +414,31 @@ export const invalidatePOSnapshotCache = async () => {
     }
 };
 
+export interface StorageObject {
+    key: string;
+    size: number;
+}
+
+export interface StorageListResponse {
+    objects: StorageObject[];
+    nextCursor?: string;
+}
+
+export interface StoragePrefix {
+    name: string;
+    prefix: string;
+}
+
 export const storageService = {
-    getFiles: async (prefix?: string) => {
-        const response = await api.get('/storage/files', { params: { prefix } });
+    getFiles: async (prefix?: string, limit: number = 50, cursor?: string): Promise<StorageListResponse> => {
+        const response = await api.get('/storage/files', {
+            params: { prefix, limit, cursor },
+        });
+        return response.data;
+    },
+
+    getPrefixes: async (prefix?: string): Promise<StoragePrefix[]> => {
+        const response = await api.get('/storage/prefixes', { params: { prefix } });
         return response.data;
     },
 

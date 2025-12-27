@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     Folder,
     File as FileIcon,
@@ -17,6 +17,12 @@ import { Button } from '@/components/ui/button';
 import { storageService } from '@/services/api';
 import { clsx } from 'clsx';
 
+const ITEMS_PER_PAGE = 50;
+
+const ensureTrailingSlash = (value: string): string => {
+    if (!value) return '';
+    return value.endsWith('/') ? value : `${value}/`;
+};
 
 interface StorageExplorerProps {
     basePrefix: string;
@@ -31,69 +37,114 @@ interface StorageItem {
 }
 
 export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps) {
-    const [currentPrefix, setCurrentPrefix] = useState(basePrefix);
-    const [items, setItems] = useState<StorageItem[]>([]);
+    const normalizedBasePrefix = ensureTrailingSlash(basePrefix);
+    const [currentPrefix, setCurrentPrefix] = useState<string>(normalizedBasePrefix);
+    const [folders, setFolders] = useState<StorageItem[]>([]);
+    const [files, setFiles] = useState<StorageItem[]>([]);
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const listRef = useRef<HTMLDivElement | null>(null);
+    const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-    const fetchFiles = useCallback(async () => {
-        setLoading(true);
-        setError(null);
+    const combinedItems = useMemo(() => [...folders, ...files], [folders, files]);
+    const hasMoreFiles = Boolean(nextCursor);
+
+    const loadFolders = useCallback(async () => {
         try {
-            const data = await storageService.getFiles(currentPrefix);
-            // Process data into folders and files
-            const processedItems: StorageItem[] = [];
-            const folders = new Set<string>();
-
-            data.forEach((obj: any) => {
-                const relativePath = obj.Key.substring(currentPrefix.length);
-                const parts = relativePath.split('/').filter(Boolean);
-
-                if (parts.length > 1) {
-                    // It's a folder
-                    folders.add(parts[0]);
-                } else if (parts.length === 1) {
-                    // It's a file
-                    processedItems.push({
-                        key: obj.Key,
-                        name: parts[0],
-                        isFolder: false,
-                        size: obj.Size
-                    });
-                }
-            });
-
-            const folderItems = Array.from(folders).map(name => ({
-                key: currentPrefix + name + '/',
-                name: name,
-                isFolder: true
+            const data = await storageService.getPrefixes(currentPrefix);
+            const folderItems = data.map((folder) => ({
+                key: ensureTrailingSlash(folder.prefix),
+                name: folder.name,
+                isFolder: true,
             }));
-
-            setItems([...folderItems, ...processedItems]);
-            setError(null);
-        } catch (error) {
-            console.error('Failed to fetch files:', error);
-            setItems([]);
-            setError('Unable to load files from storage. Please try again.');
-        } finally {
-            setLoading(false);
+            setFolders(folderItems);
+        } catch (err) {
+            console.error('Failed to fetch folders:', err);
+            setFolders([]);
         }
     }, [currentPrefix]);
 
+    const loadFiles = useCallback(
+        async (cursorOverride?: string) => {
+            const isInitial = !cursorOverride;
+            if (isInitial) {
+                setLoading(true);
+                setError(null);
+            } else {
+                setLoadingMore(true);
+            }
+
+            try {
+                const response = await storageService.getFiles(currentPrefix, ITEMS_PER_PAGE, cursorOverride);
+                const mappedFiles: StorageItem[] = response.objects.map((obj) => {
+                    const key = obj.key;
+                    const relativePath =
+                        currentPrefix && key.startsWith(currentPrefix) ? key.slice(currentPrefix.length) : key;
+                    const name = relativePath.split('/').filter(Boolean).pop() || key;
+                    return {
+                        key,
+                        name,
+                        isFolder: false,
+                        size: obj.size,
+                    };
+                });
+
+                setFiles((prev) => (cursorOverride ? [...prev, ...mappedFiles] : mappedFiles));
+                setNextCursor(response.nextCursor ?? null);
+            } catch (err) {
+                console.error('Failed to fetch files:', err);
+                if (!cursorOverride) {
+                    setFiles([]);
+                    setNextCursor(null);
+                }
+                setError('Unable to load files from storage. Please try again.');
+            } finally {
+                if (isInitial) {
+                    setLoading(false);
+                } else {
+                    setLoadingMore(false);
+                }
+            }
+        },
+        [currentPrefix],
+    );
+
+    const refreshCurrent = useCallback(() => {
+        loadFolders();
+        loadFiles();
+    }, [loadFolders, loadFiles]);
+
     useEffect(() => {
-        fetchFiles();
-    }, [fetchFiles]);
+        setCurrentPrefix(ensureTrailingSlash(basePrefix));
+    }, [basePrefix]);
+
+    useEffect(() => {
+        setFolders([]);
+        setFiles([]);
+        setNextCursor(null);
+        refreshCurrent();
+    }, [refreshCurrent]);
 
     const handleFolderClick = (prefix: string) => {
-        setCurrentPrefix(prefix);
+        setCurrentPrefix(ensureTrailingSlash(prefix));
     };
 
     const handleBack = () => {
-        if (currentPrefix === basePrefix) return;
-        const parts = currentPrefix.split('/').filter(Boolean);
-        parts.pop();
-        const parentPrefix = parts.length > 0 ? parts.join('/') + '/' : '';
-        setCurrentPrefix(parentPrefix.startsWith(basePrefix) ? parentPrefix : basePrefix);
+        if (currentPrefix === normalizedBasePrefix) return;
+        const trimmed = currentPrefix.replace(/\/+$/, '');
+        const lastSlashIndex = trimmed.lastIndexOf('/');
+        let parent = normalizedBasePrefix;
+        if (lastSlashIndex >= 0) {
+            parent = trimmed.slice(0, lastSlashIndex + 1);
+        }
+
+        if (!parent.startsWith(normalizedBasePrefix)) {
+            parent = normalizedBasePrefix;
+        }
+
+        setCurrentPrefix(ensureTrailingSlash(parent));
     };
 
     const handleDownload = async (key: string, name: string) => {
@@ -136,7 +187,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                 await storageService.deleteFile(key);
                 alert('File deleted');
             }
-            fetchFiles();
+            refreshCurrent();
         } catch (error) {
             setError(`Failed to delete ${isFolder ? 'folder' : 'file'}.`);
         }
@@ -147,20 +198,47 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
         try {
             await storageService.deletePrefix(currentPrefix);
             alert('All files in folder deleted');
-            fetchFiles();
+            refreshCurrent();
         } catch (error) {
             setError('Failed to delete folder content.');
         }
     };
 
-    const breadcrumbs = currentPrefix.substring(basePrefix.length).split('/').filter(Boolean);
+    useEffect(() => {
+        const sentinel = sentinelRef.current;
+        const listElement = listRef.current;
+        if (!sentinel || !hasMoreFiles || !nextCursor) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && nextCursor && !loading && !loadingMore) {
+                    loadFiles(nextCursor);
+                }
+            },
+            {
+                root: listElement,
+                threshold: 0.1
+            }
+        );
+
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMoreFiles, loadFiles, loading, loadingMore, nextCursor]);
+
+    const breadcrumbs = currentPrefix.substring(normalizedBasePrefix.length).split('/').filter(Boolean);
+
+    const handleManualLoadMore = () => {
+        if (nextCursor && !loadingMore) {
+            loadFiles(nextCursor);
+        }
+    };
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
             {/* Toolbar */}
             <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2 text-sm">
-                    <Button variant="ghost" size="sm" onClick={() => setCurrentPrefix(basePrefix)} className="font-semibold text-primary">
+                    <Button variant="ghost" size="sm" onClick={() => setCurrentPrefix(normalizedBasePrefix)} className="font-semibold text-primary">
                         Root
                     </Button>
                     {breadcrumbs.map((crumb, idx) => (
@@ -170,7 +248,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
-                                    const path = basePrefix + breadcrumbs.slice(0, idx + 1).join('/') + '/';
+                                    const path = normalizedBasePrefix + breadcrumbs.slice(0, idx + 1).join('/') + '/';
                                     setCurrentPrefix(path);
                                 }}
                             >
@@ -181,7 +259,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={fetchFiles} disabled={loading} title="Refresh">
+                    <Button variant="outline" size="sm" onClick={refreshCurrent} disabled={loading} title="Refresh">
                         <RefreshCcw className={clsx("w-4 h-4", loading && "animate-spin")} />
                     </Button>
                     <Button variant="outline" size="sm" onClick={handleDownloadAll} disabled={loading} className="gap-2">
@@ -189,7 +267,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                         Download All
                     </Button>
 
-                    <Button variant="destructive" size="sm" onClick={handleDeleteAll} disabled={loading || currentPrefix === basePrefix} className="gap-2">
+                    <Button variant="destructive" size="sm" onClick={handleDeleteAll} disabled={loading || currentPrefix === normalizedBasePrefix} className="gap-2">
                         <Trash className="w-4 h-4" />
                         Delete All
                     </Button>
@@ -197,18 +275,18 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-auto p-2 flex flex-col gap-3">
+            <div className="flex-1 overflow-auto p-2 flex flex-col gap-3" ref={listRef}>
                 {error && (
                     <div className="flex items-start justify-between gap-4 rounded-lg border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700">
                         <div className="flex-1">
                             {error}
                         </div>
-                        <Button variant="outline" size="sm" onClick={fetchFiles} disabled={loading}>
+                        <Button variant="outline" size="sm" onClick={refreshCurrent} disabled={loading}>
                             Retry
                         </Button>
                     </div>
                 )}
-                {currentPrefix !== basePrefix && (
+                {currentPrefix !== normalizedBasePrefix && (
                     <div
                         className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-gray-500"
                         onClick={handleBack}
@@ -218,14 +296,14 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                     </div>
                 )}
 
-                {items.length === 0 && !loading ? (
+                {combinedItems.length === 0 && !loading ? (
                     <div className="h-64 flex flex-col items-center justify-center text-gray-400">
                         <FolderPlus className="w-12 h-12 mb-2 opacity-20" />
                         <p className="text-sm">Folder is empty</p>
                     </div>
                 ) : (
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                        {items.map((item) => (
+                        {combinedItems.map((item) => (
                             <div
                                 key={item.key}
                                 className="group flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -269,6 +347,24 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                                 </div>
                             </div>
                         ))}
+                        {hasMoreFiles && <div ref={sentinelRef} className="h-1" />}
+                    </div>
+                )}
+                {loading && combinedItems.length === 0 && (
+                    <div className="h-32 flex items-center justify-center text-sm text-gray-500">
+                        Loading files...
+                    </div>
+                )}
+                {hasMoreFiles && !loading && (
+                    <div className="px-3 pb-3">
+                        <Button variant="outline" size="sm" className="w-full" onClick={handleManualLoadMore} disabled={loadingMore}>
+                            {loadingMore ? 'Loading…' : 'Load more'}
+                        </Button>
+                    </div>
+                )}
+                {loadingMore && hasMoreFiles && (
+                    <div className="px-3 pb-3 text-xs text-gray-500 text-center">
+                        Loading more files...
                     </div>
                 )}
             </div>

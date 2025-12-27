@@ -108,6 +108,7 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 			storageGroup := apiGroup.Group("/storage")
 			{
 				storageGroup.GET("/files", storageHandler.ListFiles)
+				storageGroup.GET("/prefixes", storageHandler.ListPrefixes)
 				storageGroup.GET("/download", storageHandler.DownloadFile)
 				storageGroup.GET("/download_all", storageHandler.DownloadAll)
 				storageGroup.GET("/content", storageHandler.GetFileContent)

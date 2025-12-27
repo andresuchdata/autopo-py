@@ -6,6 +6,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	cmstorage "github.com/chartmuseum/storage"
@@ -24,13 +26,19 @@ type Config struct {
 
 // ObjectInfo describes a remote object.
 type ObjectInfo struct {
-	Key  string
-	Size int64
+	Key  string `json:"key"`
+	Size int64  `json:"size"`
+}
+
+type ListObjectsResult struct {
+	Objects    []ObjectInfo `json:"objects"`
+	NextCursor string       `json:"nextCursor,omitempty"`
 }
 
 // ObjectStorage is the abstraction consumed by the pipelines.
 type ObjectStorage interface {
-	ListObjects(ctx context.Context, prefix string) ([]ObjectInfo, error)
+	ListObjects(ctx context.Context, prefix string, limit int, cursor string) (ListObjectsResult, error)
+	ListPrefixes(ctx context.Context, prefix string) ([]string, error)
 	DownloadObject(ctx context.Context, key string, destPath string) error
 	UploadObject(ctx context.Context, key string, content []byte) error
 	DeleteObject(ctx context.Context, key string) error
@@ -58,10 +66,10 @@ func (s *s3Client) DownloadObject(ctx context.Context, key string, destPath stri
 }
 
 // ListObjects implements [ObjectStorage].
-func (s *s3Client) ListObjects(ctx context.Context, prefix string) ([]ObjectInfo, error) {
+func (s *s3Client) ListObjects(ctx context.Context, prefix string, limit int, cursor string) (ListObjectsResult, error) {
 	list, err := s.backend.ListObjects(prefix)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list prefix %s: %w", prefix, err)
+		return ListObjectsResult{}, fmt.Errorf("failed to list prefix %s: %w", prefix, err)
 	}
 
 	fmt.Printf("[DEBUG] ListObjects prefix=%q returned %d objects from chartmuseum backend\n", prefix, len(list))
@@ -81,7 +89,79 @@ func (s *s3Client) ListObjects(ctx context.Context, prefix string) ([]ObjectInfo
 		})
 	}
 
-	return results, nil
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Key < results[j].Key
+	})
+
+	start := 0
+	if cursor != "" {
+		if idx, err := strconv.Atoi(cursor); err == nil && idx >= 0 && idx < len(results) {
+			start = idx
+		} else if err == nil && idx >= len(results) {
+			start = len(results)
+		}
+	}
+
+	if limit <= 0 {
+		limit = len(results) - start
+	}
+	end := start + limit
+	if end > len(results) {
+		end = len(results)
+	}
+
+	nextCursor := ""
+	if end < len(results) {
+		nextCursor = strconv.Itoa(end)
+	}
+
+	page := make([]ObjectInfo, 0, end-start)
+	if start < end {
+		page = append(page, results[start:end]...)
+	}
+
+	return ListObjectsResult{
+		Objects:    page,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+// ListPrefixes returns the immediate child folders for a given prefix.
+func (s *s3Client) ListPrefixes(ctx context.Context, prefix string) ([]string, error) {
+	objectsCursor := ""
+	found := make(map[string]struct{})
+
+	for {
+		page, err := s.ListObjects(ctx, prefix, 1000, objectsCursor)
+		if err != nil {
+			return nil, err
+		}
+
+		base := strings.Trim(prefix, "/")
+		if base != "" {
+			base += "/"
+		}
+
+		for _, obj := range page.Objects {
+			relative := strings.TrimPrefix(obj.Key, base)
+			parts := strings.Split(relative, "/")
+			if len(parts) > 1 && parts[0] != "" {
+				found[parts[0]] = struct{}{}
+			}
+		}
+
+		if page.NextCursor == "" {
+			break
+		}
+		objectsCursor = page.NextCursor
+	}
+
+	result := make([]string, 0, len(found))
+	for key := range found {
+		result = append(result, key)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 // UploadObject implements [ObjectStorage].
@@ -102,14 +182,21 @@ func (s *s3Client) DeleteObject(ctx context.Context, key string) error {
 
 // DeletePrefix implements [ObjectStorage].
 func (s *s3Client) DeletePrefix(ctx context.Context, prefix string) error {
-	objects, err := s.ListObjects(ctx, prefix)
-	if err != nil {
-		return err
-	}
-	for _, obj := range objects {
-		if err := s.DeleteObject(ctx, obj.Key); err != nil {
+	cursor := ""
+	for {
+		page, err := s.ListObjects(ctx, prefix, 1000, cursor)
+		if err != nil {
 			return err
 		}
+		for _, obj := range page.Objects {
+			if err := s.DeleteObject(ctx, obj.Key); err != nil {
+				return err
+			}
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
 	}
 	return nil
 }

@@ -1,19 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Database,
   FileText,
   Settings,
-  Layers,
   Activity,
-  Archive,
   Search,
-  X,
-  Maximize2,
-  Table as TableIcon
+  RefreshCw
 } from 'lucide-react';
-import { Sidebar, Store } from '@/components/Sidebar';
 import { StorageExplorer } from '@/components/storage/StorageExplorer';
 import { DataViewer } from '@/components/DataViewer';
 import { storageService } from '@/services/api';
@@ -26,18 +20,13 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { clsx } from 'clsx';
-
-type Section = 'stock_health_raw' | 'stock_health_output' | 'po_snapshot_raw' | 'po_snapshot_output';
-
-const SECTIONS: { id: Section; label: string; icon: any; prefix: string }[] = [
-  { id: 'stock_health_raw', label: 'Stock Health - Raw', icon: Database, prefix: 'stock_health/raw/' },
-  { id: 'stock_health_output', label: 'Stock Health - Output', icon: Archive, prefix: 'stock_health/output/' },
-  { id: 'po_snapshot_raw', label: 'PO Snapshot - Raw', icon: Layers, prefix: 'po_snapshot/raw/' },
-  { id: 'po_snapshot_output', label: 'PO Snapshot - Output', icon: FileText, prefix: 'po_snapshot/output/' },
-];
+import type { StoragePrefix } from '@/services/api';
 
 export default function StoresPage() {
-  const [activeSection, setActiveSection] = useState<Section>('stock_health_output');
+  const [folders, setFolders] = useState<StoragePrefix[]>([]);
+  const [activePrefix, setActivePrefix] = useState<string>('');
+  const [sidebarLoading, setSidebarLoading] = useState(false);
+  const [sidebarError, setSidebarError] = useState<string | null>(null);
   const [viewingFile, setViewingFile] = useState<{ key: string; name: string } | null>(null);
   const [fileData, setFileData] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,7 +62,27 @@ export default function StoresPage() {
     }
   };
 
-  const currentSection = SECTIONS.find(s => s.id === activeSection);
+  const loadRootFolders = useCallback(async () => {
+    setSidebarLoading(true);
+    setSidebarError(null);
+    try {
+      const data = await storageService.getPrefixes('');
+      setFolders(data);
+      setActivePrefix((prev) => prev || data[0]?.prefix || '');
+    } catch (error) {
+      console.error('Failed to load storage folders', error);
+      setSidebarError('Unable to load folders');
+      setFolders([]);
+    } finally {
+      setSidebarLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRootFolders();
+  }, [loadRootFolders]);
+
+  const activeFolder = folders.find((folder) => folder.prefix === activePrefix);
 
   return (
     <div className="flex h-screen bg-[#F8F9FC] dark:bg-gray-950 overflow-hidden">
@@ -86,31 +95,58 @@ export default function StoresPage() {
           </h1>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-2">
-            Data Pipeline
-          </p>
-          {SECTIONS.map((section) => {
-            const Icon = section.icon;
-            return (
-              <button
-                key={section.id}
-                onClick={() => setActiveSection(section.id)}
-                className={clsx(
-                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group",
-                  activeSection === section.id
-                    ? "bg-primary text-white shadow-md shadow-primary/20"
-                    : "text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
-                )}
-              >
-                <Icon className={clsx(
-                  "w-4 h-4",
-                  activeSection === section.id ? "text-white" : "text-gray-400 group-hover:text-primary"
-                )} />
-                {section.label}
-              </button>
-            );
-          })}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          <div className="flex items-center justify-between px-2 mb-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              Cloud Storage
+            </p>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={loadRootFolders}
+              disabled={sidebarLoading}
+            >
+              <RefreshCw className={clsx("w-3.5 h-3.5", sidebarLoading && "animate-spin")} />
+            </Button>
+          </div>
+          {sidebarError && (
+            <div className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+              {sidebarError}
+            </div>
+          )}
+          {sidebarLoading && folders.length === 0 ? (
+            <div className="space-y-2 px-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-10 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
+              ))}
+            </div>
+          ) : folders.length === 0 ? (
+            <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
+              No folders found under the configured cloud storage prefix.
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {folders.map((folder) => (
+                <button
+                  key={folder.prefix}
+                  onClick={() => setActivePrefix(folder.prefix)}
+                  className={clsx(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                    activePrefix === folder.prefix
+                      ? "bg-primary text-white shadow-md shadow-primary/20"
+                      : "text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  )}
+                >
+                  <FileText className={clsx(
+                    "w-4 h-4",
+                    activePrefix === folder.prefix ? "text-white" : "text-gray-400"
+                  )} />
+                  <span className="truncate">{folder.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="p-4 border-t border-gray-200 dark:border-gray-800">
@@ -126,10 +162,10 @@ export default function StoresPage() {
         <header className="h-16 border-b border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-gray-900/50 backdrop-blur-md flex items-center justify-between px-8 shrink-0">
           <div className="flex flex-col">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {currentSection?.label}
+              {activeFolder?.name || 'Root Storage'}
             </h2>
             <span className="text-xs text-gray-500">
-              Prefix: {currentSection?.prefix}
+              Prefix: {activePrefix || '/'}
             </span>
           </div>
 
@@ -143,13 +179,19 @@ export default function StoresPage() {
 
         <div className="flex-1 overflow-hidden p-8">
           <div className="h-full flex flex-col gap-6">
-            <div className="flex-1">
-              <StorageExplorer
-                key={activeSection}
-                basePrefix={currentSection?.prefix || ''}
-                onViewFile={handleViewFile}
-              />
-            </div>
+            {activePrefix || folders.length > 0 ? (
+              <div className="flex-1">
+                <StorageExplorer
+                  key={activePrefix || 'root'}
+                  basePrefix={activePrefix || ''}
+                  onViewFile={handleViewFile}
+                />
+              </div>
+            ) : (
+              <div className="flex-1 rounded-xl border border-dashed border-gray-300 dark:border-gray-800 flex items-center justify-center text-sm text-gray-500">
+                Select a folder to begin browsing.
+              </div>
+            )}
           </div>
         </div>
 

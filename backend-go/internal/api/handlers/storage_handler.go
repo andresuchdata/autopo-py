@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/storage"
@@ -23,12 +25,20 @@ func NewStorageHandler(s storage.ObjectStorage) *StorageHandler {
 
 func (h *StorageHandler) ListFiles(c *gin.Context) {
 	prefix := c.Query("prefix")
-	files, err := h.storage.ListObjects(c.Request.Context(), prefix)
+	limitStr := c.DefaultQuery("limit", "100")
+	cursor := c.Query("cursor")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+		limit = 100
+	}
+
+	result, err := h.storage.ListObjects(c.Request.Context(), prefix, limit, cursor)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, files)
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *StorageHandler) DownloadFile(c *gin.Context) {
@@ -107,13 +117,24 @@ func (h *StorageHandler) DownloadAll(c *gin.Context) {
 		return
 	}
 
-	files, err := h.storage.ListObjects(c.Request.Context(), prefix)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	var allFiles []storage.ObjectInfo
+	cursor := ""
+
+	for {
+		page, err := h.storage.ListObjects(c.Request.Context(), prefix, 1000, cursor)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		allFiles = append(allFiles, page.Objects...)
+
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
 	}
 
-	if len(files) == 0 {
+	if len(allFiles) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "no files found"})
 		return
 	}
@@ -121,7 +142,7 @@ func (h *StorageHandler) DownloadAll(c *gin.Context) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
-	for _, obj := range files {
+	for _, obj := range allFiles {
 		content, err := h.storage.GetObjectContent(c.Request.Context(), obj.Key)
 		if err != nil {
 			zw.Close()
@@ -152,4 +173,44 @@ func (h *StorageHandler) DownloadAll(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", zipName))
 	c.Header("Content-Type", "application/zip")
 	c.Data(http.StatusOK, "application/zip", buf.Bytes())
+}
+
+func (h *StorageHandler) ListPrefixes(c *gin.Context) {
+	prefix := c.Query("prefix")
+	prefixes, err := h.storage.ListPrefixes(c.Request.Context(), prefix)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	base := strings.Trim(prefix, "/")
+	if base != "" && !strings.HasSuffix(base, "/") {
+		base += "/"
+	}
+
+	type prefixResponse struct {
+		Name   string `json:"name"`
+		Prefix string `json:"prefix"`
+	}
+
+	result := make([]prefixResponse, 0, len(prefixes))
+	for _, name := range prefixes {
+		full := name
+		if base != "" {
+			full = base + name
+		}
+		if !strings.HasSuffix(full, "/") {
+			full += "/"
+		}
+		result = append(result, prefixResponse{
+			Name:   name,
+			Prefix: full,
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+
+	c.JSON(http.StatusOK, result)
 }
