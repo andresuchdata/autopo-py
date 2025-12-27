@@ -49,6 +49,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    env_file:
+      - .env
     environment:
       - DB_HOST=db
       - DB_PORT=5432
@@ -68,7 +70,7 @@ services:
     entrypoint: ["/app/entrypoint.sh"]
     command: ["/app/server"]
     ports:
-      - "8080:8080"
+      - "8080:8082"
     volumes:
       - ./data/uploads:/app/data/uploads
       - ./data/output:/app/data/output

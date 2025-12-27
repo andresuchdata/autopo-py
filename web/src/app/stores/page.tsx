@@ -27,17 +27,17 @@ import {
 } from '@/components/ui/dialog';
 import { clsx } from 'clsx';
 
-type Section = 'raw' | 'intermediate' | 'output' | 'legacy';
+type Section = 'stock_health_raw' | 'stock_health_output' | 'po_snapshot_raw' | 'po_snapshot_output';
 
 const SECTIONS: { id: Section; label: string; icon: any; prefix: string }[] = [
-  { id: 'raw', label: 'Raw Files', icon: Database, prefix: 'raw/' },
-  { id: 'intermediate', label: 'Intermediate', icon: Layers, prefix: 'intermediate/' },
-  { id: 'output', label: 'Output Results', icon: Archive, prefix: 'output/' },
-  { id: 'legacy', label: 'Legacy Export', icon: FileText, prefix: 'legacy/' },
+  { id: 'stock_health_raw', label: 'Stock Health - Raw', icon: Database, prefix: 'stock_health/raw/' },
+  { id: 'stock_health_output', label: 'Stock Health - Output', icon: Archive, prefix: 'stock_health/output/' },
+  { id: 'po_snapshot_raw', label: 'PO Snapshot - Raw', icon: Layers, prefix: 'po_snapshot/raw/' },
+  { id: 'po_snapshot_output', label: 'PO Snapshot - Output', icon: FileText, prefix: 'po_snapshot/output/' },
 ];
 
 export default function StoresPage() {
-  const [activeSection, setActiveSection] = useState<Section>('output');
+  const [activeSection, setActiveSection] = useState<Section>('stock_health_output');
   const [viewingFile, setViewingFile] = useState<{ key: string; name: string } | null>(null);
   const [fileData, setFileData] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);

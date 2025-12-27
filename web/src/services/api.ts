@@ -207,6 +207,10 @@ export const getDashboardSummary = async (params?: DashboardSummaryParams, optio
         });
         return response.data;
     } catch (error) {
+        if (error instanceof Error && (error.name === 'CanceledError' || error.name === 'AbortError')) {
+            throw error;
+        }
+
         console.error('Error fetching dashboard summary:', error);
         throw error;
     }

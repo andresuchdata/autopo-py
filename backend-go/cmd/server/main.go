@@ -80,7 +80,7 @@ func main() {
 	// Initialize storage
 	var storageClient storage.ObjectStorage
 	if cfg.CloudStorage.Enabled {
-		storageClient, err = storage.NewS3Client(storage.Config{
+		storageClient, err = storage.NewNativeS3Client(storage.Config{
 			Endpoint:  cfg.CloudStorage.Endpoint,
 			AccessKey: cfg.CloudStorage.AccessKey,
 			SecretKey: cfg.CloudStorage.SecretKey,

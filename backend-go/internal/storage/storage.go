@@ -64,6 +64,8 @@ func (s *s3Client) ListObjects(ctx context.Context, prefix string) ([]ObjectInfo
 		return nil, fmt.Errorf("failed to list prefix %s: %w", prefix, err)
 	}
 
+	fmt.Printf("[DEBUG] ListObjects prefix=%q returned %d objects from chartmuseum backend\n", prefix, len(list))
+
 	results := make([]ObjectInfo, 0, len(list))
 
 	for _, obj := range list {
@@ -72,6 +74,7 @@ func (s *s3Client) ListObjects(ctx context.Context, prefix string) ([]ObjectInfo
 		if prefixTrim != "" {
 			key = path.Join(prefixTrim, obj.Path)
 		}
+		fmt.Printf("[DEBUG] Object: path=%q size=%d\n", obj.Path, len(obj.Content))
 		results = append(results, ObjectInfo{
 			Key:  key,
 			Size: int64(len(obj.Content)),

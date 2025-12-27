@@ -44,3 +44,10 @@ migrate-down:
 start: db-up migrate-up run
 
 stop: db-down
+
+# Bring up the app service with cloud storage env vars loaded from .env
+app-up:
+	@bash -c 'set -a && source .env && set +a && docker-compose up -d app'
+
+app-build:
+	@bash -c 'set -a && source .env && set +a && docker compose up -d --build app'
