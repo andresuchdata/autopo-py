@@ -131,12 +131,12 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
 
         return (
             <Card className="flex flex-col bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm hover:shadow-md transition-all">
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold text-center uppercase tracking-wider text-muted-foreground">{title}</CardTitle>
+                <CardHeader className="py-2 px-3">
+                    <CardTitle className="text-[10px] font-bold text-center uppercase tracking-widest text-muted-foreground/70">{title}</CardTitle>
                 </CardHeader>
-                <CardContent className="flex-1 min-h-[320px] flex flex-col items-center gap-4">
-                    <div className="w-full h-[220px] min-h-[220px] min-w-0">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
+                <CardContent className="flex-1 min-h-[280px] flex flex-col items-center gap-3 p-3">
+                    <div className="w-full h-[180px] min-h-[180px] min-w-0">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180}>
                             <PieChart>
                                 <Pie
                                     data={data}
@@ -165,14 +165,14 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                         </ResponsiveContainer>
                     </div>
 
-                    <div className="text-center space-y-1">
-                        <span className="text-2xl font-bold block">
+                    <div className="text-center">
+                        <span className="text-xl font-bold block leading-none">
                             {valueFormatter ? valueFormatter(total) : formatNumberID(total)}
                         </span>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Total</span>
+                        <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-medium opacity-60">Total</span>
                     </div>
 
-                    <div className="w-full space-y-2">
+                    <div className="w-full space-y-1.5">
                         {data.map((item) => {
                             const percent = total ? formatPercentage(item.value, { total }) : '0';
                             const color = COLORS[item.condition as keyof typeof COLORS] || '#999999';
@@ -180,7 +180,7 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                             return (
                                 <div
                                     key={item.condition}
-                                    className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2 text-xs"
+                                    className="flex items-center justify-between rounded-md border border-border/40 px-2 py-1.5 text-[10px]"
                                 >
                                     <div className="flex items-center gap-2">
                                         <span className="h-2.5 w-2.5 rounded-full shadow-sm" style={{ backgroundColor: color }} />
@@ -202,9 +202,9 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
     };
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6">
             {/* Pie Charts Row */}
-            <div className="grid gap-6 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-3">
                 {renderPieChart(
                     pieDataBySkuCount,
                     "SKU Count Distribution"
@@ -223,11 +223,11 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
             {/* Detailed Breakdowns */}
             <div className="grid gap-6 md:grid-cols-2">
                 {brandData.length > 0 && (
-                    <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-lg font-semibold tracking-tight">Breakdown by Brand (Jumlah SKU)</CardTitle>
+                    <Card className="bg-card/40 backdrop-blur-md border border-border/40 shadow-sm">
+                        <CardHeader className="py-3 px-4">
+                            <CardTitle className="text-sm font-bold tracking-tight text-muted-foreground/80">Breakdown by Brand (Jumlah SKU)</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-4 pb-4">
                             <div className="h-[400px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart
@@ -275,11 +275,11 @@ export function DashboardCharts({ charts, brandBreakdown, storeBreakdown, isLoad
                 )}
 
                 {storeData.length > 0 && (
-                    <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-lg font-semibold tracking-tight">Breakdown by Store (Jumlah SKU)</CardTitle>
+                    <Card className="bg-card/40 backdrop-blur-md border border-border/40 shadow-sm">
+                        <CardHeader className="py-3 px-4">
+                            <CardTitle className="text-sm font-bold tracking-tight text-muted-foreground/80">Breakdown by Store (Jumlah SKU)</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-4 pb-4">
                             <div className="h-[400px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart

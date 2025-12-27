@@ -501,6 +501,19 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
     hasActiveFilter: boolean;
   }) => {
     const filterParentRef = useRef<HTMLDivElement>(null);
+    const [localSearch, setLocalSearch] = useState(filterSearch[header] || '');
+
+    // Debounce local search to global state
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        setFilterSearch(prev => {
+          if (prev[header] === localSearch) return prev;
+          return { ...prev, [header]: localSearch };
+        });
+      }, 300);
+      return () => clearTimeout(timer);
+    }, [localSearch, header]);
+
     const uniqueValues = useMemo(() => getFilteredUniqueValues(header), [header, filterSearch[header]]);
     const currentStaged = stagedFilters[header] || columnFilters[header] || new Set();
 
@@ -513,7 +526,19 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
 
     return (
       <div className="flex flex-col h-full bg-white dark:bg-gray-800">
-        <div ref={filterParentRef} className="flex-1 overflow-y-auto min-h-[250px] relative">
+        <div className="p-2 border-b bg-white dark:bg-gray-800">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 w-3 h-3 text-gray-400" />
+            <Input
+              className="h-8 pl-8 text-[11px] bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 focus-visible:ring-1 focus-visible:ring-blue-500"
+              placeholder="Search values..."
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div ref={filterParentRef} className="flex-1 overflow-y-auto min-h-[250px] relative mt-1">
           <div
             style={{
               height: `${filterVirtualizer.getTotalSize()}px`,
@@ -535,10 +560,10 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
                   <DropdownMenuCheckboxItem
                     checked={currentStaged.has(value)}
                     onCheckedChange={() => handleToggleStagedFilter(header, value)}
-                    className="h-8"
+                    className="h-8 mx-1 rounded-sm text-xs cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700 data-[state=checked]:text-blue-600 border-transparent border-[1px] hover:border-gray-200 dark:hover:border-gray-600 transition-all"
                     onSelect={(e) => e.preventDefault()}
                   >
-                    <span className="truncate text-xs">{value || '(empty)'}</span>
+                    <span className="truncate">{value || '(empty)'}</span>
                   </DropdownMenuCheckboxItem>
                 </div>
               );
@@ -546,7 +571,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
           </div>
         </div>
 
-        {uniqueValuesRef.current[header]?.size > 500 && !filterSearch[header] && (
+        {uniqueValuesRef.current[header]?.size > 500 && !localSearch && (
           <div className="bg-gray-50 dark:bg-gray-900 px-3 py-1.5 text-[10px] text-gray-400 border-t italic">
             Showing first 500 of {uniqueValuesRef.current[header].size} unique values
           </div>
@@ -556,8 +581,11 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => handleClearFilter(header)}
-            className="h-7 text-[10px] px-2 shadow-none"
+            onClick={() => {
+              setLocalSearch('');
+              handleClearFilter(header);
+            }}
+            className="h-7 text-[10px] px-2 shadow-none hover:bg-gray-200 dark:hover:bg-gray-800"
           >
             Clear
           </Button>
@@ -565,7 +593,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
             variant="default"
             size="sm"
             onClick={() => handleApplyFilter(header)}
-            className="h-7 text-[10px] px-3 bg-blue-600 hover:bg-blue-700 text-white border-none"
+            className="h-7 text-[10px] px-3 bg-blue-600 hover:bg-blue-700 text-white border-none transition-colors"
           >
             Apply
           </Button>
@@ -688,23 +716,12 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
                                 <Filter className="w-3 h-3" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-64 max-h-[400px] flex flex-col">
-                              <div className="p-2 border-b">
-                                <div className="relative">
-                                  <Search className="absolute left-2 top-2 w-3 h-3 text-gray-400" />
-                                  <Input
-                                    className="h-7 pl-7 text-[10px]"
-                                    placeholder="Search values..."
-                                    value={filterSearch[header] || ''}
-                                    onChange={(e) => setFilterSearch(prev => ({ ...prev, [header]: e.target.value }))}
-                                  />
-                                </div>
-                              </div>
-                              <div className="flex-1 min-h-[300px] flex flex-col">
+                            <DropdownMenuContent align="start" className="w-64 max-h-[450px] p-0 flex flex-col overflow-hidden shadow-xl border-gray-200 dark:border-gray-700 animate-in fade-in zoom-in-95 duration-200">
+                              <div className="flex-1 flex flex-col min-h-[300px]">
                                 {calculatingFilters === header ? (
-                                  <div className="flex-1 flex flex-col items-center justify-center p-8 gap-2">
-                                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                                    <span className="text-[10px] text-gray-500 italic">Scanning column...</span>
+                                  <div className="flex-1 flex flex-col items-center justify-center p-8 gap-2 bg-white dark:bg-gray-800">
+                                    <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                                    <span className="text-xs text-gray-500 font-medium italic">Scanning column...</span>
                                   </div>
                                 ) : (
                                   <FilterList
