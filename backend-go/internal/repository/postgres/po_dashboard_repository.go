@@ -946,7 +946,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				COALESCE(SUM(s.total_amount), 0) as total_value
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE (%s) = $1%s
+		    WHERE (%s) = $1%s
 		`, filterClause, statusExpr, filterClause)
 	}
 

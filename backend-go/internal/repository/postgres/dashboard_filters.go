@@ -93,6 +93,7 @@ func buildDerivedStatusCase(alias string) string {
 	normalized := normalizeAlias(alias)
 	return fmt.Sprintf(`CASE
 			WHEN %[1]sstatus = 2 THEN 2
+			WHEN %[1]sstatus = 9 THEN 9
 	        WHEN %[1]spo_received_at IS NOT NULL THEN 3
 	        WHEN %[1]spo_arrived_at IS NOT NULL THEN 5
 	        WHEN %[1]spo_approved_at IS NOT NULL THEN 1
