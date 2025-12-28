@@ -110,6 +110,138 @@ const MemoizedRow = React.memo(({
 
 MemoizedRow.displayName = "MemoizedRow";
 
+// Move FilterList outside to prevent re-definition on every render
+const FilterList = React.memo(({
+  header,
+  initialFilters,
+  uniqueValuesRef,
+  onApply,
+  onClear,
+}: {
+  header: string;
+  initialFilters: Set<string>;
+  uniqueValuesRef: React.MutableRefObject<Record<string, { set: Set<string>; sorted: string[]; lastRowCount: number }>>;
+  onApply: (filters: Set<string>) => void;
+  onClear: () => void;
+}) => {
+  const filterParentRef = useRef<HTMLDivElement>(null);
+  const [search, setSearch] = useState('');
+  const [localStaged, setLocalStaged] = useState<Set<string>>(new Set(initialFilters));
+
+  // Efficiently filter the pre-sorted array
+  const uniqueValues = useMemo(() => {
+    const cache = uniqueValuesRef.current[header];
+    if (!cache) return [];
+
+    const searchLower = search.toLowerCase();
+    if (!searchLower) return cache.sorted.slice(0, 1000);
+
+    return cache.sorted.filter(v =>
+      v.toLowerCase().includes(searchLower)
+    ).slice(0, 1000);
+  }, [header, search, uniqueValuesRef]);
+
+  const toggleLocalStaged = useCallback((value: string) => {
+    setLocalStaged(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }, []);
+
+  const filterVirtualizer = useVirtualizer({
+    count: uniqueValues.length,
+    getScrollElement: () => filterParentRef.current,
+    estimateSize: () => 32,
+    overscan: 10,
+  });
+
+  return (
+    <div className="flex flex-col h-full bg-card min-h-[350px]">
+      <div className="p-2 border-b bg-card sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 w-3 h-3 text-gray-400" />
+          <Input
+            className="h-8 pl-8 text-[11px] bg-muted/50 border-border focus-visible:ring-1 focus-visible:ring-primary"
+            placeholder="Search values..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div
+        ref={filterParentRef}
+        className="flex-1 overflow-y-auto relative mt-1"
+        style={{ height: '300px' }} // Fix scrolling by providing a height
+      >
+        <div
+          style={{
+            height: `${filterVirtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {filterVirtualizer.getVirtualItems().map((virtualItem) => {
+            const value = uniqueValues[virtualItem.index];
+            return (
+              <div
+                key={virtualItem.key}
+                className="absolute top-0 left-0 w-full"
+                style={{
+                  height: `${virtualItem.size}px`,
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+              >
+                <DropdownMenuCheckboxItem
+                  checked={localStaged.has(value)}
+                  onCheckedChange={() => toggleLocalStaged(value)}
+                  className="h-8 mx-1 rounded-sm text-xs cursor-pointer hover:bg-accent focus:bg-accent data-[state=checked]:text-primary transition-all"
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  <span className="truncate">{value || '(empty)'}</span>
+                </DropdownMenuCheckboxItem>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {uniqueValuesRef.current[header]?.set.size > 1000 && !search && (
+        <div className="bg-muted px-3 py-1.5 text-[10px] text-muted-foreground border-t italic">
+          Showing first 1,000 of {uniqueValuesRef.current[header].set.size.toLocaleString()} unique values
+        </div>
+      )}
+
+      <div className="p-2 border-t bg-muted flex items-center justify-between gap-2 shadow-[0_-1px_2px_rgba(0,0,0,0.05)] sticky bottom-0 z-10">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setSearch('');
+            setLocalStaged(new Set());
+            onClear();
+          }}
+          className="h-7 text-[10px] px-2 shadow-sm border border-border bg-card"
+        >
+          Clear
+        </Button>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={() => onApply(localStaged)}
+          className="h-7 text-[10px] px-3 font-semibold shadow-sm"
+        >
+          Apply
+        </Button>
+      </div>
+    </div>
+  );
+});
+
+FilterList.displayName = "FilterList";
+
 export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: VirtualizedCSVViewerProps) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rowCount, setRowCount] = useState(0);
@@ -134,7 +266,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
   const parentRef = useRef<HTMLDivElement>(null);
   const papaParserRef = useRef<Papa.Parser | null>(null);
   const rowsRef = useRef<CSVRow[]>([]);
-  const uniqueValuesRef = useRef<Record<string, Set<string>>>({});
+  const uniqueValuesRef = useRef<Record<string, { set: Set<string>; sorted: string[]; lastRowCount: number }>>({});
   const loadedCountRef = useRef(0);
   const rafScheduledRef = useRef(false);
   const lastUpdateRowCountRef = useRef(0);
@@ -143,7 +275,6 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
 
   const [calculatingFilters, setCalculatingFilters] = useState<string | null>(null);
   const [resizingColumn, setResizingColumn] = useState<string | null>(null);
-  const [stagedFilters, setStagedFilters] = useState<Record<string, Set<string>>>({});
 
   const resizingRef = useRef<{
     column: string;
@@ -351,31 +482,20 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
     window.addEventListener('mouseup', onMouseUp);
   }, [columnWidths, handleColumnResize]);
 
-  const handleApplyFilter = useCallback((header: string) => {
+  const handleApplyFilter = useCallback((header: string, filters: Set<string>) => {
     setColumnFilters(prev => ({
       ...prev,
-      [header]: stagedFilters[header] || new Set()
+      [header]: filters
     }));
-  }, [stagedFilters]);
+  }, []);
 
   const handleClearFilter = useCallback((header: string) => {
-    const nextStaged = { ...stagedFilters };
-    delete nextStaged[header];
-    setStagedFilters(nextStaged);
     setColumnFilters(prev => ({
       ...prev,
       [header]: new Set()
     }));
-  }, [stagedFilters]);
+  }, []);
 
-  const handleToggleStagedFilter = useCallback((header: string, value: string) => {
-    setStagedFilters(prev => {
-      const current = prev[header] ? new Set(prev[header]) : new Set(columnFilters[header] || []);
-      if (current.has(value)) current.delete(value);
-      else current.add(value);
-      return { ...prev, [header]: current };
-    });
-  }, [columnFilters]);
 
   const recalcViewIndices = useCallback(() => {
     if (!shouldUseViewIndices) {
@@ -466,10 +586,11 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
   }, [columnWidths, columnVirtualizer]);
 
   const ensureUniqueValues = useCallback((header: string) => {
-    if (uniqueValuesRef.current[header] && uniqueValuesRef.current[header].size > 0) return;
+    const cache = uniqueValuesRef.current[header];
+    // Refresh if we haven't scanned or if more rows have been loaded since last scan
+    if (cache && cache.set.size > 0 && cache.lastRowCount === rowsRef.current.length) return;
 
     setCalculatingFilters(header);
-    // Use setTimeout so the UI can show the loader first
     setTimeout(() => {
       const uniq = new Set<string>();
       const rows = rowsRef.current;
@@ -479,19 +600,13 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
           uniq.add(String(v));
         }
       }
-      uniqueValuesRef.current[header] = uniq;
+      const sorted = Array.from(uniq).sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+      );
+      uniqueValuesRef.current[header] = { set: uniq, sorted, lastRowCount: rows.length };
       setCalculatingFilters(null);
     }, 0);
   }, []);
-
-  const getFilteredUniqueValues = useCallback((header: string) => {
-    const all = uniqueValuesRef.current[header];
-    if (!all) return [];
-    const search = filterSearch[header]?.toLowerCase() || '';
-    const sorted = Array.from(all).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-    if (!search) return sorted.slice(0, 500);
-    return sorted.filter(v => v.toLowerCase().includes(search)).slice(0, 500);
-  }, [filterSearch]);
 
   const handleDownload = () => {
     const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8080/api/v1';
@@ -499,114 +614,6 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
   };
 
   const virtualColumns = columnVirtualizer.getVirtualItems();
-
-  const FilterList = React.memo(({ header, hasActiveFilter }: {
-    header: string;
-    hasActiveFilter: boolean;
-  }) => {
-    const filterParentRef = useRef<HTMLDivElement>(null);
-    const [localSearch, setLocalSearch] = useState(filterSearch[header] || '');
-
-    // Debounce local search to global state
-    useEffect(() => {
-      const timer = setTimeout(() => {
-        setFilterSearch(prev => {
-          if (prev[header] === localSearch) return prev;
-          return { ...prev, [header]: localSearch };
-        });
-      }, 300);
-      return () => clearTimeout(timer);
-    }, [localSearch, header]);
-
-    const uniqueValues = useMemo(() => getFilteredUniqueValues(header), [header, filterSearch[header]]);
-    const currentStaged = stagedFilters[header] || columnFilters[header] || new Set();
-
-    const filterVirtualizer = useVirtualizer({
-      count: uniqueValues.length,
-      getScrollElement: () => filterParentRef.current,
-      estimateSize: () => 32,
-      overscan: 10,
-    });
-
-    return (
-      <div className="flex flex-col h-full bg-card">
-        <div className="p-2 border-b bg-card">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 w-3 h-3 text-gray-400" />
-            <Input
-              className="h-8 pl-8 text-[11px] bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 focus-visible:ring-1 focus-visible:ring-blue-500"
-              placeholder="Search values..."
-              value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div ref={filterParentRef} className="flex-1 overflow-y-auto min-h-[250px] relative mt-1">
-          <div
-            style={{
-              height: `${filterVirtualizer.getTotalSize()}px`,
-              width: '100%',
-              position: 'relative',
-            }}
-          >
-            {filterVirtualizer.getVirtualItems().map((virtualItem) => {
-              const value = uniqueValues[virtualItem.index];
-              return (
-                <div
-                  key={virtualItem.key}
-                  className="absolute top-0 left-0 w-full"
-                  style={{
-                    height: `${virtualItem.size}px`,
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
-                >
-                  <DropdownMenuCheckboxItem
-                    checked={currentStaged.has(value)}
-                    onCheckedChange={() => handleToggleStagedFilter(header, value)}
-                    className="h-8 mx-1 rounded-sm text-xs cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700 data-[state=checked]:text-blue-600 border-transparent border-[1px] hover:border-gray-200 dark:hover:border-gray-600 transition-all"
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    <span className="truncate">{value || '(empty)'}</span>
-                  </DropdownMenuCheckboxItem>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {uniqueValuesRef.current[header]?.size > 500 && !localSearch && (
-          <div className="bg-gray-50 dark:bg-gray-900 px-3 py-1.5 text-[10px] text-gray-400 border-t italic">
-            Showing first 500 of {uniqueValuesRef.current[header].size} unique values
-          </div>
-        )}
-
-        <div className="p-2 border-t bg-gray-50 dark:bg-gray-900 flex items-center justify-between gap-2 sticky bottom-0 z-10">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setLocalSearch('');
-              handleClearFilter(header);
-            }}
-            className="h-7 text-[10px] px-2 shadow-none hover:bg-gray-200 dark:hover:bg-gray-800"
-          >
-            Clear
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => handleApplyFilter(header)}
-            className="h-7 text-[10px] px-3 bg-blue-600 hover:bg-blue-700 text-white border-none transition-colors"
-          >
-            Apply
-          </Button>
-        </div>
-      </div>
-    );
-  });
-
-  FilterList.displayName = "FilterList";
 
   return (
     <div
@@ -730,7 +737,10 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
                                 ) : (
                                   <FilterList
                                     header={header}
-                                    hasActiveFilter={hasActiveFilter}
+                                    initialFilters={columnFilters[header] || new Set()}
+                                    uniqueValuesRef={uniqueValuesRef}
+                                    onApply={(filters) => handleApplyFilter(header, filters)}
+                                    onClear={() => handleClearFilter(header)}
                                   />
                                 )}
                               </div>
