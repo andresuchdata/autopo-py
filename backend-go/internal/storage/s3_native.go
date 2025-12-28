@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type nativeS3Client struct {
@@ -99,13 +100,14 @@ func NewNativeS3Client(cfg Config) (ObjectStorage, error) {
 }
 
 func (c *nativeS3Client) ListObjects(ctx context.Context, prefix string, limit int, cursor string) (ListObjectsResult, error) {
-	fullPrefix := c.applyBasePrefix(prefix, false)
+	fullPrefix := c.applyBasePrefix(prefix, true)
 
 	fmt.Printf("[DEBUG] Native S3 ListObjects: bucket=%q prefix=%q limit=%d cursor=%q\n", c.bucket, fullPrefix, limit, cursor)
 
 	input := &s3.ListObjectsV2Input{
-		Bucket: aws.String(c.bucket),
-		Prefix: aws.String(fullPrefix),
+		Bucket:    aws.String(c.bucket),
+		Prefix:    aws.String(fullPrefix),
+		Delimiter: aws.String("/"),
 	}
 
 	if limit > 0 {
@@ -239,6 +241,43 @@ func (c *nativeS3Client) DeleteObject(ctx context.Context, key string) error {
 	return nil
 }
 
+func (c *nativeS3Client) DeleteObjects(ctx context.Context, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	// S3 DeleteObjects can handle up to 1000 keys at once
+	const batchSize = 1000
+	for i := 0; i < len(keys); i += batchSize {
+		end := i + batchSize
+		if end > len(keys) {
+			end = len(keys)
+		}
+
+		batch := keys[i:end]
+		objectIds := make([]types.ObjectIdentifier, len(batch))
+		for j, key := range batch {
+			fullKey := c.applyBasePrefix(key, false)
+			objectIds[j] = types.ObjectIdentifier{
+				Key: aws.String(fullKey),
+			}
+		}
+
+		_, err := c.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			Bucket: aws.String(c.bucket),
+			Delete: &types.Delete{
+				Objects: objectIds,
+				Quiet:   aws.Bool(true),
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to bulk delete objects: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (c *nativeS3Client) DeletePrefix(ctx context.Context, prefix string) error {
 	cursor := ""
 	for {
@@ -295,8 +334,10 @@ func (c *nativeS3Client) ListPrefixes(ctx context.Context, prefix string) ([]str
 			if cp.Prefix == nil {
 				continue
 			}
-			trimmed := strings.TrimPrefix(strings.Trim(*cp.Prefix, "/"), baseForTrim)
-			trimmed = strings.Trim(trimmed, "/")
+			full := *cp.Prefix
+			// Strip the base prefix and the input prefix to get just the folder name
+			trimmed := strings.TrimPrefix(full, fullPrefix)
+			trimmed = strings.TrimSuffix(trimmed, "/")
 			if trimmed == "" {
 				continue
 			}

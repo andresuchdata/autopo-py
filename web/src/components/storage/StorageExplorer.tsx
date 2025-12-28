@@ -11,7 +11,10 @@ import {
     RefreshCcw,
     FolderPlus,
     DownloadCloud,
-    Trash
+    Trash,
+    CheckSquare,
+    Square,
+    Files
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { storageService } from '@/services/api';
@@ -45,6 +48,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
     const listRef = useRef<HTMLDivElement | null>(null);
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -124,6 +128,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
         setFolders([]);
         setFiles([]);
         setNextCursor(null);
+        setSelectedKeys(new Set());
         refreshCurrent();
     }, [refreshCurrent]);
 
@@ -204,6 +209,66 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
         }
     };
 
+    const toggleSelect = (key: string) => {
+        setSelectedKeys((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedKeys.size === combinedItems.length) {
+            setSelectedKeys(new Set());
+        } else {
+            setSelectedKeys(new Set(combinedItems.map((item) => item.key)));
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        const keysToDelete = Array.from(selectedKeys);
+        if (keysToDelete.length === 0) return;
+
+        if (!window.confirm(`Are you sure you want to delete ${keysToDelete.length} items?`)) return;
+
+        try {
+            setLoading(true);
+            await storageService.bulkDeleteFiles(keysToDelete);
+            setSelectedKeys(new Set());
+            refreshCurrent();
+            alert('Selected items deleted');
+        } catch (error) {
+            setError('Failed to delete selected items.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleBulkDownload = async () => {
+        const keysToDownload = Array.from(selectedKeys);
+        if (keysToDownload.length === 0) return;
+
+        try {
+            setLoading(true);
+            const blob = await storageService.bulkDownloadFiles(keysToDownload);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `bulk_download_${new Date().getTime()}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            setError('Failed to download selected items.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
         const sentinel = sentinelRef.current;
         const listElement = listRef.current;
@@ -259,6 +324,30 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {selectedKeys.size > 0 && (
+                        <div className="flex items-center gap-2 mr-4 pr-4 border-r border-gray-200 dark:border-gray-800">
+                            <span className="text-xs font-medium text-gray-500">
+                                {selectedKeys.size} selected
+                            </span>
+                            <Button variant="outline" size="sm" onClick={handleBulkDownload} className="gap-2 h-8">
+                                <Download className="w-3.5 h-3.5" />
+                                Download Selected
+                            </Button>
+                            <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="gap-2 h-8">
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete Selected
+                            </Button>
+                        </div>
+                    )}
+
+                    <Button variant="ghost" size="sm" onClick={toggleSelectAll} className="gap-2 h-8">
+                        {selectedKeys.size === combinedItems.length && combinedItems.length > 0 ? (
+                            <CheckSquare className="w-4 h-4 text-primary" />
+                        ) : (
+                            <Square className="w-4 h-4 text-gray-400" />
+                        )}
+                        Select All
+                    </Button>
                     <Button variant="outline" size="sm" onClick={refreshCurrent} disabled={loading} title="Refresh">
                         <RefreshCcw className={clsx("w-4 h-4", loading && "animate-spin")} />
                     </Button>
@@ -306,8 +395,26 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                         {combinedItems.map((item) => (
                             <div
                                 key={item.key}
-                                className="group flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                className={clsx(
+                                    "group flex items-center justify-between p-3 rounded-lg transition-colors border-l-4",
+                                    selectedKeys.has(item.key)
+                                        ? "bg-primary/5 border-primary"
+                                        : "hover:bg-gray-50 dark:hover:bg-gray-800 border-transparent"
+                                )}
                             >
+                                <div className="flex items-center gap-3 mr-2">
+                                    <button
+                                        onClick={() => toggleSelect(item.key)}
+                                        className="text-gray-400 hover:text-primary transition-colors focus:outline-none"
+                                    >
+                                        {selectedKeys.has(item.key) ? (
+                                            <CheckSquare className="w-5 h-5 text-primary" />
+                                        ) : (
+                                            <Square className="w-5 h-5" />
+                                        )}
+                                    </button>
+                                </div>
+
                                 <div
                                     className="flex items-center gap-3 flex-1 cursor-pointer"
                                     onClick={() => item.isFolder ? handleFolderClick(item.key) : onViewFile?.(item.key)}

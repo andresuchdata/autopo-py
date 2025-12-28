@@ -175,6 +175,73 @@ func (h *StorageHandler) DownloadAll(c *gin.Context) {
 	c.Data(http.StatusOK, "application/zip", buf.Bytes())
 }
 
+func (h *StorageHandler) BulkDeleteFiles(c *gin.Context) {
+	var req struct {
+		Keys []string `json:"keys"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	if len(req.Keys) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no keys provided"})
+		return
+	}
+
+	err := h.storage.DeleteObjects(c.Request.Context(), req.Keys)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "count": len(req.Keys)})
+}
+
+func (h *StorageHandler) BulkDownloadFiles(c *gin.Context) {
+	keysStr := c.Query("keys")
+	if keysStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "keys are required"})
+		return
+	}
+	keys := strings.Split(keysStr, ",")
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	for _, key := range keys {
+		content, err := h.storage.GetObjectContent(c.Request.Context(), key)
+		if err != nil {
+			zw.Close()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("failed to get %s: %w", key, err).Error()})
+			return
+		}
+
+		fileName := filepath.Base(key)
+		f, err := zw.Create(fileName)
+		if err != nil {
+			zw.Close()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		_, err = io.Copy(f, bytes.NewReader(content))
+		if err != nil {
+			zw.Close()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	if err := zw.Close(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", "attachment; filename=bulk_download.zip")
+	c.Header("Content-Type", "application/zip")
+	c.Data(http.StatusOK, "application/zip", buf.Bytes())
+}
+
 func (h *StorageHandler) ListPrefixes(c *gin.Context) {
 	prefix := c.Query("prefix")
 	prefixes, err := h.storage.ListPrefixes(c.Request.Context(), prefix)

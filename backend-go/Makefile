@@ -43,7 +43,8 @@ migrate-down:
 # Combined commands
 start: db-up migrate-up run
 
-stop: db-down
+stop: 
+	lsof -ti:8082 | xargs kill -9 2>/dev/null || true
 
 # Bring up the app service with cloud storage env vars loaded from .env
 app-up:

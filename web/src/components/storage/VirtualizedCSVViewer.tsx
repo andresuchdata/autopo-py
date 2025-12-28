@@ -75,8 +75,8 @@ const MemoizedRow = React.memo(({
         width: 'fit-content',
         minWidth: '100%',
         backgroundColor: isEven
-          ? 'rgb(255 255 255 / 1)'
-          : 'rgb(249 250 251 / 1)',
+          ? 'var(--card)'
+          : 'var(--muted)',
       }}
     >
       <div className="w-12 shrink-0 flex items-center justify-center border-r border-gray-100 dark:border-gray-800 text-xs text-gray-400 sticky left-0 z-10 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
@@ -208,7 +208,11 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
 
           if (results.data && Array.isArray(results.data) && results.data.length > 0) {
             const incoming = results.data as CSVRow[];
-            rowsRef.current.push(...incoming);
+            // Use a loop to avoid stack overflow from spread operator on large arrays
+            for (let i = 0; i < incoming.length; i++) {
+              rowsRef.current.push(incoming[i]);
+            }
+
             const currentTotal = rowsRef.current.length;
             loadedCountRef.current = currentTotal;
 
@@ -525,8 +529,8 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
     });
 
     return (
-      <div className="flex flex-col h-full bg-white dark:bg-gray-800">
-        <div className="p-2 border-b bg-white dark:bg-gray-800">
+      <div className="flex flex-col h-full bg-card">
+        <div className="p-2 border-b bg-card">
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 w-3 h-3 text-gray-400" />
             <Input
@@ -607,9 +611,9 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
   return (
     <div
       data-csv-viewer={fileKey}
-      className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden"
+      className="flex flex-col h-full bg-card rounded-lg border border-border overflow-hidden"
     >
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 shrink-0">
+      <div className="flex items-center justify-between p-4 border-b border-border bg-muted/50 shrink-0">
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{fileName}</h3>
           <p className="text-xs text-gray-500 mt-1">
@@ -677,10 +681,10 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
               }}
             >
               <div
-                className="sticky top-0 z-20 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex"
+                className="sticky top-0 z-20 bg-muted border-b border-border flex"
                 style={{ height: '50px', width: '100%' }}
               >
-                <div className="w-12 shrink-0 sticky left-0 z-30 bg-gray-100 dark:bg-gray-800 flex items-center justify-center border-r border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-500">
+                <div className="w-12 shrink-0 sticky left-0 z-30 bg-muted flex items-center justify-center border-r border-border text-xs font-bold text-muted-foreground">
                   #
                 </div>
 
@@ -692,7 +696,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
                   return (
                     <div
                       key={virtualCol.key}
-                      className="absolute top-0 flex flex-col border-r border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 h-full"
+                      className="absolute top-0 flex flex-col border-r border-border bg-muted h-full"
                       style={{
                         width: `${virtualCol.size}px`,
                         left: '48px',
@@ -719,9 +723,9 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
                             <DropdownMenuContent align="start" className="w-64 max-h-[450px] p-0 flex flex-col overflow-hidden shadow-xl border-gray-200 dark:border-gray-700 animate-in fade-in zoom-in-95 duration-200">
                               <div className="flex-1 flex flex-col min-h-[300px]">
                                 {calculatingFilters === header ? (
-                                  <div className="flex-1 flex flex-col items-center justify-center p-8 gap-2 bg-white dark:bg-gray-800">
+                                  <div className="flex-1 flex flex-col items-center justify-center p-8 gap-2 bg-card">
                                     <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-                                    <span className="text-xs text-gray-500 font-medium italic">Scanning column...</span>
+                                    <span className="text-xs text-muted-foreground font-medium italic">Scanning column...</span>
                                   </div>
                                 ) : (
                                   <FilterList

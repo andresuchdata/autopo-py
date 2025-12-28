@@ -104,13 +104,13 @@ export default function StoresPage() {
                     className={clsx(
                       "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
                       activePrefix === folder.prefix
-                        ? "bg-primary text-white shadow-md shadow-primary/20"
+                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
                         : "text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
                     )}
                   >
                     <FileText className={clsx(
                       "w-4 h-4",
-                      activePrefix === folder.prefix ? "text-white" : "text-gray-400"
+                      activePrefix === folder.prefix ? "text-primary-foreground" : "text-gray-400"
                     )} />
                     <span className="truncate">{folder.name}</span>
                   </button>

@@ -112,9 +112,11 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 				storageGroup.GET("/prefixes", storageHandler.ListPrefixes)
 				storageGroup.GET("/download", storageHandler.DownloadFile)
 				storageGroup.GET("/download_all", storageHandler.DownloadAll)
+				storageGroup.GET("/download/bulk", storageHandler.BulkDownloadFiles)
 				storageGroup.GET("/content", storageHandler.GetFileContent)
 				storageGroup.GET("/stream_csv", csvStreamHandler.StreamCSV)
 				storageGroup.DELETE("/file", storageHandler.DeleteFile)
+				storageGroup.DELETE("/files/bulk", storageHandler.BulkDeleteFiles)
 				storageGroup.DELETE("/prefix", storageHandler.DeletePrefix)
 			}
 		}

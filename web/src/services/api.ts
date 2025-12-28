@@ -472,4 +472,15 @@ export const storageService = {
         const response = await api.delete('/storage/prefix', { params: { prefix } });
         return response.data;
     },
+    bulkDeleteFiles: async (keys: string[]) => {
+        const response = await api.delete('/storage/files/bulk', { data: { keys } });
+        return response.data;
+    },
+    bulkDownloadFiles: async (keys: string[]) => {
+        const response = await api.get('/storage/download/bulk', {
+            params: { keys: keys.join(',') },
+            responseType: 'blob',
+        });
+        return response.data;
+    },
 };

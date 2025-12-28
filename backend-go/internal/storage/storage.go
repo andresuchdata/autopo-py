@@ -51,6 +51,7 @@ type ObjectStorage interface {
 	DeletePrefix(ctx context.Context, prefix string) error
 	GetObjectContent(ctx context.Context, key string) ([]byte, error)
 	GetObjectStream(ctx context.Context, key string) (io.ReadCloser, error)
+	DeleteObjects(ctx context.Context, keys []string) error
 }
 
 type s3Client struct {
@@ -185,6 +186,16 @@ func (s *s3Client) UploadObject(ctx context.Context, key string, content []byte)
 func (s *s3Client) DeleteObject(ctx context.Context, key string) error {
 	if err := s.backend.DeleteObject(key); err != nil {
 		return fmt.Errorf("failed to delete %s: %w", key, err)
+	}
+	return nil
+}
+
+// DeleteObjects implements [ObjectStorage].
+func (s *s3Client) DeleteObjects(ctx context.Context, keys []string) error {
+	for _, key := range keys {
+		if err := s.DeleteObject(ctx, key); err != nil {
+			return err
+		}
 	}
 	return nil
 }
