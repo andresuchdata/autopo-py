@@ -163,7 +163,7 @@ export function EnhancedDashboard() {
   return (
     <div className="min-h-screen bg-background text-foreground max-w-[1800px] mx-auto transition-colors duration-300">
       {/* Sticky Header Section */}
-      <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/40 px-6 lg:px-10 py-4 mb-4">
+      <div className="bg-background border-b border-border/40 px-6 lg:px-10 py-4 mb-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2 gap-3 bg-primary/10 rounded-xl text-primary shadow-sm border border-primary/20">

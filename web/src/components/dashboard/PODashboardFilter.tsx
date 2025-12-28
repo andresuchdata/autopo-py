@@ -256,7 +256,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
   }, [loading, applyFilters, setDraftSupplierIdsFilter, setSupplierPopoverOpen, setSupplierSearch]);
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end sm:gap-x-3 sm:gap-y-3">
+    <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
       <div className="flex flex-col gap-1 w-full sm:w-auto">
         <Label htmlFor="po-type-select" className="text-xs font-medium uppercase text-muted-foreground">PO Type</Label>
         <Select
@@ -339,11 +339,10 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                           setDraftStoreIdsFilter(allIds);
                         }}
                       >
-                        <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${
-                          draftStoreIdsFilter.length === storeOptions.length && storeOptions.length > 0
-                            ? "bg-primary text-primary-foreground"
-                            : "opacity-50 [&_svg]:invisible"
-                        }`}>
+                        <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${draftStoreIdsFilter.length === storeOptions.length && storeOptions.length > 0
+                          ? "bg-primary text-primary-foreground"
+                          : "opacity-50 [&_svg]:invisible"
+                          }`}>
                           <Check className="h-3 w-3" />
                         </div>
                         <span className="font-medium">Select All</span>
@@ -428,11 +427,10 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                       setDraftSupplierIdsFilter(allIds);
                     }}
                   >
-                    <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${
-                      draftSupplierIdsFilter.length === supplierDisplayOptions.length && supplierDisplayOptions.length > 0
-                        ? "bg-primary text-primary-foreground"
-                        : "opacity-50 [&_svg]:invisible"
-                    }`}>
+                    <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${draftSupplierIdsFilter.length === supplierDisplayOptions.length && supplierDisplayOptions.length > 0
+                      ? "bg-primary text-primary-foreground"
+                      : "opacity-50 [&_svg]:invisible"
+                      }`}>
                       <Check className="h-3 w-3" />
                     </div>
                     <span className="font-medium">Select All</span>
@@ -521,11 +519,10 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
                           setDraftBrandIdsFilter(allIds);
                         }}
                       >
-                        <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${
-                          draftBrandIdsFilter.length === brandOptions.length && brandOptions.length > 0
-                            ? "bg-primary text-primary-foreground"
-                            : "opacity-50 [&_svg]:invisible"
-                        }`}>
+                        <div className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary transition-all ${draftBrandIdsFilter.length === brandOptions.length && brandOptions.length > 0
+                          ? "bg-primary text-primary-foreground"
+                          : "opacity-50 [&_svg]:invisible"
+                          }`}>
                           <Check className="h-3 w-3" />
                         </div>
                         <span className="font-medium">Select All</span>

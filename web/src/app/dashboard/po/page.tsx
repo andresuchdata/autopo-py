@@ -36,7 +36,7 @@ function PODashboardContent() {
     const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
     const [statusModalOpen, setStatusModalOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    
+
     const isLoading = loading || refreshing;
     const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter } = usePODashboardFilter();
 
@@ -68,11 +68,7 @@ function PODashboardContent() {
                 if (!isActive) return;
                 setData(result);
             } catch (err) {
-                if (controller.signal.aborted) {
-                    return;
-                }
-                // Ignore abort errors (they're expected when filters change quickly)
-                if (err instanceof Error && err.name === 'CanceledError') {
+                if (err instanceof Error && (err.name === 'CanceledError' || err.name === 'AbortError')) {
                     return;
                 }
                 console.error(err);
@@ -189,194 +185,208 @@ function PODashboardContent() {
     }, [data?.totals, statusSummaries]);
 
     return (
-        <div className="min-h-screen bg-background text-foreground p-6 space-y-6 overflow-x-hidden">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="flex items-start gap-3">
-                    <div className="hidden sm:flex items-center justify-center w-9 h-9 rounded-lg bg-muted text-muted-foreground border border-border/60">
-                        <FilterIcon className="h-4 w-4" />
+        <div className="min-h-screen bg-background text-foreground space-y-6 overflow-x-hidden">
+            {/* 0. Header Area: Title & Refresh */}
+            <div className="px-6 pt-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between max-w-[1600px] mx-auto">
+                    <div className="flex items-start gap-3">
+                        <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-sm">
+                            <ShoppingCart className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight">Purchase Orders Dashboard</h1>
+                            <p className="text-sm text-muted-foreground mt-1">Manage and monitor purchase order lifecycles and performance insights.</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold">Purchase Orders Dashboard</h1>
-                        <p className="text-sm text-muted-foreground">Filter by PO type, store, brand, and released date to focus the insights.</p>
-                    </div>
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end lg:justify-end w-full lg:w-auto">
                     <Button
                         onClick={handleRefresh}
                         disabled={isLoading}
                         variant="outline"
                         size="sm"
-                        className="gap-2"
+                        className="gap-2 self-start sm:self-center h-9"
                     >
                         <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                         {refreshing ? 'Refreshing...' : 'Refresh Data'}
                     </Button>
+                </div>
+            </div>
+
+            {/* 0b. Filter Area: Dedicated section with subtle background */}
+            <div className="px-6">
+                <div className="max-w-[1600px] mx-auto p-4 rounded-xl border border-border/50 bg-muted/30">
+                    <div className="flex items-center gap-2 mb-3 px-1">
+                        <FilterIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick Filters</span>
+                    </div>
                     <PODashboardFilter loading={isLoading} />
                 </div>
-                </div>
-
-            {/* 1. Status Summary Cards */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                {isLoading
-                    ? Array.from({ length: 6 }).map((_, idx) => (
-                          <div key={idx} className="space-y-3 rounded-xl border border-border bg-card p-4">
-                              <Skeleton className="h-4 w-24" />
-                              <Skeleton className="h-6 w-16" />
-                              <Skeleton className="h-3 w-full" />
-                              <Skeleton className="h-3 w-3/4" />
-                          </div>
-                      ))
-                    : statusSummaries.map((summary: any) => (
-                          <POStatusCard
-                              key={summary.status}
-                              title={`PO ${summary.status}`}
-                              count={summary.count}
-                              totalValue={summary.total_value}
-                              skuCount={summary.sku_count}
-                              totalQty={summary.total_qty}
-                              avgDays={summary.avg_days}
-                              isActive={statusModalOpen && summary.status === selectedStatus}
-                              onClick={() => {
-                                  setSelectedStatus(summary.status);
-                                  setStatusModalOpen(true);
-                              }}
-                          />
-                      ))}
             </div>
 
-            {/* 1b. Aggregate Totals */}
-            <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-muted/40 via-card to-background p-5 shadow-md space-y-5">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Overall totals</p>
-                        <h2 className="text-lg font-semibold text-foreground">Impact of current filters</h2>
-                        <p className="text-sm text-muted-foreground">
-                            Sum of PO count, inventory value, quantity, and SKU breadth across visible statuses.
-                        </p>
-                    </div>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-4 py-1 text-xs font-medium text-muted-foreground">
-                        <span className="h-2 w-2 rounded-full bg-primary" />
-                        {statusSummaries.length} statuses included
-                    </div>
-                </div>
+            <div className="px-6 pb-12 space-y-8 max-w-[1600px] mx-auto">
 
-                {isLoading ? (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        {Array.from({ length: 4 }).map((_, idx) => (
-                            <div key={idx} className="rounded-2xl border border-border/60 bg-card/60 p-4">
-                                <Skeleton className="h-4 w-24 mb-3" />
-                                <Skeleton className="h-8 w-32" />
-                                <Skeleton className="h-3 w-20 mt-2" />
+                {/* 1. Status Summary Cards */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    {isLoading
+                        ? Array.from({ length: 6 }).map((_, idx) => (
+                            <div key={idx} className="space-y-3 rounded-xl border border-border bg-card p-4">
+                                <Skeleton className="h-4 w-24" />
+                                <Skeleton className="h-6 w-16" />
+                                <Skeleton className="h-3 w-full" />
+                                <Skeleton className="h-3 w-3/4" />
                             </div>
+                        ))
+                        : statusSummaries.map((summary: any) => (
+                            <POStatusCard
+                                key={summary.status}
+                                title={`PO ${summary.status}`}
+                                count={summary.count}
+                                totalValue={summary.total_value}
+                                skuCount={summary.sku_count}
+                                totalQty={summary.total_qty}
+                                avgDays={summary.avg_days}
+                                isActive={statusModalOpen && summary.status === selectedStatus}
+                                onClick={() => {
+                                    setSelectedStatus(summary.status);
+                                    setStatusModalOpen(true);
+                                }}
+                            />
                         ))}
+                </div>
+
+                {/* 1b. Aggregate Totals */}
+                <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-muted/40 via-card to-background p-5 shadow-md space-y-5">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Overall totals</p>
+                            <h2 className="text-lg font-semibold text-foreground">Impact of current filters</h2>
+                            <p className="text-sm text-muted-foreground">
+                                Sum of PO count, inventory value, quantity, and SKU breadth across visible statuses.
+                            </p>
+                        </div>
+                        <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-4 py-1 text-xs font-medium text-muted-foreground">
+                            <span className="h-2 w-2 rounded-full bg-primary" />
+                            {statusSummaries.length} statuses included
+                        </div>
                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        {[
-                            {
-                                label: 'PO Count',
-                                value: totals.totalPOs,
-                                icon: ShoppingCart,
-                                helper: 'Orders created',
-                                formatter: (val: number) => formatNumberID(val),
-                            },
-                            {
-                                label: 'Total Value',
-                                value: totals.totalValue,
-                                icon: DollarSign,
-                                helper: 'IDR',
-                                formatter: (val: number) =>
-                                    formatCurrencyIDR(val, { compactThreshold: 50_000_000, compactMaximumFractionDigits: 1 }),
-                            },
-                            {
-                                label: 'Total Qty',
-                                value: totals.totalQty,
-                                icon: Package,
-                                helper: 'Units pending',
-                                formatter: (val: number) => formatNumberID(val),
-                            },
-                            {
-                                label: 'Total SKUs',
-                                value: totals.totalSku,
-                                icon: Layers,
-                                helper: 'Unique items',
-                                formatter: (val: number) => formatNumberID(val),
-                            },
-                        ].map((metric) => {
-                            const Icon = metric.icon;
-                            return (
-                                <div
-                                    key={metric.label}
-                                    className="rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm hover:shadow-md transition-shadow"
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">{metric.label}</p>
-                                            <p className="mt-2 text-2xl font-semibold text-foreground">{metric.formatter(metric.value)}</p>
-                                        </div>
-                                        <div className="rounded-xl bg-primary/10 p-2 text-primary">
-                                            <Icon className="h-5 w-5" strokeWidth={2.2} />
-                                        </div>
-                                    </div>
-                                    <p className="mt-3 text-xs text-muted-foreground">{metric.helper}</p>
+
+                    {isLoading ? (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            {Array.from({ length: 4 }).map((_, idx) => (
+                                <div key={idx} className="rounded-2xl border border-border/60 bg-card/60 p-4">
+                                    <Skeleton className="h-4 w-24 mb-3" />
+                                    <Skeleton className="h-8 w-32" />
+                                    <Skeleton className="h-3 w-20 mt-2" />
                                 </div>
-                            );
-                        })}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            {[
+                                {
+                                    label: 'PO Count',
+                                    value: totals.totalPOs,
+                                    icon: ShoppingCart,
+                                    helper: 'Orders created',
+                                    formatter: (val: number) => formatNumberID(val),
+                                },
+                                {
+                                    label: 'Total Value',
+                                    value: totals.totalValue,
+                                    icon: DollarSign,
+                                    helper: 'IDR',
+                                    formatter: (val: number) =>
+                                        formatCurrencyIDR(val, { compactThreshold: 50_000_000, compactMaximumFractionDigits: 1 }),
+                                },
+                                {
+                                    label: 'Total Qty',
+                                    value: totals.totalQty,
+                                    icon: Package,
+                                    helper: 'Units pending',
+                                    formatter: (val: number) => formatNumberID(val),
+                                },
+                                {
+                                    label: 'Total SKUs',
+                                    value: totals.totalSku,
+                                    icon: Layers,
+                                    helper: 'Unique items',
+                                    formatter: (val: number) => formatNumberID(val),
+                                },
+                            ].map((metric) => {
+                                const Icon = metric.icon;
+                                return (
+                                    <div
+                                        key={metric.label}
+                                        className="rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm hover:shadow-md transition-shadow"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs uppercase tracking-wide text-muted-foreground">{metric.label}</p>
+                                                <p className="mt-2 text-2xl font-semibold text-foreground">{metric.formatter(metric.value)}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-primary/10 p-2 text-primary">
+                                                <Icon className="h-5 w-5" strokeWidth={2.2} />
+                                            </div>
+                                        </div>
+                                        <p className="mt-3 text-xs text-muted-foreground">{metric.helper}</p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. Charts Row 1: Funnel & Trend */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {isLoading ? (
+                        <Skeleton className="h-[320px] w-full rounded-xl" />
+                    ) : (
+                        <POFunnelChart data={funnelData} />
+                    )}
+                    {isLoading ? (
+                        <Skeleton className="h-[320px] w-full rounded-xl" />
+                    ) : (
+                        <POTrendChart data={trendData} />
+                    )}
+                </div>
+
+
+                {/* 3. Charts Row 2: Aging & Supplier Performance */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {isLoading ? (
+                        <Skeleton className="h-[360px] w-full rounded-xl" />
+                    ) : (
+                        <POAgingTable initialItems={agingData} />
+                    )}
+                    {isLoading ? (
+                        <Skeleton className="h-[360px] w-full rounded-xl" />
+                    ) : (
+                        <SupplierPerformanceChart initialItems={supplierPerformanceData} />
+                    )}
+                </div>
+
+                {/* Find the summary for the selected status to pass totals */}
+                {(() => {
+                    const selectedSummary = statusSummaries.find((s: any) => s.status === selectedStatus);
+                    return (
+                        <POSnapshotDialog
+                            status={selectedStatus}
+                            open={statusModalOpen}
+                            onOpenChange={(open: boolean) => {
+                                setStatusModalOpen(open);
+                                if (!open) {
+                                    setSelectedStatus(null);
+                                }
+                            }}
+                            summaryDefaults={selectedSummary ? {
+                                totalPOs: selectedSummary.count,
+                                totalQty: selectedSummary.total_qty,
+                                totalValue: selectedSummary.total_value,
+                                totalSkus: selectedSummary.sku_count
+                            } : undefined}
+                        />
+                    );
+                })()}
             </div>
-
-            {/* 2. Charts Row 1: Funnel & Trend */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {isLoading ? (
-                    <Skeleton className="h-[320px] w-full rounded-xl" />
-                ) : (
-                    <POFunnelChart data={funnelData} />
-                )}
-                {isLoading ? (
-                    <Skeleton className="h-[320px] w-full rounded-xl" />
-                ) : (
-                    <POTrendChart data={trendData} />
-                )}
-            </div>
-
-
-            {/* 3. Charts Row 2: Aging & Supplier Performance */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {isLoading ? (
-                    <Skeleton className="h-[360px] w-full rounded-xl" />
-                ) : (
-                    <POAgingTable initialItems={agingData} />
-                )}
-                {isLoading ? (
-                    <Skeleton className="h-[360px] w-full rounded-xl" />
-                ) : (
-                    <SupplierPerformanceChart initialItems={supplierPerformanceData} />
-                )}
-            </div>
-
-            {/* Find the summary for the selected status to pass totals */}
-            {(() => {
-                const selectedSummary = statusSummaries.find((s: any) => s.status === selectedStatus);
-                return (
-                    <POSnapshotDialog
-                        status={selectedStatus}
-                        open={statusModalOpen}
-                        onOpenChange={(open: boolean) => {
-                            setStatusModalOpen(open);
-                            if (!open) {
-                                setSelectedStatus(null);
-                            }
-                        }}
-                        summaryDefaults={selectedSummary ? {
-                            totalPOs: selectedSummary.count,
-                            totalQty: selectedSummary.total_qty,
-                            totalValue: selectedSummary.total_value,
-                            totalSkus: selectedSummary.sku_count
-                        } : undefined}
-                    />
-                );
-            })()}
         </div>
     );
 }
