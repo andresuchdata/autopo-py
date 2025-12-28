@@ -98,9 +98,6 @@ func readRawRows(path string) ([]RawRow, error) {
 			QtyReceived: get(record, "qtyreceived"),
 		}
 
-		if row.SKU == "" && row.NoPO == "" {
-			continue
-		}
 		out = append(out, row)
 	}
 
