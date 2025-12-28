@@ -221,7 +221,8 @@ const FilterList = React.memo(({
           onClick={() => {
             setSearch('');
             setLocalStaged(new Set());
-            onClear();
+            // Use requestAnimationFrame to avoid render-cycle conflicts (flushSync error)
+            requestAnimationFrame(() => onClear());
           }}
           className="h-7 text-[10px] px-2 shadow-sm border border-border bg-card"
         >
@@ -230,7 +231,10 @@ const FilterList = React.memo(({
         <Button
           variant="default"
           size="sm"
-          onClick={() => onApply(localStaged)}
+          onClick={() => {
+            // Use requestAnimationFrame to avoid render-cycle conflicts (flushSync error)
+            requestAnimationFrame(() => onApply(localStaged));
+          }}
           className="h-7 text-[10px] px-3 font-semibold shadow-sm"
         >
           Apply
@@ -258,6 +262,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
   const [filterSearch, setFilterSearch] = useState<Record<string, string>>({});
   const [showFullFile, setShowFullFile] = useState(false);
   const [hasExceededLimit, setHasExceededLimit] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   const BATCH_SIZE = 200;
   const lastBatchCountRef = useRef(0);
@@ -349,9 +354,16 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
 
             // Batch streaming: pause every BATCH_SIZE rows
             if (!showFullFile && currentTotal - lastBatchCountRef.current >= BATCH_SIZE) {
-              parser.pause();
-              setIsPaused(true);
-              lastBatchCountRef.current = currentTotal;
+              try {
+                if (parser && typeof parser.pause === 'function') {
+                  parser.pause();
+                  setIsPaused(true);
+                  lastBatchCountRef.current = currentTotal;
+                }
+              } catch (e) {
+                console.warn("PapaParse pause() not supported or failed:", e);
+                // If we can't pause, we just continue streaming - it's safer than crashing
+              }
             }
 
             // Only update row count every 100 rows (more frequent for batch feedback)
@@ -487,6 +499,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
       ...prev,
       [header]: filters
     }));
+    setOpenDropdown(null);
   }, []);
 
   const handleClearFilter = useCallback((header: string) => {
@@ -494,6 +507,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
       ...prev,
       [header]: new Set()
     }));
+    setOpenDropdown(null);
   }, []);
 
 
@@ -567,8 +581,18 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
     const lastVisibleItem = virtualItems[virtualItems.length - 1];
     // If we are within 20 rows of the end of CURRENTLY LOADED rows, resume streaming
     if (lastVisibleItem.index >= rowsRef.current.length - 20) {
-      setIsPaused(false);
-      papaParserRef.current.resume();
+      if (papaParserRef.current && typeof papaParserRef.current.resume === 'function') {
+        try {
+          setIsPaused(false);
+          papaParserRef.current.resume();
+        } catch (e) {
+          console.warn("PapaParse resume() failed:", e);
+        }
+      } else {
+        // Fallback: if we can't resume but we are paused, just mark as not paused 
+        // and hope the stream progresses or handles itself
+        setIsPaused(false);
+      }
     }
   }, [rowVirtualizer.getVirtualItems(), isPaused, isComplete]);
 
@@ -721,7 +745,17 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
                             ) : <ArrowUpDown className="w-3 h-3 text-gray-400" />}
                           </Button>
 
-                          <DropdownMenu onOpenChange={(open) => open && ensureUniqueValues(header)}>
+                          <DropdownMenu
+                            open={openDropdown === header}
+                            onOpenChange={(open) => {
+                              if (open) {
+                                ensureUniqueValues(header);
+                                setOpenDropdown(header);
+                              } else {
+                                setOpenDropdown(null);
+                              }
+                            }}
+                          >
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className={clsx("h-5 w-5", hasActiveFilter && "text-blue-600")}>
                                 <Filter className="w-3 h-3" />
