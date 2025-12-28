@@ -1,13 +1,21 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	cmstorage "github.com/chartmuseum/storage"
 )
 
@@ -24,19 +32,32 @@ type Config struct {
 
 // ObjectInfo describes a remote object.
 type ObjectInfo struct {
-	Key  string
-	Size int64
+	Key  string `json:"key"`
+	Size int64  `json:"size"`
+}
+
+type ListObjectsResult struct {
+	Objects    []ObjectInfo `json:"objects"`
+	NextCursor string       `json:"nextCursor,omitempty"`
 }
 
 // ObjectStorage is the abstraction consumed by the pipelines.
 type ObjectStorage interface {
-	ListObjects(ctx context.Context, prefix string) ([]ObjectInfo, error)
+	ListObjects(ctx context.Context, prefix string, limit int, cursor string) (ListObjectsResult, error)
+	ListPrefixes(ctx context.Context, prefix string) ([]string, error)
 	DownloadObject(ctx context.Context, key string, destPath string) error
 	UploadObject(ctx context.Context, key string, content []byte) error
+	DeleteObject(ctx context.Context, key string) error
+	DeletePrefix(ctx context.Context, prefix string) error
+	GetObjectContent(ctx context.Context, key string) ([]byte, error)
+	GetObjectStream(ctx context.Context, key string) (io.ReadCloser, error)
+	DeleteObjects(ctx context.Context, keys []string) error
 }
 
 type s3Client struct {
 	backend cmstorage.Backend
+	s3      *s3.S3
+	bucket  string
 }
 
 // DownloadObject implements [ObjectStorage].
@@ -55,11 +76,13 @@ func (s *s3Client) DownloadObject(ctx context.Context, key string, destPath stri
 }
 
 // ListObjects implements [ObjectStorage].
-func (s *s3Client) ListObjects(ctx context.Context, prefix string) ([]ObjectInfo, error) {
+func (s *s3Client) ListObjects(ctx context.Context, prefix string, limit int, cursor string) (ListObjectsResult, error) {
 	list, err := s.backend.ListObjects(prefix)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list prefix %s: %w", prefix, err)
+		return ListObjectsResult{}, fmt.Errorf("failed to list prefix %s: %w", prefix, err)
 	}
+
+	fmt.Printf("[DEBUG] ListObjects prefix=%q returned %d objects from chartmuseum backend\n", prefix, len(list))
 
 	results := make([]ObjectInfo, 0, len(list))
 
@@ -69,13 +92,86 @@ func (s *s3Client) ListObjects(ctx context.Context, prefix string) ([]ObjectInfo
 		if prefixTrim != "" {
 			key = path.Join(prefixTrim, obj.Path)
 		}
+		fmt.Printf("[DEBUG] Object: path=%q size=%d\n", obj.Path, len(obj.Content))
 		results = append(results, ObjectInfo{
 			Key:  key,
 			Size: int64(len(obj.Content)),
 		})
 	}
 
-	return results, nil
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Key < results[j].Key
+	})
+
+	start := 0
+	if cursor != "" {
+		if idx, err := strconv.Atoi(cursor); err == nil && idx >= 0 && idx < len(results) {
+			start = idx
+		} else if err == nil && idx >= len(results) {
+			start = len(results)
+		}
+	}
+
+	if limit <= 0 {
+		limit = len(results) - start
+	}
+	end := start + limit
+	if end > len(results) {
+		end = len(results)
+	}
+
+	nextCursor := ""
+	if end < len(results) {
+		nextCursor = strconv.Itoa(end)
+	}
+
+	page := make([]ObjectInfo, 0, end-start)
+	if start < end {
+		page = append(page, results[start:end]...)
+	}
+
+	return ListObjectsResult{
+		Objects:    page,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+// ListPrefixes returns the immediate child folders for a given prefix.
+func (s *s3Client) ListPrefixes(ctx context.Context, prefix string) ([]string, error) {
+	objectsCursor := ""
+	found := make(map[string]struct{})
+
+	for {
+		page, err := s.ListObjects(ctx, prefix, 1000, objectsCursor)
+		if err != nil {
+			return nil, err
+		}
+
+		base := strings.Trim(prefix, "/")
+		if base != "" {
+			base += "/"
+		}
+
+		for _, obj := range page.Objects {
+			relative := strings.TrimPrefix(obj.Key, base)
+			parts := strings.Split(relative, "/")
+			if len(parts) > 1 && parts[0] != "" {
+				found[parts[0]] = struct{}{}
+			}
+		}
+
+		if page.NextCursor == "" {
+			break
+		}
+		objectsCursor = page.NextCursor
+	}
+
+	result := make([]string, 0, len(found))
+	for key := range found {
+		result = append(result, key)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 // UploadObject implements [ObjectStorage].
@@ -84,6 +180,75 @@ func (s *s3Client) UploadObject(ctx context.Context, key string, content []byte)
 		return fmt.Errorf("failed to upload %s: %w", key, err)
 	}
 	return nil
+}
+
+// DeleteObject implements [ObjectStorage].
+func (s *s3Client) DeleteObject(ctx context.Context, key string) error {
+	if err := s.backend.DeleteObject(key); err != nil {
+		return fmt.Errorf("failed to delete %s: %w", key, err)
+	}
+	return nil
+}
+
+// DeleteObjects implements [ObjectStorage].
+func (s *s3Client) DeleteObjects(ctx context.Context, keys []string) error {
+	for _, key := range keys {
+		if err := s.DeleteObject(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeletePrefix implements [ObjectStorage].
+func (s *s3Client) DeletePrefix(ctx context.Context, prefix string) error {
+	cursor := ""
+	for {
+		page, err := s.ListObjects(ctx, prefix, 1000, cursor)
+		if err != nil {
+			return err
+		}
+		for _, obj := range page.Objects {
+			if err := s.DeleteObject(ctx, obj.Key); err != nil {
+				return err
+			}
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	return nil
+}
+
+// GetObjectContent implements [ObjectStorage].
+func (s *s3Client) GetObjectContent(ctx context.Context, key string) ([]byte, error) {
+	obj, err := s.backend.GetObject(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get content of %s: %w", key, err)
+	}
+	return obj.Content, nil
+}
+
+// GetObjectStream implements [ObjectStorage].
+func (s *s3Client) GetObjectStream(ctx context.Context, key string) (io.ReadCloser, error) {
+	if s.s3 == nil {
+		// Fallback to byte-buffering if native s3 client is not available
+		obj, err := s.backend.GetObject(key)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get object %s: %w", key, err)
+		}
+		return io.NopCloser(bytes.NewReader(obj.Content)), nil
+	}
+
+	out, err := s.s3.GetObjectWithContext(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to stream object %s: %w", key, err)
+	}
+	return out.Body, nil
 }
 
 // NewS3Client builds a chartmuseum-backed S3 client using the provided configuration.
@@ -129,7 +294,25 @@ func NewS3Client(cfg Config) (ObjectStorage, error) {
 		},
 	)
 
-	return &s3Client{backend: backend}, nil
+	// Also initialize a native S3 client for streaming
+	awsCfg := aws.NewConfig().
+		WithRegion(region).
+		WithEndpoint(endpoint).
+		WithCredentials(credentials.NewStaticCredentials(cfg.AccessKey, cfg.SecretKey, "")).
+		WithS3ForcePathStyle(true).
+		WithDisableSSL(!cfg.UseSSL)
+
+	sess, err := session.NewSession(awsCfg)
+	var s3Svc *s3.S3
+	if err == nil {
+		s3Svc = s3.New(sess)
+	}
+
+	return &s3Client{
+		backend: backend,
+		s3:      s3Svc,
+		bucket:  cfg.Bucket,
+	}, nil
 }
 
 func boolPtr(b bool) *bool {

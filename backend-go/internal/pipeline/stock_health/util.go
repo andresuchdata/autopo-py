@@ -1,9 +1,9 @@
 package stock_health
 
 import (
-	"fmt"
 	"math"
 	"strconv"
+	"strings"
 )
 
 // roundFloat rounds v to the given number of decimal places.
@@ -18,8 +18,8 @@ func roundFloat(v float64, decimals int) float64 {
 
 // formatIDFloat formats a float using Indonesian locale conventions:
 // thousands separator as dot and decimal separator as comma.
-// When the fractional part is zero after rounding, the decimal part is omitted.
-// Example: 1234.5 (2 decimals) => "1.234,50"; 1000.0 => "1.000".
+// When the fractional part is zero after rounding, it STILL shows the decimals if decimals > 0.
+// Example: 1234.5 (2 decimals) => "1.234,50"; 1000.0 (2 decimals) => "1.000,00".
 func formatIDFloat(v float64, decimals int) string {
 	neg := v < 0
 	if neg {
@@ -30,47 +30,42 @@ func formatIDFloat(v float64, decimals int) string {
 		decimals = 0
 	}
 
-	// round to requested decimal places
-	factor := math.Pow(10, float64(decimals))
-	scaled := math.Round(v * factor)
-	intPart := int64(scaled) / int64(factor)
-	fracPart := int64(scaled) % int64(factor)
+	// Round to requested decimal places
+	s := strconv.FormatFloat(v, 'f', decimals, 64)
+	parts := strings.Split(s, ".")
+	intPart := parts[0]
+	fracPart := ""
+	if len(parts) > 1 {
+		fracPart = parts[1]
+	}
 
-	// format integer part with dot as thousands separator
-	s := strconv.FormatInt(intPart, 10)
-	if len(s) > 3 {
+	// Format integer part with dot as thousands separator
+	if len(intPart) > 3 {
 		var buf []byte
 		count := 0
-		for i := len(s) - 1; i >= 0; i-- {
-			buf = append(buf, s[i])
+		for i := len(intPart) - 1; i >= 0; i-- {
+			buf = append(buf, intPart[i])
 			count++
 			if count == 3 && i != 0 {
 				buf = append(buf, '.')
 				count = 0
 			}
 		}
-		// reverse buf
+		// Reverse buf
 		for i, j := 0, len(buf)-1; i < j; i, j = i+1, j-1 {
 			buf[i], buf[j] = buf[j], buf[i]
 		}
-		s = string(buf)
+		intPart = string(buf)
 	}
 
-	prefix := ""
+	res := intPart
 	if neg {
-		prefix = "-"
+		res = "-" + res
 	}
 
-	// If there is no fractional part after rounding, omit decimals entirely
-	if decimals == 0 || fracPart == 0 {
-		return prefix + s
+	if decimals > 0 {
+		res += "," + fracPart
 	}
 
-	// Left-pad fractional part with zeros up to the requested precision
-	fracStr := strconv.FormatInt(fracPart, 10)
-	for len(fracStr) < decimals {
-		fracStr = "0" + fracStr
-	}
-
-	return fmt.Sprintf("%s%s,%s", prefix, s, fracStr)
+	return res
 }

@@ -79,20 +79,20 @@ export function DashboardFilters({
     const selectedStoreId = filters.storeIds[0] ?? null;
 
     return (
-        <div className="flex flex-col xl:flex-row gap-5 mb-8 bg-card/50 backdrop-blur-sm p-6 rounded-2xl shadow-sm border border-border/50 transition-colors">
-            <div className="flex items-start gap-3 text-muted-foreground border-r border-border/50 pr-5 hidden xl:flex">
-                <div className="p-2 bg-muted rounded-lg">
-                    <Filter size={20} />
+        <div className="flex flex-col xl:flex-row gap-4 mb-4 bg-card/40 backdrop-blur-md p-4 rounded-xl shadow-sm border border-border/40 transition-all hover:bg-card/50">
+            <div className="flex items-start gap-2.5 text-muted-foreground border-r border-border/40 pr-4 hidden xl:flex">
+                <div className="p-1.5 bg-muted rounded-md">
+                    <Filter size={18} />
                 </div>
                 <div className="text-sm font-medium mt-1.5">
                     Filters
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1">
-                <div className="flex flex-col gap-2">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <StoreIcon size={14} className="text-primary/70" /> Store
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 flex-1">
+                <div className="flex flex-col gap-1.5">
+                    <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tighter flex items-center gap-1">
+                        <StoreIcon size={12} className="text-primary/60" /> Store
                     </Label>
                     <GenericFilter<number>
                         mode="single"
@@ -109,12 +109,12 @@ export function DashboardFilters({
                     />
                 </div>
 
-                <div className="flex flex-col gap-2">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Calendar size={14} className="text-primary/70" /> Date (Snapshot)
+                <div className="flex flex-col gap-1.5">
+                    <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tighter flex items-center gap-1">
+                        <Calendar size={12} className="text-primary/60" /> Date (Snapshot)
                     </Label>
                     <Select value={selectedDate || ""} onValueChange={onDateChange}>
-                        <SelectTrigger className="w-full h-auto min-h-12 py-2 px-3 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
+                        <SelectTrigger className="w-full h-9 py-1 px-2.5 bg-background/50 border-border/60 hover:bg-muted/30 transition-colors rounded-md shadow-sm text-sm">
                             <SelectValue placeholder="Latest Snapshot" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px]">
@@ -130,8 +130,8 @@ export function DashboardFilters({
                         </SelectContent>
                     </Select>
                 </div>
-                <div className="flex flex-col gap-2">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <div className="flex flex-col gap-1.5">
+                    <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tighter flex items-center gap-1">
                         <Tag size={14} className="text-primary/70" /> Kategori Brand
                     </Label>
                     <GenericFilter<string>
@@ -148,8 +148,8 @@ export function DashboardFilters({
                         maxInlineSelected={10}
                     />
                 </div>
-                <div className="flex flex-col gap-2">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <div className="flex flex-col gap-1.5">
+                    <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tighter flex items-center gap-1">
                         <Tag size={14} className="text-primary/70" /> Brand
                     </Label>
                     <GenericFilter<number>
@@ -166,7 +166,7 @@ export function DashboardFilters({
                     />
                 </div>
                 <div className="flex flex-col gap-2">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tighter flex items-center gap-1">
                         <Barcode size={14} className="text-primary/70" /> SKU
                     </Label>
                     <GenericFilter<string>
@@ -207,11 +207,11 @@ export function DashboardFilters({
                             kategoriBrands: [],
                         })
                     }
-                    className="w-full xl:w-auto whitespace-nowrap text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-12"
+                    className="w-full xl:w-auto h-9 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/5 rounded-md"
                 >
-                    <X size={16} className="mr-2" /> Clear All
+                    <X size={14} className="mr-1.5" /> Clear All
                 </Button>
             </div>
-        </div>
+        </div >
     );
 }

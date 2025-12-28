@@ -207,6 +207,10 @@ export const getDashboardSummary = async (params?: DashboardSummaryParams, optio
         });
         return response.data;
     } catch (error) {
+        if (error instanceof Error && (error.name === 'CanceledError' || error.name === 'AbortError')) {
+            throw error;
+        }
+
         console.error('Error fetching dashboard summary:', error);
         throw error;
     }
@@ -408,4 +412,75 @@ export const invalidatePOSnapshotCache = async () => {
         console.error('Error invalidating PO snapshot cache:', error);
         throw error;
     }
+};
+
+export interface StorageObject {
+    key: string;
+    size: number;
+}
+
+export interface StorageListResponse {
+    objects: StorageObject[];
+    nextCursor?: string;
+}
+
+export interface StoragePrefix {
+    name: string;
+    prefix: string;
+}
+
+export const storageService = {
+    getFiles: async (prefix?: string, limit: number = 50, cursor?: string): Promise<StorageListResponse> => {
+        const response = await api.get('/storage/files', {
+            params: { prefix, limit, cursor },
+        });
+        return response.data;
+    },
+
+    getPrefixes: async (prefix?: string): Promise<StoragePrefix[]> => {
+        const response = await api.get('/storage/prefixes', { params: { prefix } });
+        return response.data;
+    },
+
+    downloadFile: async (key: string) => {
+        const response = await api.get('/storage/download', {
+            params: { key },
+            responseType: 'blob',
+        });
+        return response.data;
+    },
+
+    downloadAll: async (prefix: string) => {
+        const response = await api.get('/storage/download_all', {
+            params: { prefix },
+            responseType: 'blob',
+        });
+        return response.data;
+    },
+
+    getFileContent: async (key: string) => {
+        const response = await api.get('/storage/content', { params: { key } });
+        return response.data;
+    },
+
+    deleteFile: async (key: string) => {
+        const response = await api.delete('/storage/file', { params: { key } });
+        return response.data;
+    },
+
+    deletePrefix: async (prefix: string) => {
+        const response = await api.delete('/storage/prefix', { params: { prefix } });
+        return response.data;
+    },
+    bulkDeleteFiles: async (keys: string[]) => {
+        const response = await api.delete('/storage/files/bulk', { data: { keys } });
+        return response.data;
+    },
+    bulkDownloadFiles: async (keys: string[]) => {
+        const response = await api.get('/storage/download/bulk', {
+            params: { keys: keys.join(',') },
+            responseType: 'blob',
+        });
+        return response.data;
+    },
 };

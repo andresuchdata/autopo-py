@@ -226,7 +226,7 @@ export function EnhancedDashboard() {
 
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <section>
-            <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={isLoading} />
+            <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={loading} />
           </section>
 
           <section>
@@ -234,7 +234,7 @@ export function EnhancedDashboard() {
               <div className="h-6 w-1 bg-primary rounded-full" />
               <h3 className="text-xl font-semibold tracking-tight text-foreground">Overstock Deep Dive</h3>
             </div>
-            <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} isLoading={isLoading} />
+            <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} />
           </section>
 
           <section>
@@ -246,7 +246,7 @@ export function EnhancedDashboard() {
               charts={charts}
               brandBreakdown={brandBreakdown}
               storeBreakdown={storeBreakdown}
-              isLoading={isLoading}
+              isLoading={loading}
             />
           </section>
         </div>

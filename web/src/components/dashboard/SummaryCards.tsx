@@ -136,16 +136,16 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
 
     return (
         <>
-            <div className="flex flex-col items-center justify-center p-4 text-center md:items-end md:text-right md:pr-6 bg-card/30 rounded-xl border border-border/30 backdrop-blur-sm">
-                <div className="p-2 bg-primary/10 rounded-lg text-primary mb-2 hidden md:block">
-                    <RowIcon size={20} />
+            <div className="flex flex-col items-center justify-center p-3 text-center md:items-end md:text-right md:pr-4 bg-card/30 rounded-lg border border-border/30 backdrop-blur-sm">
+                <div className="p-1.5 bg-primary/10 rounded-md text-primary mb-1.5 hidden md:block">
+                    <RowIcon size={16} />
                 </div>
-                <div className="font-semibold text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                <div className="font-bold text-muted-foreground/60 text-[10px] uppercase tracking-tighter mb-0.5">
                     {title}
                 </div>
                 <div className="text-sm">
-                    <span className="text-muted-foreground">Total: </span>
-                    <span className="font-bold text-foreground text-base block md:inline">{formatValue(total)}</span>
+                    <span className="text-muted-foreground text-[10px]">Total: </span>
+                    <span className="font-bold text-foreground text-sm block md:inline">{formatValue(total)}</span>
                 </div>
             </div>
 
@@ -159,18 +159,18 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
                 const isHighlighted = HIGHLIGHT_CONDITIONS.has(condition);
                 // Glassmorphism Styles
                 const cardPalette = isHighlighted
-                    ? "bg-gradient-to-br from-slate-800 to-black text-white border-slate-700/50 shadow-xl hover:from-slate-700 hover:to-slate-900"
-                    : "bg-white/60 dark:bg-gray-900/40 backdrop-blur-md text-foreground border-white/20 dark:border-white/10 hover:bg-white/80 dark:hover:bg-gray-800/60 shadow-sm hover:shadow-md";
+                    ? "bg-gradient-to-br from-slate-800 to-black text-white border-slate-700/50 shadow-lg hover:from-slate-700 hover:to-slate-900"
+                    : "bg-white/40 dark:bg-gray-900/40 backdrop-blur-md text-foreground border-border/40 hover:bg-white/60 dark:hover:bg-gray-800/60 shadow-sm hover:shadow-md";
 
                 const valueTextClass = isHighlighted
-                    ? "bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300"
+                    ? "bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-200"
                     : "text-foreground";
 
                 const percentageTextClass = isHighlighted ? "text-slate-400" : "text-muted-foreground";
 
                 // Unique border top color based on condition
                 const borderStyle = {
-                    borderTop: `3px solid ${COLORS[condition]}`,
+                    borderTop: `2px solid ${COLORS[condition]}`,
                 };
 
                 return (
@@ -182,17 +182,17 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
                     >
                         <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 p-3">
-                            <CardTitle className={`text-[10px] font-bold uppercase tracking-wider opacity-80 ${isHighlighted ? 'text-white' : 'text-muted-foreground'}`}>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 p-2">
+                            <CardTitle className={`text-[9px] font-bold uppercase tracking-tighter opacity-70 ${isHighlighted ? 'text-white' : 'text-muted-foreground'}`}>
                                 {CONDITION_LABELS[condition]}
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-3 pt-0">
-                            <div className={`font-bold tracking-tight ${type === 'currency' ? 'text-lg' : 'text-2xl'} ${valueTextClass}`}>
+                        <CardContent className="p-2 pt-0">
+                            <div className={`font-bold tracking-tight ${type === 'currency' ? 'text-sm' : 'text-xl'} ${valueTextClass}`}>
                                 {formatValue(value)}
                             </div>
-                            <div className="flex items-center gap-1.5 mt-2">
-                                <div className="h-1.5 w-full bg-black/10 dark:bg-white/10 rounded-full overflow-hidden">
+                            <div className="flex items-center gap-1 mt-1.5">
+                                <div className="h-1 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
                                     <div
                                         className="h-full rounded-full transition-all duration-500"
                                         style={{
@@ -201,7 +201,7 @@ function SummaryRow({ title, data, total, type, grouping, onCardClick }: RowProp
                                         }}
                                     />
                                 </div>
-                                <p className={`text-[10px] font-medium whitespace-nowrap ${percentageTextClass}`}>
+                                <p className={`text-[9px] font-bold whitespace-nowrap ${percentageTextClass}`}>
                                     {displayPercentage}%
                                 </p>
                             </div>
@@ -239,7 +239,7 @@ export function SummaryCards({ summary, onCardClick, isLoading }: SummaryCardsPr
     }
 
     return (
-        <div className="grid gap-3 grid-cols-2 md:[grid-template-columns:140px_repeat(7,_minmax(0,_1fr))] items-stretch">
+        <div className="grid gap-2 grid-cols-2 md:[grid-template-columns:140px_repeat(7,_minmax(0,_1fr))] items-stretch">
             <HeaderRow />
 
             <SummaryRow

@@ -16,6 +16,18 @@ type Config struct {
 	LegacyDatabase LegacyDatabaseConfig
 	App            AppConfig
 	Cache          CacheConfig
+	CloudStorage   CloudStorageConfig
+}
+
+type CloudStorageConfig struct {
+	Enabled   bool
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	Region    string
+	UseSSL    bool
+	Prefix    string
 }
 
 type ServerConfig struct {
@@ -96,6 +108,14 @@ func Load() *Config {
 		viper.SetDefault("LEGACY_DB_PASSWORD", "")
 		viper.SetDefault("LEGACY_DB_NAME", "")
 		viper.SetDefault("LEGACY_DB_TIMEZONE", "Asia/Jakarta")
+		viper.SetDefault("CLOUD_STORAGE_ENABLED", false)
+		viper.SetDefault("CLOUD_STORAGE_ENDPOINT", "")
+		viper.SetDefault("CLOUD_STORAGE_ACCESS_KEY", "")
+		viper.SetDefault("CLOUD_STORAGE_SECRET_KEY", "")
+		viper.SetDefault("CLOUD_STORAGE_BUCKET", "")
+		viper.SetDefault("CLOUD_STORAGE_REGION", "us-east-1")
+		viper.SetDefault("CLOUD_STORAGE_USE_SSL", true)
+		viper.SetDefault("CLOUD_STORAGE_PREFIX", "")
 
 		// Read from environment variables
 		viper.AutomaticEnv()
@@ -141,6 +161,16 @@ func Load() *Config {
 				RedisDB:               viper.GetInt("REDIS_DB"),
 				DashboardTTLSeconds:   viper.GetInt("CACHE_DASHBOARD_TTL_SECONDS"),
 				StockHealthTTLSeconds: viper.GetInt("CACHE_STOCK_HEALTH_TTL_SECONDS"),
+			},
+			CloudStorage: CloudStorageConfig{
+				Enabled:   viper.GetBool("CLOUD_STORAGE_ENABLED"),
+				Endpoint:  viper.GetString("CLOUD_STORAGE_ENDPOINT"),
+				AccessKey: viper.GetString("CLOUD_STORAGE_ACCESS_KEY"),
+				SecretKey: viper.GetString("CLOUD_STORAGE_SECRET_KEY"),
+				Bucket:    viper.GetString("CLOUD_STORAGE_BUCKET"),
+				Region:    viper.GetString("CLOUD_STORAGE_REGION"),
+				UseSSL:    viper.GetBool("CLOUD_STORAGE_USE_SSL"),
+				Prefix:    viper.GetString("CLOUD_STORAGE_PREFIX"),
 			},
 		}
 	})

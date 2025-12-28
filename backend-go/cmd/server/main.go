@@ -17,6 +17,7 @@ import (
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository/postgres"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/storage"
 	"github.com/andresuchdata/autopo-py/backend-go/pkg/logger"
 	_ "github.com/lib/pq"
 )
@@ -76,6 +77,23 @@ func main() {
 	poService := service.NewPOService(poRepo, dashboardCache)
 	stockHealthService := service.NewStockHealthService(stockHealthRepo, stockHealthCache)
 
+	// Initialize storage
+	var storageClient storage.ObjectStorage
+	if cfg.CloudStorage.Enabled {
+		storageClient, err = storage.NewNativeS3Client(storage.Config{
+			Endpoint:  cfg.CloudStorage.Endpoint,
+			AccessKey: cfg.CloudStorage.AccessKey,
+			SecretKey: cfg.CloudStorage.SecretKey,
+			Bucket:    cfg.CloudStorage.Bucket,
+			Region:    cfg.CloudStorage.Region,
+			UseSSL:    cfg.CloudStorage.UseSSL,
+			Prefix:    cfg.CloudStorage.Prefix,
+		})
+		if err != nil {
+			logger.Log.Warn().Err(err).Msg("Failed to initialize cloud storage client")
+		}
+	}
+
 	// Initialize HTTP server
 	router := api.NewRouter(&api.Services{
 		POService:          poService,
@@ -83,6 +101,7 @@ func main() {
 		StockHealthCache:   stockHealthCache,
 		DashboardCache:     dashboardCache,
 		LegacyDBConfig:     cfg.LegacyDatabase,
+		Storage:            storageClient,
 	}, cfg.Server.AllowedOrigins)
 
 	srv := &http.Server{
