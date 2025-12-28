@@ -80,6 +80,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
         totalPOS: 0,
         totalQty: 0,
         totalValue: 0,
+        totalSKUs: 0,
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -118,6 +119,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                     totalPOS: response.total_pos ?? 0,
                     totalQty: response.total_qty ?? 0,
                     totalValue: response.total_value ?? 0,
+                    totalSKUs: response.total_skus ?? 0,
                 });
                 setPage(pageValue);
                 setPageSize(pageSizeValue);
@@ -492,11 +494,11 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
         </TableHead>
     );
 
-    // Calculate display values
-    const displaySkus = summaryDefaults?.totalSkus ?? total;
-    const displayPOs = summaryDefaults?.totalPOs ?? grandTotals.totalPOS;
-    const displayQty = summaryDefaults?.totalQty ?? grandTotals.totalQty;
-    const displayValue = summaryDefaults?.totalValue ?? grandTotals.totalValue;
+    // Prioritize actual aggregated totals from items endpoint over summary defaults
+    const displaySkus = (grandTotals.totalSKUs > 0 || !loading) ? grandTotals.totalSKUs : (summaryDefaults?.totalSkus ?? 0);
+    const displayPOs = (grandTotals.totalPOS > 0 || !loading) ? grandTotals.totalPOS : (summaryDefaults?.totalPOs ?? 0);
+    const displayQty = (grandTotals.totalQty > 0 || !loading) ? grandTotals.totalQty : (summaryDefaults?.totalQty ?? 0);
+    const displayValue = (grandTotals.totalValue > 0 || !loading) ? grandTotals.totalValue : (summaryDefaults?.totalValue ?? 0);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

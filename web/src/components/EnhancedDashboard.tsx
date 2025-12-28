@@ -161,100 +161,104 @@ export function EnhancedDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground space-y-8 p-6 lg:p-10 max-w-[1800px] mx-auto transition-colors duration-300">
-
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/40 pb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-primary/10 rounded-xl text-primary shadow-sm border border-primary/20">
-            <LayoutDashboard size={28} strokeWidth={1.5} />
+    <div className="min-h-screen bg-background text-foreground max-w-[1800px] mx-auto transition-colors duration-300">
+      {/* Sticky Header Section */}
+      <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/40 px-6 lg:px-10 py-4 mb-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 gap-3 bg-primary/10 rounded-xl text-primary shadow-sm border border-primary/20">
+              <LayoutDashboard size={24} strokeWidth={1.5} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                Stock Health
+              </h2>
+              <p className="text-muted-foreground flex items-center gap-2 text-xs">
+                Inventory analytics and monitoring
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight text-foreground bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              Stock Health
-            </h2>
-            <p className="text-muted-foreground mt-1 flex items-center gap-2 text-sm">
-              Inventory analytics and stock level monitoring
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={handleRefresh}
-            disabled={isLoading}
-            variant="outline"
-            size="sm"
-            className="gap-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing...' : 'Refresh Data'}
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleRefresh}
+              disabled={isLoading}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh Data'}
+            </Button>
+          </div>
         </div>
       </div>
 
-      {isInitialLoading && (
-        <div className="flex w-full justify-center items-center gap-2 text-xs text-muted-foreground mb-2">
-          <div className="h-3 w-3 rounded-full border-2 border-muted border-t-primary animate-spin" />
-          <span>Loading inventory data...</span>
-        </div>
-      )}
+      <div className="px-6 lg:px-10 pb-10 space-y-8">
 
-      <div className={cn(isInitialLoading && "pointer-events-none opacity-60 select-none")}
-      >
-        <DashboardFilters
-          filters={filters}
-          onFilterChange={onFiltersChange}
-          brandOptions={brandOptions}
-          kategoriBrandOptions={kategoriBrandOptions}
-          storeOptions={storeOptions}
-          selectedDate={selectedDate}
-          availableDates={availableDates}
-          onDateChange={onDateChange}
-          skuOptions={skuOptions}
-          onSkuSearch={onSkuSearch}
-          skuSearchLoading={skuSearchLoading}
-          onSkuLoadMore={onSkuLoadMore}
-          skuHasMoreOptions={skuHasMoreOptions}
-          skuLoadMoreLoading={skuLoadMoreLoading}
-          resolveSkuOption={resolveSkuOption}
+        {isInitialLoading && (
+          <div className="flex w-full justify-center items-center gap-2 text-xs text-muted-foreground mb-2">
+            <div className="h-3 w-3 rounded-full border-2 border-muted border-t-primary animate-spin" />
+            <span>Loading inventory data...</span>
+          </div>
+        )}
+
+        <div className={cn(isInitialLoading && "pointer-events-none opacity-60 select-none")}
+        >
+          <DashboardFilters
+            filters={filters}
+            onFilterChange={onFiltersChange}
+            brandOptions={brandOptions}
+            kategoriBrandOptions={kategoriBrandOptions}
+            storeOptions={storeOptions}
+            selectedDate={selectedDate}
+            availableDates={availableDates}
+            onDateChange={onDateChange}
+            skuOptions={skuOptions}
+            onSkuSearch={onSkuSearch}
+            skuSearchLoading={skuSearchLoading}
+            onSkuLoadMore={onSkuLoadMore}
+            skuHasMoreOptions={skuHasMoreOptions}
+            skuLoadMoreLoading={skuLoadMoreLoading}
+            resolveSkuOption={resolveSkuOption}
+          />
+        </div>
+
+        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <section>
+            <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={isLoading} />
+          </section>
+
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-6 w-1 bg-primary rounded-full" />
+              <h3 className="text-xl font-semibold tracking-tight text-foreground">Overstock Deep Dive</h3>
+            </div>
+            <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} isLoading={isLoading} />
+          </section>
+
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-6 w-1 bg-secondary rounded-full" />
+              <h3 className="text-xl font-semibold tracking-tight text-foreground">Category Analytics</h3>
+            </div>
+            <DashboardCharts
+              charts={charts}
+              brandBreakdown={brandBreakdown}
+              storeBreakdown={storeBreakdown}
+              isLoading={isLoading}
+            />
+          </section>
+        </div>
+
+        <StockItemsDialog
+          isOpen={isDialogOpen}
+          condition={selectedCondition}
+          grouping={selectedGrouping}
+          onOpenChange={handleDialogOpenChange}
+          fetchItems={fetchItemsForDialog}
         />
       </div>
-
-      <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <section>
-          <SummaryCards summary={summary} onCardClick={handleCardClick} isLoading={isLoading} />
-        </section>
-
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="h-6 w-1 bg-primary rounded-full" />
-            <h3 className="text-xl font-semibold tracking-tight text-foreground">Overstock Deep Dive</h3>
-          </div>
-          <OverstockSubgroupCards breakdown={overstockBreakdown} onCardClick={handleOverstockCardClick} isLoading={isLoading} />
-        </section>
-
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="h-6 w-1 bg-secondary rounded-full" />
-            <h3 className="text-xl font-semibold tracking-tight text-foreground">Category Analytics</h3>
-          </div>
-          <DashboardCharts
-            charts={charts}
-            brandBreakdown={brandBreakdown}
-            storeBreakdown={storeBreakdown}
-            isLoading={isLoading}
-          />
-        </section>
-      </div>
-
-      <StockItemsDialog
-        isOpen={isDialogOpen}
-        condition={selectedCondition}
-        grouping={selectedGrouping}
-        onOpenChange={handleDialogOpenChange}
-        fetchItems={fetchItemsForDialog}
-      />
     </div>
   );
 }

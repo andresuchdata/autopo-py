@@ -15,6 +15,7 @@ type poSnapshotTotals struct {
 	TotalPOs   int     `db:"total_pos"`
 	TotalQty   int     `db:"total_qty"`
 	TotalValue float64 `db:"total_value"`
+	TotalSKUs  int     `db:"total_skus"`
 }
 
 // GetDashboardSummary aggregates all dashboard data applying optional filters
@@ -758,7 +759,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	offset := (page - 1) * pageSize
 
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 2)
-	statusExpr := buildDerivedStatusCase("s.")
+	statusExpr := "COALESCE(s.status, -1)"
 	useLatestDay := filter == nil || filter.ReleasedDate == ""
 
 	if filterClause != "" {
@@ -772,18 +773,22 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	var query string
 	if useLatestDay {
 		query = fmt.Sprintf(`
-			WITH latest_day AS (
+			WITH filtered_snapshots AS (
+				SELECT *
+				FROM po_snapshots s
+				WHERE s.po_number <> '' %s
+			),
+			latest_day AS (
 			    SELECT MAX(time::date) AS latest_date
-			    FROM po_snapshots
+			    FROM filtered_snapshots
 			),
 			latest_snapshot AS (
 				SELECT 
 					po_number,
 					sku,
 					MAX(time) AS latest_time
-				FROM po_snapshots s
-				JOIN latest_day d ON s.time::date = d.latest_date
-				WHERE s.po_number <> '' %s
+				FROM filtered_snapshots s
+				WHERE s.time::date = (SELECT latest_date FROM latest_day)
 				GROUP BY po_number, sku
 			)
 			SELECT
@@ -813,13 +818,17 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 		`, filterClause, statusExpr, filterClause, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
 	} else {
 		query = fmt.Sprintf(`
-			WITH latest_snapshot AS (
+			WITH filtered_snapshots AS (
+				SELECT *
+				FROM po_snapshots s
+				WHERE s.po_number <> '' %s
+			),
+			latest_snapshot AS (
 				SELECT 
 					po_number,
 					sku,
 					MAX(time) AS latest_time
-				FROM po_snapshots s
-				WHERE s.po_number <> '' %s
+				FROM filtered_snapshots s
 				GROUP BY po_number, sku
 			)
 			SELECT
@@ -905,48 +914,58 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	var totalsQuery string
 	if useLatestDay {
 		totalsQuery = fmt.Sprintf(`
-			WITH latest_day AS (
+			WITH filtered_snapshots AS (
+				SELECT *
+				FROM po_snapshots s
+				WHERE s.po_number <> '' %s
+			),
+			latest_day AS (
 			    SELECT MAX(time::date) AS latest_date
-			    FROM po_snapshots
+			    FROM filtered_snapshots
 			),
 			latest_snapshot AS (
 				SELECT 
 					po_number,
 					sku,
 					MAX(time) AS latest_time
-				FROM po_snapshots s
-				JOIN latest_day d ON s.time::date = d.latest_date
-				WHERE s.po_number <> '' %s
+				FROM filtered_snapshots s
+				WHERE s.time::date = (SELECT latest_date FROM latest_day)
 				GROUP BY po_number, sku
 			)
 			SELECT 
 				COUNT(*) as total_items,
 				COUNT(DISTINCT s.po_number) as total_pos,
 				COALESCE(SUM(s.quantity_ordered), 0) as total_qty,
-				COALESCE(SUM(s.total_amount), 0) as total_value
+				COALESCE(SUM(s.total_amount), 0) as total_value,
+				COUNT(DISTINCT s.sku) as total_skus
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE (%s) = $1%s
+			WHERE (%s) = $1 %s
 		`, filterClause, statusExpr, filterClause)
 	} else {
 		totalsQuery = fmt.Sprintf(`
-			WITH latest_snapshot AS (
+			WITH filtered_snapshots AS (
+				SELECT *
+				FROM po_snapshots s
+				WHERE s.po_number <> '' %s
+			),
+			latest_snapshot AS (
 				SELECT 
 					po_number,
 					sku,
 					MAX(time) AS latest_time
-				FROM po_snapshots s
-				WHERE s.po_number <> '' %s
+				FROM filtered_snapshots s
 				GROUP BY po_number, sku
 			)
 			SELECT 
 				COUNT(*) as total_items,
 				COUNT(DISTINCT s.po_number) as total_pos,
 				COALESCE(SUM(s.quantity_ordered), 0) as total_qty,
-				COALESCE(SUM(s.total_amount), 0) as total_value
+				COALESCE(SUM(s.total_amount), 0) as total_value,
+				COUNT(DISTINCT s.sku) as total_skus
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-		    WHERE (%s) = $1%s
+		    WHERE (%s) = $1 %s
 		`, filterClause, statusExpr, filterClause)
 	}
 
@@ -976,6 +995,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 		TotalPOs:   totals.TotalPOs,
 		TotalQty:   totals.TotalQty,
 		TotalValue: totals.TotalValue,
+		TotalSKUs:  totals.TotalSKUs,
 	}
 
 	log.Debug().

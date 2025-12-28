@@ -11,7 +11,7 @@ export const api = axios.create({
 });
 
 // Helper to join number arrays into comma-separated strings
-const joinIds = (ids?: number[]): string | undefined => 
+const joinIds = (ids?: number[]): string | undefined =>
     ids && ids.length > 0 ? ids.join(',') : undefined;
 
 // Helper to build query params object
@@ -336,6 +336,7 @@ export interface POSnapshotItemsResponse {
     total_pos: number;
     total_qty: number;
     total_value: number;
+    total_skus: number;
 }
 
 interface POSnapshotItemsParams {

@@ -157,4 +157,5 @@ type POSnapshotItemsResponse struct {
 	TotalPOs   int              `json:"total_pos"`
 	TotalQty   int              `json:"total_qty"`
 	TotalValue float64          `json:"total_value"`
+	TotalSKUs  int              `json:"total_skus"`
 }
