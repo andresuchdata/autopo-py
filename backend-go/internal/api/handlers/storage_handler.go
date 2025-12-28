@@ -3,6 +3,7 @@ package handlers
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,10 @@ func NewStorageHandler(s storage.ObjectStorage) *StorageHandler {
 }
 
 func (h *StorageHandler) ListFiles(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	prefix := c.Query("prefix")
 	limitStr := c.DefaultQuery("limit", "100")
 	cursor := c.Query("cursor")
@@ -42,6 +47,10 @@ func (h *StorageHandler) ListFiles(c *gin.Context) {
 }
 
 func (h *StorageHandler) DownloadFile(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	key := c.Query("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})
@@ -63,6 +72,10 @@ func (h *StorageHandler) DownloadFile(c *gin.Context) {
 }
 
 func (h *StorageHandler) GetFileContent(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	key := c.Query("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})
@@ -79,6 +92,10 @@ func (h *StorageHandler) GetFileContent(c *gin.Context) {
 }
 
 func (h *StorageHandler) DeleteFile(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	key := c.Query("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})
@@ -95,6 +112,10 @@ func (h *StorageHandler) DeleteFile(c *gin.Context) {
 }
 
 func (h *StorageHandler) DeletePrefix(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	prefix := c.Query("prefix")
 	if prefix == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "prefix is required"})
@@ -111,60 +132,24 @@ func (h *StorageHandler) DeletePrefix(c *gin.Context) {
 }
 
 func (h *StorageHandler) DownloadAll(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	prefix := c.Query("prefix")
 	if prefix == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "prefix is required"})
 		return
 	}
 
-	var allFiles []storage.ObjectInfo
-	cursor := ""
-
-	for {
-		page, err := h.storage.ListObjects(c.Request.Context(), prefix, 1000, cursor)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		allFiles = append(allFiles, page.Objects...)
-
-		if page.NextCursor == "" {
-			break
-		}
-		cursor = page.NextCursor
-	}
-
-	if len(allFiles) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "no files found"})
-		return
-	}
-
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
-	for _, obj := range allFiles {
-		content, err := h.storage.GetObjectContent(c.Request.Context(), obj.Key)
-		if err != nil {
-			zw.Close()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		relPath := strings.TrimPrefix(obj.Key, prefix)
-		relPath = strings.TrimPrefix(relPath, "/")
-
-		f, err := zw.Create(relPath)
-		if err != nil {
-			zw.Close()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		_, err = io.Copy(f, bytes.NewReader(content))
-		if err != nil {
-			zw.Close()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+	err := h.addPrefixToZip(c.Request.Context(), zw, prefix, filepath.Dir(strings.TrimSuffix(prefix, "/")))
+	if err != nil {
+		zw.Close()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	zw.Close()
@@ -175,7 +160,70 @@ func (h *StorageHandler) DownloadAll(c *gin.Context) {
 	c.Data(http.StatusOK, "application/zip", buf.Bytes())
 }
 
+func (h *StorageHandler) addPrefixToZip(ctx context.Context, zw *zip.Writer, prefix string, baseForRel string) error {
+	cursor := ""
+	for {
+		// We need a recursive list here, so we might need a version of ListObjects that doesn't use a delimiter
+		// For now, our ListObjects in storage implementations use delimiters.
+		// Let's assume we want a true recursive list.
+		// Actually, let's use the existing ListObjects and recurse manually or fix the storage implementations.
+
+		page, err := h.storage.ListObjects(ctx, prefix, 1000, cursor)
+		if err != nil {
+			return err
+		}
+
+		for _, obj := range page.Objects {
+			content, err := h.storage.GetObjectContent(ctx, obj.Key)
+			if err != nil {
+				return err
+			}
+
+			relPath := obj.Key
+			if baseForRel != "" {
+				relPath = strings.TrimPrefix(obj.Key, baseForRel)
+				relPath = strings.TrimPrefix(relPath, "/")
+			}
+
+			f, err := zw.Create(relPath)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(f, bytes.NewReader(content))
+			if err != nil {
+				return err
+			}
+		}
+
+		// Also handle sub-folders!
+		prefixes, err := h.storage.ListPrefixes(ctx, prefix)
+		if err != nil {
+			return err
+		}
+		for _, sub := range prefixes {
+			fullSub := prefix
+			if !strings.HasSuffix(fullSub, "/") {
+				fullSub += "/"
+			}
+			fullSub += sub + "/"
+			if err := h.addPrefixToZip(ctx, zw, fullSub, baseForRel); err != nil {
+				return err
+			}
+		}
+
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	return nil
+}
+
 func (h *StorageHandler) BulkDeleteFiles(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	var req struct {
 		Keys []string `json:"keys"`
 	}
@@ -189,16 +237,27 @@ func (h *StorageHandler) BulkDeleteFiles(c *gin.Context) {
 		return
 	}
 
-	err := h.storage.DeleteObjects(c.Request.Context(), req.Keys)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	for _, key := range req.Keys {
+		var err error
+		if strings.HasSuffix(key, "/") {
+			err = h.storage.DeletePrefix(c.Request.Context(), key)
+		} else {
+			err = h.storage.DeleteObject(c.Request.Context(), key)
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete %s: %v", key, err)})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "count": len(req.Keys)})
 }
 
 func (h *StorageHandler) BulkDownloadFiles(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	keysStr := c.Query("keys")
 	if keysStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "keys are required"})
@@ -210,25 +269,41 @@ func (h *StorageHandler) BulkDownloadFiles(c *gin.Context) {
 	zw := zip.NewWriter(&buf)
 
 	for _, key := range keys {
-		content, err := h.storage.GetObjectContent(c.Request.Context(), key)
-		if err != nil {
-			zw.Close()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("failed to get %s: %w", key, err).Error()})
-			return
-		}
+		if strings.HasSuffix(key, "/") {
+			// It's a folder, zip it recursively
+			// We use the parent folder as the base for relative paths in the zip
+			parent := filepath.Dir(strings.TrimSuffix(key, "/"))
+			if parent == "." {
+				parent = ""
+			}
+			err := h.addPrefixToZip(c.Request.Context(), zw, key, parent)
+			if err != nil {
+				zw.Close()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("failed to zip folder %s: %w", key, err).Error()})
+				return
+			}
+		} else {
+			// It's a file
+			content, err := h.storage.GetObjectContent(c.Request.Context(), key)
+			if err != nil {
+				zw.Close()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("failed to get %s: %w", key, err).Error()})
+				return
+			}
 
-		fileName := filepath.Base(key)
-		f, err := zw.Create(fileName)
-		if err != nil {
-			zw.Close()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		_, err = io.Copy(f, bytes.NewReader(content))
-		if err != nil {
-			zw.Close()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
+			fileName := filepath.Base(key)
+			f, err := zw.Create(fileName)
+			if err != nil {
+				zw.Close()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			_, err = io.Copy(f, bytes.NewReader(content))
+			if err != nil {
+				zw.Close()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
 		}
 	}
 
@@ -243,6 +318,10 @@ func (h *StorageHandler) BulkDownloadFiles(c *gin.Context) {
 }
 
 func (h *StorageHandler) ListPrefixes(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	prefix := c.Query("prefix")
 	prefixes, err := h.storage.ListPrefixes(c.Request.Context(), prefix)
 	if err != nil {

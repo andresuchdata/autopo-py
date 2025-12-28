@@ -279,23 +279,47 @@ func (c *nativeS3Client) DeleteObjects(ctx context.Context, keys []string) error
 }
 
 func (c *nativeS3Client) DeletePrefix(ctx context.Context, prefix string) error {
+	fullPrefix := c.applyBasePrefix(prefix, true)
 	cursor := ""
 	for {
-		page, err := c.ListObjects(ctx, prefix, 1000, cursor)
-		if err != nil {
-			return err
+		// List ALL objects under prefix without delimiter to get everything recursively
+		input := &s3.ListObjectsV2Input{
+			Bucket: aws.String(c.bucket),
+			Prefix: aws.String(fullPrefix),
+		}
+		if cursor != "" {
+			input.ContinuationToken = aws.String(cursor)
 		}
 
-		for _, obj := range page.Objects {
-			if err := c.DeleteObject(ctx, obj.Key); err != nil {
-				return err
+		result, err := c.client.ListObjectsV2(ctx, input)
+		if err != nil {
+			return fmt.Errorf("failed to list objects for deletion: %w", err)
+		}
+
+		if len(result.Contents) > 0 {
+			objectIds := make([]types.ObjectIdentifier, len(result.Contents))
+			for i, obj := range result.Contents {
+				objectIds[i] = types.ObjectIdentifier{
+					Key: obj.Key,
+				}
+			}
+
+			_, err = c.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+				Bucket: aws.String(c.bucket),
+				Delete: &types.Delete{
+					Objects: objectIds,
+					Quiet:   aws.Bool(true),
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to delete objects in prefix: %w", err)
 			}
 		}
 
-		if page.NextCursor == "" {
+		if result.NextContinuationToken == nil {
 			break
 		}
-		cursor = page.NextCursor
+		cursor = *result.NextContinuationToken
 	}
 
 	return nil

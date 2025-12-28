@@ -46,6 +46,10 @@ func NewCSVStreamHandler(s storage.ObjectStorage) *CSVStreamHandler {
 //   - key: the object key to stream
 //   - compress: optional, set to "true" to enable gzip compression
 func (h *CSVStreamHandler) StreamCSV(c *gin.Context) {
+	if h.storage == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cloud storage is not enabled or configured"})
+		return
+	}
 	key := c.Query("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})

@@ -103,22 +103,21 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 			}
 		}
 
-		if services.Storage != nil {
-			storageHandler := handlers.NewStorageHandler(services.Storage)
-			csvStreamHandler := handlers.NewCSVStreamHandler(services.Storage)
-			storageGroup := apiGroup.Group("/storage")
-			{
-				storageGroup.GET("/files", storageHandler.ListFiles)
-				storageGroup.GET("/prefixes", storageHandler.ListPrefixes)
-				storageGroup.GET("/download", storageHandler.DownloadFile)
-				storageGroup.GET("/download_all", storageHandler.DownloadAll)
-				storageGroup.GET("/download/bulk", storageHandler.BulkDownloadFiles)
-				storageGroup.GET("/content", storageHandler.GetFileContent)
-				storageGroup.GET("/stream_csv", csvStreamHandler.StreamCSV)
-				storageGroup.DELETE("/file", storageHandler.DeleteFile)
-				storageGroup.DELETE("/files/bulk", storageHandler.BulkDeleteFiles)
-				storageGroup.DELETE("/prefix", storageHandler.DeletePrefix)
-			}
+		// Storage operations endpoints
+		storageHandler := handlers.NewStorageHandler(services.Storage)
+		csvStreamHandler := handlers.NewCSVStreamHandler(services.Storage)
+		storageGroup := apiGroup.Group("/storage")
+		{
+			storageGroup.GET("/files", storageHandler.ListFiles)
+			storageGroup.GET("/prefixes", storageHandler.ListPrefixes)
+			storageGroup.GET("/download", storageHandler.DownloadFile)
+			storageGroup.GET("/download_all", storageHandler.DownloadAll)
+			storageGroup.GET("/download/bulk", storageHandler.BulkDownloadFiles)
+			storageGroup.GET("/content", storageHandler.GetFileContent)
+			storageGroup.GET("/stream_csv", csvStreamHandler.StreamCSV)
+			storageGroup.DELETE("/file", storageHandler.DeleteFile)
+			storageGroup.DELETE("/files/bulk", storageHandler.BulkDeleteFiles)
+			storageGroup.DELETE("/prefix", storageHandler.DeletePrefix)
 		}
 	}
 
