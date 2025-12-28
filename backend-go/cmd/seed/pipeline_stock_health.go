@@ -25,43 +25,7 @@ import (
 
 // rewrite using format StoreContribution for mapping below
 
-var STORE_CONTRIBUTIONS = map[string]float64{
-	"PADANG":           100,
-	"PEKANBARU":        60,
-	"JAMBI":            33,
-	"BUKITTINGGI":      45,
-	"PANAM":            46,
-	"MUARO BUNGO":      42,
-	"LAMPUNG":          18,
-	"BENGKULU":         14,
-	"MEDAN":            46,
-	"PALEMBANG":        26,
-	"DAMAR":            91,
-	"BANGKA":           28,
-	"PAYAKUMBUH":       47,
-	"SOLOK":            37,
-	"TEMBILAHAN":       27,
-	"LUBUK LINGGAU":    26,
-	"DUMAI":            36,
-	"KEDATON":          18,
-	"RANTAU PRAPAT":    27,
-	"TANJUNG PINANG":   19,
-	"SUTOMO":           49,
-	"PASAMAN BARAT":    17,
-	"HALAT":            31,
-	"DURI":             28,
-	"SUDIRMAN":         44,
-	"DR. MANSYUR":      25,
-	"DR.MANSYUR":       25,
-	"MANSYUR":          25,
-	"PADANG SIDIMPUAN": 31,
-	"P. SIDIMPUAN":     31,
-	"P.SIDIMPUAN":      31,
-	"ACEH":             15,
-	"MARPOYAN":         30,
-	"SEI PENUH":        21,
-	"MAYANG":           18,
-}
+// STORE_CONTRIBUTIONS has been removed as per user request to ignore scaling.
 
 func stockHealthPipelineFlags() []cli.Flag {
 	return []cli.Flag{
@@ -457,8 +421,6 @@ func runStockHealthPipeline(c *cli.Context) error {
 	// Build stock health pipeline
 	stockCfg := stockhealth.Config{
 		SupplierData:        supplierData,
-		StoreContributions:  STORE_CONTRIBUTIONS,
-		PadangStoreName:     "Miss Glam Padang",
 		InputDateFormat:     inputDateFormat,
 		OutputDir:           outputDir,
 		DownloadDir:         downloadDir,

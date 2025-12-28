@@ -3,38 +3,47 @@ package stock_health
 import (
 	"bufio"
 	"encoding/csv"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+
+	"io"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
 )
 
-// readAndCleanCSV reads a CSV file into RawStockRow slice.
-func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []string, error) {
-	// Derive store name and contribution from the filename, matching notebook logic
-	storeName := p.getStoreNameFromFilename(path)
-	contributionPct := p.getContributionPct(storeName)
-
+// ReadAndCleanCSV reads a CSV file into RawStockRow slice.
+func (p *StockHealthPipeline) ReadAndCleanCSV(path string) ([]RawStockRow, []string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer file.Close()
 
-	reader := csv.NewReader(file)
+	return p.readAndCleanRows(file, path)
+}
+
+// readAndCleanRows reads a CSV from a reader into RawStockRow slice.
+func (p *StockHealthPipeline) readAndCleanRows(r io.Reader, pathForFallback string) ([]RawStockRow, []string, error) {
+	// We need to peek or read a bit to detect delimiter.
+	// If r is already a seeker we could seek back, but it might be a network stream.
+	// Best to use a bufio.Reader.
+	br := bufio.NewReader(r)
+
+	// Create a new reader from the buffered reader
+	reader := csv.NewReader(br)
 	reader.TrimLeadingSpace = true
 
-	// Auto-detect delimiter from first line if needed
-	fileForCheck, err := os.Open(path)
-	if err == nil {
-		bufReader := bufio.NewReader(fileForCheck)
-		firstLine, _ := bufReader.ReadString('\n')
-		fileForCheck.Close()
-
+	// Detect delimiter from first line if possible
+	peek, _ := br.Peek(1000) // peek up to 1000 bytes
+	if len(peek) > 0 {
+		firstLine := string(peek)
+		if idx := strings.Index(firstLine, "\n"); idx != -1 {
+			firstLine = firstLine[:idx]
+		}
 		reader.Comma = pipeline.DetectCSVDelimiter(firstLine)
 	}
 
@@ -149,27 +158,30 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 			return f
 		}
 
-		// parse once so we can keep both scaled and original values if needed later
+		// Determine store name: prioritize column if available
+		rowToko := get(idxToko)
+		if rowToko == "" {
+			rowToko = p.GetStoreNameFromFilename(pathForFallback)
+		}
+
+		// parse once
 		parsedDaily := parseFloat(idxDailySales)
 		parsedMaxDaily := parseFloat(idxMaxDailySales)
 
 		row := RawStockRow{
-			Brand:             get(idxBrand),
-			SKU:               get(idxSKU),
-			Nama:              get(idxNama),
-			Toko:              get(idxToko),
-			Stock:             parseFloat(idxStock),
-			DailySales:        parsedDaily,
-			MaxDailySales:     parsedMaxDaily,
-			LeadTime:          parseFloat(idxLeadTime),
-			MaxLeadTime:       parseFloat(idxMaxLeadTime),
-			SedangPO:          parseFloat(idxSedangPO),
-			HPP:               parseFloat(idxHPP),
-			Harga:             parseFloat(idxHarga),
-			MinOrder:          parseFloat(idxMinOrder),
-			Contribution:      contributionPct,
-			OrigDailySales:    parsedDaily,
-			OrigMaxDailySales: parsedMaxDaily,
+			Brand:         get(idxBrand),
+			SKU:           get(idxSKU),
+			Nama:          get(idxNama),
+			Toko:          rowToko,
+			Stock:         parseFloat(idxStock),
+			DailySales:    parsedDaily,
+			MaxDailySales: parsedMaxDaily,
+			LeadTime:      parseFloat(idxLeadTime),
+			MaxLeadTime:   parseFloat(idxMaxLeadTime),
+			SedangPO:      parseFloat(idxSedangPO),
+			HPP:           parseFloat(idxHPP),
+			Harga:         parseFloat(idxHarga),
+			MinOrder:      parseFloat(idxMinOrder),
 		}
 
 		rows = append(rows, row)
@@ -178,53 +190,63 @@ func (p *StockHealthPipeline) readAndCleanCSV(path string) ([]RawStockRow, []str
 	return rows, header, nil
 }
 
-// getStoreNameFromFilename extracts a normalized store name from the filename.
-func (p *StockHealthPipeline) getStoreNameFromFilename(path string) string {
+// GetStoreNameFromFilename extracts a normalized store name from the filename.
+func (p *StockHealthPipeline) GetStoreNameFromFilename(path string) string {
 	base := filepath.Base(path)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 
-	// Strip leading date prefix if it matches the configured layout followed by '_'
+	// 1. Strip leading date prefix if it matches the configured layout followed by '_'
 	layout := p.config.InputDateFormat
 	if layout == "" {
 		layout = "20060102"
 	}
 	if len(name) > len(layout)+1 && name[len(layout)] == '_' {
-		if _, err := fmt.Sscanf(name[:len(layout)], layout); err == nil {
+		dateStr := name[:len(layout)]
+		if _, err := time.Parse(layout, dateStr); err == nil {
 			name = name[len(layout)+1:]
 		}
 	}
 
+	// 2. Tokenize and clean
 	parts := strings.Fields(name)
-	if len(parts) >= 3 && strings.EqualFold(parts[1], "miss") && strings.EqualFold(parts[2], "glam") {
-		// e.g. "002 Miss Glam Pekanbaru" -> "PEKANBARU"
-		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[3:], " ")))
-	}
-	if len(parts) >= 2 && strings.EqualFold(parts[0], "miss") && strings.EqualFold(parts[1], "glam") {
-		// e.g. "Miss Glam Padang" -> "PADANG"
-		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[2:], " ")))
-	}
-	if len(parts) > 1 {
-		// Fallback: drop the first token (often a sequence number)
-		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[1:], " ")))
-	}
-	if len(parts) == 1 {
-		return strings.ToUpper(strings.TrimSpace(parts[0]))
-	}
-	return ""
-}
-
-// getContributionPct looks up the contribution percentage for a store
-func (p *StockHealthPipeline) getContributionPct(storeName string) float64 {
-	if p.config.StoreContributions == nil {
-		return 100
-	}
-	key := strings.ToUpper(strings.TrimSpace(storeName))
-	if key == "" {
-		return 100
-	}
-	if v, ok := p.config.StoreContributions[key]; ok {
-		return v
+	if len(parts) == 0 {
+		return ""
 	}
 
-	return 100
+	// 3. Robustly strip common prefixes (sequence numbers, Miss Glam)
+	startIdx := 0
+	for startIdx < len(parts) {
+		token := parts[startIdx]
+		tokenLower := strings.ToLower(token)
+
+		// Strip sequence numbers like "1.", "123." or just "002"
+		isNumeric := true
+		for _, c := range strings.TrimSuffix(token, ".") {
+			if c < '0' || c > '9' {
+				isNumeric = false
+				break
+			}
+		}
+		if isNumeric && len(token) > 0 {
+			startIdx++
+			continue
+		}
+
+		// Strip "Miss Glam"
+		if tokenLower == "miss" && startIdx+1 < len(parts) && strings.ToLower(parts[startIdx+1]) == "glam" {
+			startIdx += 2
+			continue
+		}
+
+		// If we reach a token that isn't a known prefix, this is likely the store name
+		break
+	}
+
+	// 4. Join remaining parts
+	if startIdx < len(parts) {
+		return strings.ToUpper(strings.TrimSpace(strings.Join(parts[startIdx:], " ")))
+	}
+
+	// Final fallback: if everything was stripped, just use the last token (best effort)
+	return strings.ToUpper(parts[len(parts)-1])
 }

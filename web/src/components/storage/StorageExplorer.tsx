@@ -37,6 +37,7 @@ interface StorageItem {
     name: string;
     isFolder: boolean;
     size?: number;
+    lastModified?: string;
 }
 
 export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps) {
@@ -92,6 +93,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                         name,
                         isFolder: false,
                         size: obj.size,
+                        lastModified: obj.lastModified,
                     };
                 });
 
@@ -391,70 +393,99 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                         <p className="text-sm">Folder is empty</p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                        {combinedItems.map((item) => (
-                            <div
-                                key={item.key}
-                                className={clsx(
-                                    "group flex items-center justify-between p-3 rounded-lg transition-colors border-l-4",
-                                    selectedKeys.has(item.key)
-                                        ? "bg-primary/5 border-primary"
-                                        : "hover:bg-gray-50 dark:hover:bg-gray-800 border-transparent"
-                                )}
-                            >
-                                <div className="flex items-center gap-3 mr-2">
-                                    <button
-                                        onClick={() => toggleSelect(item.key)}
-                                        className="text-gray-400 hover:text-primary transition-colors focus:outline-none"
-                                    >
-                                        {selectedKeys.has(item.key) ? (
-                                            <CheckSquare className="w-5 h-5 text-primary" />
-                                        ) : (
-                                            <Square className="w-5 h-5" />
-                                        )}
-                                    </button>
-                                </div>
+                    <div className="flex flex-col">
+                        {/* Table Header */}
+                        <div className="flex items-center px-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-900/30 text-[10px] uppercase tracking-wider font-semibold text-gray-500 shrink-0">
+                            <div className="w-8 ml-2"></div>
+                            <div className="flex-1 min-w-0 px-3">Name</div>
+                            <div className="w-24 px-3 text-right">Size</div>
+                            <div className="w-40 px-3 text-right">Updated At</div>
+                            <div className="w-24"></div>
+                        </div>
 
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {combinedItems.map((item) => (
                                 <div
-                                    className="flex items-center gap-3 flex-1 cursor-pointer"
-                                    onClick={() => item.isFolder ? handleFolderClick(item.key) : onViewFile?.(item.key)}
-                                >
-                                    {item.isFolder ? (
-                                        <Folder className="w-5 h-5 text-blue-500 fill-blue-50/50" />
-                                    ) : (
-                                        <FileIcon className="w-5 h-5 text-gray-400" />
+                                    key={item.key}
+                                    className={clsx(
+                                        "group flex items-center p-1.5 hover:bg-gray-50 dark:hover:bg-gray-810 transition-colors border-l-2",
+                                        selectedKeys.has(item.key)
+                                            ? "bg-primary/5 border-primary"
+                                            : "border-transparent"
                                     )}
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-primary transition-colors">
+                                >
+                                    <div className="w-8 ml-2 flex items-center justify-center shrink-0">
+                                        <button
+                                            onClick={() => toggleSelect(item.key)}
+                                            className="text-gray-400 hover:text-primary transition-colors focus:outline-none"
+                                        >
+                                            {selectedKeys.has(item.key) ? (
+                                                <CheckSquare className="w-4 h-4 text-primary" />
+                                            ) : (
+                                                <Square className="w-4 h-4" />
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    <div
+                                        className="flex items-center gap-3 flex-1 min-w-0 px-3 cursor-pointer overflow-hidden"
+                                        onClick={() => item.isFolder ? handleFolderClick(item.key) : onViewFile?.(item.key)}
+                                    >
+                                        {item.isFolder ? (
+                                            <Folder className="w-4 h-4 text-blue-500/80 shrink-0" />
+                                        ) : (
+                                            <FileIcon className="w-4 h-4 text-gray-400 shrink-0" />
+                                        )}
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-primary transition-colors truncate">
                                             {item.name}
                                         </span>
-                                        {!item.isFolder && item.size && (
-                                            <span className="text-xs text-gray-400">
-                                                {(item.size / 1024).toFixed(1)} KB
+                                    </div>
+
+                                    <div className="w-24 px-3 text-right shrink-0">
+                                        {!item.isFolder && item.size !== undefined && (
+                                            <span className="text-[11px] text-gray-500 font-mono">
+                                                {item.size > 1024 * 1024
+                                                    ? `${(item.size / (1024 * 1024)).toFixed(1)} MB`
+                                                    : `${(item.size / 1024).toFixed(1)} KB`
+                                                }
                                             </span>
                                         )}
                                     </div>
-                                </div>
 
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {!item.isFolder && (
-                                        <>
-                                            <Button variant="ghost" size="icon" onClick={() => onViewFile?.(item.key)} title="View Content">
-                                                <Eye className="w-4 h-4" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDownload(item.key, item.name)} title="Download">
-                                                <Download className="w-4 h-4" />
-                                            </Button>
-                                        </>
-                                    )}
+                                    <div className="w-40 px-3 text-right shrink-0">
+                                        {item.lastModified && (
+                                            <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                                                {new Date(item.lastModified).toLocaleString('id-ID', {
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </span>
+                                        )}
+                                    </div>
 
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(item.key, item.name, item.isFolder)} title="Delete">
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
+                                    <div className="w-24 px-3 flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                        {!item.isFolder && (
+                                            <>
+                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onViewFile?.(item.key)} title="View Content">
+                                                    <Eye className="w-3.5 h-3.5" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDownload(item.key, item.name)} title="Download">
+                                                    <Download className="w-3.5 h-3.5" />
+                                                </Button>
+                                            </>
+                                        )}
+
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(item.key, item.name, item.isFolder)} title="Delete">
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                        {hasMoreFiles && <div ref={sentinelRef} className="h-1" />}
+                            ))}
+                            {hasMoreFiles && <div ref={sentinelRef} className="h-1" />}
+                        </div>
                     </div>
                 )}
                 {loading && combinedItems.length === 0 && (

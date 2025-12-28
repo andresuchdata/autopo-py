@@ -30,8 +30,6 @@ type StockHealthPipeline struct {
 	config     Config
 	calculator *InventoryCalculator
 
-	padangSalesCache map[string]map[string]padangSales // dateKey -> SKU -> Padang sales
-
 	supplierIndex map[supplierKey]SupplierData
 
 	storageClient storage.ObjectStorage
@@ -71,10 +69,9 @@ func NewStockHealthPipeline(cfg Config) (*StockHealthPipeline, error) {
 
 	top100ByStore := loadTop100SKUsByStore(cfg.Top100SKUDir, cfg.InputDateFormat)
 	p := &StockHealthPipeline{
-		config:           cfg,
-		calculator:       NewInventoryCalculator(cfg.SpecialSKUs, top100ByStore),
-		padangSalesCache: make(map[string]map[string]padangSales),
-		supplierIndex:    make(map[supplierKey]SupplierData),
+		config:        cfg,
+		calculator:    NewInventoryCalculator(cfg.SpecialSKUs, top100ByStore),
+		supplierIndex: make(map[supplierKey]SupplierData),
 	}
 	// Build supplier index if supplier data is provided.
 	for _, s := range cfg.SupplierData {
@@ -237,7 +234,7 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 	}
 
 	// 2) Read and clean raw rows
-	cleanedRows, header, err := p.readAndCleanCSV(inputFile)
+	cleanedRows, header, err := p.ReadAndCleanCSV(inputFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read/clean file %s: %w", inputFile, err)
 	}
@@ -299,15 +296,11 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 			MaxLeadTime:   raw.MaxLeadTime,
 			SedangPO:      raw.SedangPO,
 			MinOrder:      raw.MinOrder,
-			Contribution:  raw.Contribution,
 			Metrics:       metrics,
 			// supplier info
 			SupplierStore: supplierStore,
 			SupplierName:  supplierName,
 			SupplierPhone: supplierPhone,
-			// carry through original per-store sales
-			OrigDailySales:    raw.OrigDailySales,
-			OrigMaxDailySales: raw.OrigMaxDailySales,
 		}
 		transformed = append(transformed, row)
 	}
@@ -342,7 +335,6 @@ func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (
 			"hpp":                           row.HPP,
 			"harga":                         row.Harga,
 			"min_order":                     row.MinOrder,
-			"contribution_pct":              row.Contribution,
 			"supplier_store":                row.SupplierStore,
 			"supplier_name":                 row.SupplierName,
 			"supplier_phone":                row.SupplierPhone,

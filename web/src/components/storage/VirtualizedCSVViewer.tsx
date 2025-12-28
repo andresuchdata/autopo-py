@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { storageService } from '@/services/api';
 
 interface VirtualizedCSVViewerProps {
   fileKey: string;
@@ -632,9 +633,44 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
     }, 0);
   }, []);
 
-  const handleDownload = () => {
-    const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8080/api/v1';
-    window.open(`${apiUrl}/storage/download?key=${encodeURIComponent(fileKey)}`, '_blank');
+  const handleDownload = async () => {
+    try {
+      const blob = await storageService.downloadFile(fileKey);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      setError('Failed to download file: ' + err.message);
+    }
+  };
+
+  const handleExportFiltered = () => {
+    const base = rowsRef.current;
+    if (base.length === 0) return;
+
+    const indices = viewIndices || base.map((_, i) => i);
+    const filteredRows = indices.map(idx => base[idx]);
+
+    if (filteredRows.length === 0) {
+      alert("No rows match current filters to export.");
+      return;
+    }
+
+    const csv = Papa.unparse(filteredRows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `filtered_${fileName}`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const virtualColumns = columnVirtualizer.getVirtualItems();
@@ -681,8 +717,11 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
               Stream All
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handleDownload} className="gap-2 h-8">
-            <Download className="w-4 h-4" /> Download
+          <Button variant="outline" size="sm" onClick={handleExportFiltered} disabled={!isComplete && rowCount === 0} className="gap-2 h-8">
+            <Download className="w-4 h-4" /> Export Filtered
+          </Button>
+          <Button variant="default" size="sm" onClick={handleDownload} className="gap-2 h-8">
+            <Download className="w-4 h-4" /> Download Original
           </Button>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="w-4 h-4" />

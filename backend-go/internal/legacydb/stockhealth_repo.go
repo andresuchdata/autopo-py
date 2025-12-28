@@ -134,9 +134,6 @@ func (r *StockHealthRepository) FetchStoreSnapshot(ctx context.Context, storeID 
 		row.MaxLeadTime = nullFloat64Value(maxLeadTime)
 		row.SedangPO = nullFloat64Value(sedangPO)
 
-		row.OrigDailySales = row.DailySales
-		row.OrigMaxDailySales = row.MaxDailySales
-
 		results = append(results, row)
 	}
 

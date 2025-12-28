@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -32,8 +33,9 @@ type Config struct {
 
 // ObjectInfo describes a remote object.
 type ObjectInfo struct {
-	Key  string `json:"key"`
-	Size int64  `json:"size"`
+	Key          string    `json:"key"`
+	Size         int64     `json:"size"`
+	LastModified time.Time `json:"lastModified"`
 }
 
 type ListObjectsResult struct {
@@ -94,8 +96,9 @@ func (s *s3Client) ListObjects(ctx context.Context, prefix string, limit int, cu
 		}
 		fmt.Printf("[DEBUG] Object: path=%q size=%d\n", obj.Path, len(obj.Content))
 		results = append(results, ObjectInfo{
-			Key:  key,
-			Size: int64(len(obj.Content)),
+			Key:          key,
+			Size:         int64(len(obj.Content)),
+			LastModified: time.Time{},
 		})
 	}
 

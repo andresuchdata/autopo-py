@@ -17,11 +17,6 @@ type RawStockRow struct {
 	Harga         float64 // Selling price
 	MinOrder      float64 // Minimum order quantity
 	Toko          string  // Store name
-	Contribution  float64 // Store contribution percentage
-
-	// Original per-store sales before any contribution-based scaling
-	OrigDailySales    float64
-	OrigMaxDailySales float64
 }
 
 // InventoryMetrics holds calculated inventory metrics
@@ -63,9 +58,6 @@ type TransformedStockRow struct {
 	SedangPO float64
 	MinOrder float64
 
-	// Store info
-	Contribution float64
-
 	// Calculated metrics
 	Metrics InventoryMetrics
 
@@ -74,10 +66,7 @@ type TransformedStockRow struct {
 	SupplierName  string // Supplier name
 	SupplierPhone string // No HP
 
-	// Original per-store sales and Padang presence flag
-	OrigDailySales    float64
-	OrigMaxDailySales float64
-	IsInPadang        int
+	IsInPadang int
 }
 
 // SupplierData represents supplier information
@@ -97,14 +86,12 @@ type StoreContribution struct {
 
 // Config holds configuration for the stock health pipeline
 type Config struct {
-	SpecialSKUs        map[string]bool // SKUs that need 60 days cover instead of 30
-	SupplierData       []SupplierData
-	StoreContributions map[string]float64
-	PadangStoreName    string // Reference store name (usually "Miss Glam Padang")
-	InputDateFormat    string // Date format in input filenames
-	OutputDir          string // NOT USED when cloud storage is enabled
-	DownloadDir        string // NOT USED when cloud storage is enabled
-	Top100SKUDir       string // Directory containing per-store top 100 SKU files (xlsx/csv)
+	SpecialSKUs     map[string]bool // SKUs that need 60 days cover instead of 30
+	SupplierData    []SupplierData
+	InputDateFormat string // Date format in input filenames
+	OutputDir       string // NOT USED when cloud storage is enabled
+	DownloadDir     string // NOT USED when cloud storage is enabled
+	Top100SKUDir    string // Directory containing per-store top 100 SKU files (xlsx/csv)
 
 	// Hybrid intermediate persistence configuration
 	// IntermediateDir is the root directory for per-file intermediate outputs

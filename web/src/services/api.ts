@@ -417,6 +417,7 @@ export const invalidatePOSnapshotCache = async () => {
 export interface StorageObject {
     key: string;
     size: number;
+    lastModified: string;
 }
 
 export interface StorageListResponse {

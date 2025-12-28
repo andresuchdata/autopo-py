@@ -18,8 +18,16 @@ func WriteStoreCSV(rows []stockhealth.RawStockRow, storeName, snapshotDate, outp
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
+	// Clean up store name: if it already starts with "Miss Glam", don't prepended it again.
+	cleanStoreName := strings.TrimSpace(storeName)
+	if strings.HasPrefix(strings.ToLower(cleanStoreName), "miss glam") {
+		// Just use the name as is (it already has the prefix)
+	} else {
+		cleanStoreName = "Miss Glam " + cleanStoreName
+	}
+
 	// Format filename to match legacy export: YYYYMMDD_Miss Glam StoreName.csv
-	filename := fmt.Sprintf("%s_Miss Glam %s.csv", snapshotDate, storeName)
+	filename := fmt.Sprintf("%s_%s.csv", snapshotDate, cleanStoreName)
 	filePath := filepath.Join(outputDir, filename)
 
 	file, err := os.Create(filePath)

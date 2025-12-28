@@ -7,6 +7,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -142,9 +143,15 @@ func (c *nativeS3Client) ListObjects(ctx context.Context, prefix string, limit i
 			size = *obj.Size
 		}
 
+		modTime := time.Time{}
+		if obj.LastModified != nil {
+			modTime = *obj.LastModified
+		}
+
 		objects = append(objects, ObjectInfo{
-			Key:  key,
-			Size: size,
+			Key:          key,
+			Size:         size,
+			LastModified: modTime,
 		})
 	}
 

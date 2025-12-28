@@ -50,8 +50,6 @@ func serializeRawStockRows(header []string, rows []RawStockRow) ([]byte, error) 
 				record[i] = formatIDFloat(r.Harga, 2)
 			case "min_order":
 				record[i] = formatIDFloat(r.MinOrder, 2)
-			case "contribution_pct":
-				record[i] = formatIDFloat(r.Contribution, 2)
 			}
 		}
 		if err := writer.Write(record); err != nil {
@@ -123,11 +121,8 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 		"hpp",
 		"harga",
 		"min_order",
-		"contribution_pct",
 		"sales_contribution",
 		"is_in_padang",
-		"orig_daily_sales",
-		"orig_max_daily_sales",
 		"safety_stock",
 		"reorder_point",
 		"target_days_cover",
@@ -166,11 +161,8 @@ func (p *StockHealthPipeline) writeMetricsIntermediate(date time.Time, inputFile
 			fmt.Sprintf("%v", r.HPP),
 			fmt.Sprintf("%v", r.Harga),
 			fmt.Sprintf("%v", r.MinOrder),
-			fmt.Sprintf("%v", r.Contribution),
 			formatIDFloat(salesContribution, 2),
 			fmt.Sprintf("%v", r.IsInPadang),
-			formatIDFloat(r.OrigDailySales, 2),
-			formatIDFloat(r.OrigMaxDailySales, 2),
 			fmt.Sprintf("%v", r.Metrics.SafetyStock),
 			fmt.Sprintf("%v", r.Metrics.ReorderPoint),
 			fmt.Sprintf("%v", r.Metrics.TargetDaysCover),
