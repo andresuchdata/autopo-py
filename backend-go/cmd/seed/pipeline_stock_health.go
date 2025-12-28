@@ -561,9 +561,7 @@ func loadSupplierDataCSV(path string) ([]stockhealth.SupplierData, error) {
 			NamaSupplier: get(idxSupplier),
 			NoHP:         get(idxPhone),
 		}
-		if strings.TrimSpace(row.SKU) == "" && strings.TrimSpace(row.NamaStore) == "" {
-			continue
-		}
+
 		out = append(out, row)
 	}
 	return out, nil
@@ -616,9 +614,7 @@ func loadSupplierDataXLSX(path string) ([]stockhealth.SupplierData, error) {
 			NamaSupplier: get(idxSupplier),
 			NoHP:         get(idxPhone),
 		}
-		if strings.TrimSpace(row.SKU) == "" && strings.TrimSpace(row.NamaStore) == "" {
-			continue
-		}
+
 		out = append(out, row)
 	}
 	if err := rows.Error(); err != nil {
