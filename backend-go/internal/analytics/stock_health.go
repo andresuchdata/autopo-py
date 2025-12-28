@@ -328,7 +328,6 @@ func (p *AnalyticsProcessor) processStockHealthFile(ctx context.Context, filePat
 		if sku == "" {
 			skippedRows++
 			log.Printf("warning: skipping row %d in %s: empty SKU", rowNumber+1, filepath.Base(filePath))
-			continue
 		}
 
 		hppValue := getFloat("hpp")
