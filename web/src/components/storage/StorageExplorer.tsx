@@ -303,7 +303,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
     return (
         <div className="flex flex-col h-full min-h-0 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
             {/* Toolbar */}
-            <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex items-center justify-between shrink-0">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2 text-sm">
                     <Button variant="ghost" size="sm" onClick={() => setCurrentPrefix(normalizedBasePrefix)} className="font-semibold text-primary">
                         Root
@@ -395,7 +395,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                 ) : (
                     <div className="flex flex-col">
                         {/* Table Header */}
-                        <div className="flex items-center px-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-900/30 text-[10px] uppercase tracking-wider font-semibold text-gray-500 shrink-0">
+                        <div className="flex items-center px-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800/20 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 shrink-0">
                             <div className="w-8 ml-2"></div>
                             <div className="flex-1 min-w-0 px-3">Name</div>
                             <div className="w-24 px-3 text-right">Size</div>
@@ -408,9 +408,9 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                                 <div
                                     key={item.key}
                                     className={clsx(
-                                        "group flex items-center p-1.5 hover:bg-gray-50 dark:hover:bg-gray-810 transition-colors border-l-2",
+                                        "group flex items-center p-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors border-l-2",
                                         selectedKeys.has(item.key)
-                                            ? "bg-primary/5 border-primary"
+                                            ? "bg-primary/5 dark:bg-primary/10 border-primary"
                                             : "border-transparent"
                                     )}
                                 >
@@ -432,7 +432,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
                                         onClick={() => item.isFolder ? handleFolderClick(item.key) : onViewFile?.(item.key)}
                                     >
                                         {item.isFolder ? (
-                                            <Folder className="w-4 h-4 text-blue-500/80 shrink-0" />
+                                            <Folder className="w-4 h-4 text-blue-500/80 dark:text-blue-400 shrink-0" />
                                         ) : (
                                             <FileIcon className="w-4 h-4 text-gray-400 shrink-0" />
                                         )}
@@ -443,7 +443,7 @@ export function StorageExplorer({ basePrefix, onViewFile }: StorageExplorerProps
 
                                     <div className="w-24 px-3 text-right shrink-0">
                                         {!item.isFolder && item.size !== undefined && (
-                                            <span className="text-[11px] text-gray-500 font-mono">
+                                            <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
                                                 {item.size > 1024 * 1024
                                                     ? `${(item.size / (1024 * 1024)).toFixed(1)} MB`
                                                     : `${(item.size / 1024).toFixed(1)} KB`

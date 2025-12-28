@@ -52,3 +52,41 @@ app-up:
 
 app-build:
 	@bash -c 'set -a && source .env && set +a && docker compose up -d --build app'
+
+# =============================================================================
+# Pipeline Seed Commands
+# =============================================================================
+
+# Stock Health Pipeline
+# Run using local files in data/test_ingestion (no Drive download, no Legacy DB)
+seed-stock-health-local:
+	@echo "Running Stock Health Pipeline (LOCAL MODE)"
+	@bash -c 'set -a && source .env && set +a && \
+		LEGACY_DB_HOST="" \
+		STOCK_HEALTH_REUSE_LOCAL=true \
+		STOCK_HEALTH_DOWNLOAD_DIR="./data/test_ingestion" \
+		go run cmd/seed/*.go pipeline-stock-health --reuse-local'
+
+# Run using Google Drive download (as configured in .env)
+seed-stock-health-drive:
+	@echo "Running Stock Health Pipeline (DRIVE MODE)"
+	@bash -c 'set -a && source .env && set +a && \
+		LEGACY_DB_HOST="" \
+		go run cmd/seed/*.go pipeline-stock-health'
+
+# PO Snapshot Pipeline
+# Run using local files in data/test_ingestion/po_snapshots (example path)
+seed-po-snapshot-local:
+	@echo "Running PO Snapshot Pipeline (LOCAL MODE)"
+	@bash -c 'set -a && source .env && set +a && \
+		LEGACY_DB_HOST="" \
+		PO_SNAPSHOT_REUSE_LOCAL=true \
+		PO_SNAPSHOT_DOWNLOAD_DIR="./data/test_ingestion/po_snapshots" \
+		go run cmd/seed/*.go pipeline-po-snapshots --reuse-local'
+
+# Run using Google Drive download (as configured in .env)
+seed-po-snapshot-drive:
+	@echo "Running PO Snapshot Pipeline (DRIVE MODE)"
+	@bash -c 'set -a && source .env && set +a && \
+		LEGACY_DB_HOST="" \
+		go run cmd/seed/*.go pipeline-po-snapshots'
