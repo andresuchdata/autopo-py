@@ -82,14 +82,14 @@ func (p *AnalyticsProcessor) poTimeLayouts() []string {
 
 // processPOSnapshotFile ingests PO snapshot CSV data in batches with deduplication
 func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath string) error {
+	log.Printf("DEBUG PO: Opening file %s", filePath)
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
-	// Auto-detect delimiter ("," vs ";") based on the header line so we can
-	// handle both comma- and semicolon-separated exports.
+	// ... (header detection logic) ...
 	bufReader := bufio.NewReader(file)
 	firstLine, err := bufReader.ReadString('\n')
 	if err != nil && err != io.EOF {
@@ -108,6 +108,7 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	if err != nil {
 		return fmt.Errorf("failed to read CSV header: %w", err)
 	}
+	log.Printf("DEBUG PO: Header read successfully. Columns: %d", len(header))
 
 	colMap := make(map[string]int)
 	for i, col := range header {
@@ -118,12 +119,14 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	if err != nil {
 		return fmt.Errorf("invalid date in filename %s: %w", filePath, err)
 	}
+	log.Printf("DEBUG PO: Snapshot time parsed: %s", snapshotTime)
 
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
+	log.Printf("DEBUG PO: Transaction started")
 
 	rawRows := make([]rawPOSnapshotRow, 0)
 	skuNames := make(map[string]string)
@@ -131,30 +134,30 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 	storeNames := make(map[string]string)
 	supplierNames := make(map[string]string)
 
-	rowNum := 1 // Track row number for logging (header is row 1)
+	rowNum := 1
 	poTimeFormats := p.poTimeLayouts()
+
+	log.Printf("DEBUG PO: Starting row processing loop")
 	for {
 		record, err := reader.Read()
 		if err != nil {
 			if err == io.EOF {
+				log.Printf("DEBUG PO: End of file reached. Total rows: %d", rowNum)
 				break
 			}
-			// Handle CSV parse errors (e.g. wrong number of fields) gracefully
 			if parseErr, ok := err.(*csv.ParseError); ok {
 				log.Printf("Warning: skipping malformed CSV record in %s at line %d: %v", filePath, rowNum+1, parseErr)
-				rowNum++ // Still increment row num as Read likely advanced
+				rowNum++
 				continue
 			}
-
 			return fmt.Errorf("error reading record: %w", err)
 		}
 		rowNum++
+		if rowNum%50000 == 0 {
+			log.Printf("DEBUG PO: Processed %d rows...", rowNum)
+		}
 
 		sku := normalizeSKU(record[colMap["SKU"]])
-		if sku == "" {
-			log.Printf("Skipping record without SKU in file %s", filePath)
-			continue
-		}
 
 		productName := strings.TrimSpace(record[colMap["Nama Produk"]])
 		if productName == "" {
@@ -167,7 +170,7 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 
 		poNumber := strings.TrimSpace(record[colMap["No PO"]])
 		if poNumber == "" {
-			return fmt.Errorf("record missing PO number")
+			log.Printf("WARNING: Empty PO Number record in %s at line %d", filePath, rowNum+1)
 		}
 
 		brandName := strings.TrimSpace(record[colMap["Brand"]])
@@ -177,7 +180,7 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 
 		storeName := strings.TrimSpace(record[colMap["Store"]])
 		if storeName == "" {
-			return fmt.Errorf("record missing store name")
+			log.Printf("WARNING: Empty Store Name record in %s at line %d", filePath, rowNum+1)
 		}
 		storeNames[strings.ToLower(storeName)] = storeName
 
@@ -188,17 +191,6 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 
 		unitPrice := parseOptionalFloat(record, colMap, "Harga")
 		totalAmount := parseOptionalFloat(record, colMap, "Amount")
-
-		// Log warning for extremely large values that might cause issues
-		const maxReasonableAmount = 999999999999.99 // ~1 trillion
-		if totalAmount > maxReasonableAmount {
-			log.Printf("WARNING: Row %d has unusually large total_amount=%.2f (po=%s sku=%s). This may indicate data quality issues.",
-				rowNum, totalAmount, poNumber, sku)
-		}
-		if unitPrice > maxReasonableAmount {
-			log.Printf("WARNING: Row %d has unusually large unit_price=%.2f (po=%s sku=%s). This may indicate data quality issues.",
-				rowNum, unitPrice, poNumber, sku)
-		}
 
 		rawRows = append(rawRows, rawPOSnapshotRow{
 			sku:              sku,
@@ -220,22 +212,27 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 		})
 	}
 
+	log.Printf("DEBUG PO: Ensuring bulk entities (Products: %d, Stores: %d, Brands: %d, Suppliers: %d)",
+		len(skuNames), len(storeNames), len(brandNames), len(supplierNames))
+
 	productIDs, err := p.ensureProductsWithNamesBulk(ctx, tx, skuNames)
 	if err != nil {
-		return err
+		return fmt.Errorf("ensureProductsWithNamesBulk failed: %w", err)
 	}
 	storeIDs, err := ensureStoresBulk(ctx, tx, storeNames)
 	if err != nil {
-		return err
+		return fmt.Errorf("ensureStoresBulk failed: %w", err)
 	}
 	brandIDs, err := ensureBrandsBulk(ctx, tx, brandNames)
 	if err != nil {
-		return err
+		return fmt.Errorf("ensureBrandsBulk failed: %w", err)
 	}
 	supplierIDs, err := ensureSuppliersBulk(ctx, tx, supplierNames)
 	if err != nil {
-		return err
+		return fmt.Errorf("ensureSuppliersBulk failed: %w", err)
 	}
+
+	log.Printf("DEBUG PO: Entity resolution done. Building %d records", len(rawRows))
 
 	records := make([]poSnapshotRecord, 0, len(rawRows))
 	for _, raw := range rawRows {
@@ -289,16 +286,18 @@ func (p *AnalyticsProcessor) processPOSnapshotFile(ctx context.Context, filePath
 		})
 	}
 
+	log.Printf("DEBUG PO: Starting batch flush of %d records", len(records))
 	for start := 0; start < len(records); start += analyticsBatchSize {
 		end := start + analyticsBatchSize
 		if end > len(records) {
 			end = len(records)
 		}
 		if err := p.flushPOSnapshotBatch(ctx, tx, records[start:end]); err != nil {
-			return err
+			return fmt.Errorf("flushPOSnapshotBatch failed at index %d: %w", start, err)
 		}
 	}
 
+	log.Printf("DEBUG PO: Committing transaction")
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}

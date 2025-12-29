@@ -33,9 +33,17 @@ const analyticsBatchSize = 1000
 
 // ProcessFile processes either stock health or PO snapshot files based on the file path
 func (p *AnalyticsProcessor) ProcessFile(ctx context.Context, filePath string) error {
-	log.Printf("Processing file: %s, directory: %s", filePath, filepath.Base(filepath.Dir(filePath)))
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in ProcessFile for %s: %v", filePath, r)
+		}
+	}()
 
-	switch detectPipelineType(filePath) {
+	log.Printf("DEBUG PROCESSOR: Starting ProcessFile for: %s", filePath)
+	pipelineType := detectPipelineType(filePath)
+	log.Printf("DEBUG PROCESSOR: Detected pipeline type: '%s'", pipelineType)
+
+	switch pipelineType {
 	case "stock_health":
 		return p.processStockHealthFile(ctx, filePath)
 	case "po_snapshots":

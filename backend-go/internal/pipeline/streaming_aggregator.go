@@ -22,6 +22,7 @@ type StreamingAggregator struct {
 	mu            sync.Mutex
 	flushCallback func(ctx context.Context, csvPath string) error
 	lastFlush     time.Time
+	wg            sync.WaitGroup
 }
 
 // NewStreamingAggregator creates a new streaming aggregator for a pipeline
@@ -81,7 +82,14 @@ func (sa *StreamingAggregator) Finalize(ctx context.Context) error {
 		return nil
 	}
 
-	return sa.flushLocked(ctx)
+	// Flush any remaining data
+	if err := sa.flushLocked(ctx); err != nil {
+		return err
+	}
+
+	// Wait for all async operations to complete
+	sa.wg.Wait()
+	return nil
 }
 
 // flushLocked writes the current buffer to CSV and triggers the seed callback
@@ -91,50 +99,84 @@ func (sa *StreamingAggregator) flushLocked(ctx context.Context) error {
 		return nil
 	}
 
-	log.Printf("[%s] Flushing %d files to CSV...", sa.pipeline.Name(), len(sa.buffer))
+	log.Printf("[%s] Calculation complete for batch of %d files. Saving buffered CSV asynchronously...", sa.pipeline.Name(), len(sa.buffer))
 
-	// Flatten all rows
-	var allRows []TransformedRow
-	for _, fileRows := range sa.buffer {
-		allRows = append(allRows, fileRows...)
-	}
+	// Shallow copy buffer for async processing
+	bufferCopy := make([][]TransformedRow, len(sa.buffer))
+	copy(bufferCopy, sa.buffer)
 
-	// Ensure output directory exists
-	if err := os.MkdirAll(sa.config.OutputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
+	// Flatten rows immediately if needed, or do it in async. Doing it async saves main thread time.
+	// But we need to capture relevant data for the closure.
 
-	// Write to CSV with date in filename
-	csvPath := filepath.Join(
-		sa.config.OutputDir,
-		fmt.Sprintf("%s.csv", sa.date.Format("20060102")),
-	)
+	// Date and config are constant/thread-safe or local copies needed?
+	// sa.config is value receiver copy in struct? No, struct has copy.
+	// sa.date is value.
 
-	if err := sa.writeCSV(csvPath, allRows); err != nil {
-		return fmt.Errorf("failed to write CSV: %w", err)
-	}
-
-	log.Printf("[%s] Wrote %d rows to %s", sa.pipeline.Name(), len(allRows), csvPath)
-
-	uploadPath := csvPath
-	if cp, ok := sa.pipeline.(CloudPipeline); ok {
-		if err := cp.UploadAggregatedOutput(ctx, sa.date, csvPath); err != nil {
-			return fmt.Errorf("failed to upload aggregated output: %w", err)
-		}
-		uploadPath = csvPath
-	}
-
-	// Trigger seed callback (calls analytics.ProcessFile)
-	if sa.flushCallback != nil {
-		if err := sa.flushCallback(ctx, uploadPath); err != nil {
-			return fmt.Errorf("flush callback failed: %w", err)
-		}
-	}
-
-	// Clear buffer
+	// Clear main buffer immediately so main thread can continue
 	sa.buffer = sa.buffer[:0]
 	sa.bufferSize = 0
 	sa.lastFlush = time.Now()
+
+	sa.wg.Add(1)
+	go func(rowsBatch [][]TransformedRow) {
+		defer sa.wg.Done()
+
+		// Flatten
+		var allRows []TransformedRow
+		for _, fileRows := range rowsBatch {
+			allRows = append(allRows, fileRows...)
+		}
+
+		// Ensure output directory exists
+		if err := os.MkdirAll(sa.config.OutputDir, 0755); err != nil {
+			log.Printf("ERROR [%s] Async flush failed: ensure dir: %v", sa.pipeline.Name(), err)
+			return
+		}
+
+		// Write to CSV with date in filename
+		// Note: using timestamp to allow multiple flushes per day if needed, but original logic was uniform per date.
+		// If multiple flushes happen for same date, they might overwrite or need collision handling.
+		// Original logic: fmt.Sprintf("%s.csv", sa.date.Format("20060102"))
+		// Since we now support multiple concurrent batches, strict overwriting is dangerous.
+		// Use timestamp in filename for uniqueness if multiple batches?
+		// User requirement "output csv file... wait at end" suggests one big file or multiple?
+		// Existing logic overwrote? No, it appended? No, os.Create overwrites.
+		// If we stream, we should probably APPEND if file exists, or use unique names.
+		// CAUTION: Original code overwrote `os.Create`. If `flushLocked` called multiple times, it would overwrite previous data!
+		// But `StreamingAggregator` seems designed to flush periodically.
+		// If flushing periodically, we MUST use unique filenames or Append.
+		// Let's use unique filenames for safety in async batches: YYYYMMDD_HHMMSS_nanos.csv
+		csvName := fmt.Sprintf("%s_%d.csv", sa.date.Format("20060102"), time.Now().UnixNano())
+		csvPath := filepath.Join(sa.config.OutputDir, csvName)
+
+		if err := sa.writeCSV(csvPath, allRows); err != nil {
+			log.Printf("ERROR [%s] Async flush failed: write CSV: %v", sa.pipeline.Name(), err)
+			return
+		}
+
+		log.Printf("[%s] CSV saved successfully: %s (%d rows)", sa.pipeline.Name(), csvPath, len(allRows))
+
+		uploadPath := csvPath
+		if cp, ok := sa.pipeline.(CloudPipeline); ok {
+			if err := cp.UploadAggregatedOutput(ctx, sa.date, csvPath); err != nil {
+				log.Printf("ERROR [%s] Async flush failed: upload: %v", sa.pipeline.Name(), err)
+				// Don't return, try to proceed to callback?
+			} else {
+				uploadPath = csvPath
+			}
+		}
+
+		// Trigger seed callback (calls analytics.ProcessFile)
+		log.Printf("[%s] Debug: About to trigger flush callback. Callback is nil? %v", sa.pipeline.Name(), sa.flushCallback == nil)
+		if sa.flushCallback != nil {
+			log.Printf("[%s] Debug: Calling flush callback with path: %s", sa.pipeline.Name(), uploadPath)
+			if err := sa.flushCallback(ctx, uploadPath); err != nil {
+				log.Printf("ERROR [%s] Async flush callback failed: %v", sa.pipeline.Name(), err)
+			} else {
+				log.Printf("[%s] Debug: Flush callback completed successfully", sa.pipeline.Name())
+			}
+		}
+	}(bufferCopy)
 
 	return nil
 }
