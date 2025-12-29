@@ -19,6 +19,7 @@ type Runner struct {
 	scriptPath string
 	baseIndex  string // Path to the autopo/notebook directory
 	storage    storage.ObjectStorage
+	Workers    int // Number of workers for parallel processing
 }
 
 // ValidationResult represents the output from validate.py
@@ -51,6 +52,7 @@ func NewRunner(notebookBaseDir string, storageClient storage.ObjectStorage) *Run
 		scriptPath: filepath.Join(notebookBaseDir, "scripts", "validate.py"),
 		baseIndex:  notebookBaseDir,
 		storage:    storageClient,
+		Workers:    5, // Default to 5 workers
 	}
 }
 
@@ -72,6 +74,7 @@ func (r *Runner) Run(ctx context.Context, date time.Time) (*ValidationResult, er
 		"--date", dateStr,
 		"--base-dir", r.baseIndex,
 		"--json-out", tmpPath,
+		"--workers", fmt.Sprintf("%d", r.Workers),
 	}
 
 	logger.Log.Info().Str("date", dateStr).Msg("Starting validation run")

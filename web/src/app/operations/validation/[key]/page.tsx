@@ -21,8 +21,9 @@ export default function ValidationDetailsPage() {
     // Available sheets in the validation Excel files
     const sheets = [
         { id: 'validation', label: 'Validation Details' },
+        { id: 'mismatches', label: 'Mismatches' },
         { id: 'metrics', label: 'Metrics' },
-        // Add more sheets as needed based on your Excel structure
+        { id: 'top100_comparison', label: 'Top 100 SKU' },
     ];
 
     return (

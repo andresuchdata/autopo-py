@@ -16,6 +16,19 @@ load_dotenv()
 
 BASE_DIR = Path('/Users/andresuchitra/dev/missglam/autopo/notebook')
 
+# Default comparison configuration for intelligent tolerance
+DEFAULT_COMPARE_CONFIG = {
+    "mode": "loose",  # Allow small tolerances
+    "treat_blank_as_zero": True,  # Treat blank/empty as 0 for numeric fields
+    "treat_blank_as_null": False,  # When treat_blank_as_zero is True
+    "abs_tol": 0.01,  # Small absolute tolerance for floating point
+    "rel_tol": 0.0,
+    "normalize_keys": True,
+    "normalize_sku": True,
+    "normalize_toko": True,
+    "toko_key_mode": "slug",
+}
+
 def _normalize_col(s: str) -> str:
     return re.sub(r"\s+", " ", str(s)).strip().lower()
 
@@ -1304,6 +1317,52 @@ def run_validation_for_date(
     return summary_df
 
 
+# Module-level function for multiprocessing (must be picklable)
+def _process_single_validation_file(args_tuple):
+    """Process a single input file for validation.
+    Args: tuple of (in_file, report_dir, xlsx_out_arg)
+    Returns: dict with validation result
+    """
+    in_file, report_dir, xlsx_out_arg = args_tuple
+    
+    out_file = _resolve_output_file(in_file, in_file.parent.name)
+    if not out_file:
+        return {
+            "file": in_file.name,
+            "status": "missing_output",
+            "metrics": None
+        }
+
+    try:
+        # Use DEFAULT_COMPARE_CONFIG if it exists, otherwise use default
+        compare_cfg = DEFAULT_COMPARE_CONFIG if 'DEFAULT_COMPARE_CONFIG' in globals() else None
+        
+        merged, _ = validate_po_fields(in_file, out_file, compare_config=compare_cfg)
+        metrics_df = _build_metrics_df(in_file, out_file, compare_config=compare_cfg)
+        
+        # Convert metrics df to dict
+        metrics = dict(zip(metrics_df["metric"], metrics_df["value"]))
+        
+        # Export XLSX if requested or default location
+        xlsx_path = xlsx_out_arg if xlsx_out_arg else report_dir / f"validation_{in_file.stem}.xlsx"
+        export_validation_xlsx(merged, xlsx_path, compare_config=compare_cfg)
+
+        return {
+            "file": in_file.name,
+            "status": "success",
+            "output_file": str(out_file),
+            "report_file": str(xlsx_path),
+            "metrics": metrics
+        }
+
+    except Exception as e:
+        return {
+            "file": in_file.name,
+            "status": "error",
+            "error": str(e)
+        }
+
+
 
 def main():
     import argparse
@@ -1338,53 +1397,21 @@ def main():
     report_dir = BASE_DIR / "output" / date_str / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
 
-    # Helper function for parallel processing
-    def process_single_file(in_file):
-        out_file = _resolve_output_file(in_file, date_str)
-        if not out_file:
-            return {
-                "file": in_file.name,
-                "status": "missing_output",
-                "metrics": None
-            }
-
-        try:
-            merged, _ = validate_po_fields(in_file, out_file)
-            metrics_df = _build_metrics_df(in_file, out_file)
-            
-            # Convert metrics df to dict
-            metrics = dict(zip(metrics_df["metric"], metrics_df["value"]))
-            
-            # Export XLSX if requested or default location
-            xlsx_path = args.xlsx_out if args.xlsx_out else report_dir / f"validation_{in_file.stem}.xlsx"
-            export_validation_xlsx(merged, xlsx_path)
-
-            return {
-                "file": in_file.name,
-                "status": "success",
-                "output_file": str(out_file),
-                "report_file": str(xlsx_path),
-                "metrics": metrics
-            }
-
-        except Exception as e:
-            return {
-                "file": in_file.name,
-                "status": "error",
-                "error": str(e)
-            }
-
-    # Process files in parallel
+    # Prepare arguments for parallel processing
+    task_args = [(f, report_dir, args.xlsx_out) for f in input_files]
+    
+    # Calculate number of workers
     from multiprocessing import Pool, cpu_count
     num_workers = min(args.workers, cpu_count())
     
+    # Process files in parallel
     if num_workers > 1 and len(input_files) > 1:
         print(f"Processing {len(input_files)} files with {num_workers} workers...", file=sys.stderr)
         with Pool(processes=num_workers) as pool:
-            results = pool.map(process_single_file, input_files)
+            results = pool.map(_process_single_validation_file, task_args)
     else:
         print(f"Processing {len(input_files)} files sequentially...", file=sys.stderr)
-        results = [process_single_file(f) for f in input_files]
+        results = [_process_single_validation_file(args) for args in task_args]
 
     # Write JSON output
     output_data = {

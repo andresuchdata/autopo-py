@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -117,6 +118,15 @@ func main() {
 
 	// Initialize validation runner
 	validationRunner := validation.NewRunner(notebookDir, storageClient)
+	// Configure workers from environment variable (default: 5)
+	if workersStr := os.Getenv("VALIDATION_WORKERS"); workersStr != "" {
+		if workers, err := strconv.Atoi(workersStr); err == nil && workers > 0 {
+			validationRunner.Workers = workers
+		}
+	}
+	if validationRunner.Workers == 0 {
+		validationRunner.Workers = 5 // Default to 5 workers
+	}
 
 	// Initialize HTTP server
 	router := api.NewRouter(&api.Services{
