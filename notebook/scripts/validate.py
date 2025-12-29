@@ -392,6 +392,9 @@ def export_validation_xlsx(
     fields: list[str] | None = None,
     compare_config: dict | None = None,
     sheet_name: str = "validation",
+    metrics_df: pd.DataFrame | None = None,
+    mismatches_df: pd.DataFrame | None = None,
+    top100_df: pd.DataFrame | None = None,
 ) -> Path:
     output_xlsx_path = Path(output_xlsx_path)
     output_xlsx_path.parent.mkdir(parents=True, exist_ok=True)
@@ -399,12 +402,34 @@ def export_validation_xlsx(
     flags_df = build_validation_flags(merged_df, fields=fields, compare_config=compare_config)
 
     with pd.ExcelWriter(output_xlsx_path, engine="openpyxl") as writer:
+        # Write validation sheet
         flags_df.to_excel(writer, index=False, sheet_name=sheet_name)
         ws = writer.sheets[sheet_name]
-
         max_row = ws.max_row
         max_col = ws.max_column
         ws.auto_filter.ref = ws.cell(row=1, column=1).coordinate + ":" + ws.cell(row=max_row, column=max_col).coordinate
+
+        # Write mismatches sheet if provided
+        if mismatches_df is not None and not mismatches_df.empty:
+            mismatches_df.to_excel(writer, index=False, sheet_name="mismatches")
+            ws_mismatch = writer.sheets["mismatches"]
+            max_row = ws_mismatch.max_row
+            max_col = ws_mismatch.max_column
+            if max_row > 1:
+                ws_mismatch.auto_filter.ref = ws_mismatch.cell(row=1, column=1).coordinate + ":" + ws_mismatch.cell(row=max_row, column=max_col).coordinate
+
+        # Write metrics sheet if provided
+        if metrics_df is not None and not metrics_df.empty:
+            metrics_df.to_excel(writer, index=False, sheet_name="metrics")
+
+        # Write top100 comparison sheet if provided
+        if top100_df is not None and not top100_df.empty:
+            top100_df.to_excel(writer, index=False, sheet_name="top100_comparison")
+            ws_top100 = writer.sheets["top100_comparison"]
+            max_row = ws_top100.max_row
+            max_col = ws_top100.max_column
+            if max_row > 1:
+                ws_top100.auto_filter.ref = ws_top100.cell(row=1, column=1).coordinate + ":" + ws_top100.cell(row=max_row, column=max_col).coordinate
 
     return output_xlsx_path
 
@@ -1337,15 +1362,22 @@ def _process_single_validation_file(args_tuple):
         # Use DEFAULT_COMPARE_CONFIG if it exists, otherwise use default
         compare_cfg = DEFAULT_COMPARE_CONFIG if 'DEFAULT_COMPARE_CONFIG' in globals() else None
         
-        merged, _ = validate_po_fields(in_file, out_file, compare_config=compare_cfg)
+        merged, mismatches = validate_po_fields(in_file, out_file, compare_config=compare_cfg)
         metrics_df = _build_metrics_df(in_file, out_file, compare_config=compare_cfg)
         
         # Convert metrics df to dict
         metrics = dict(zip(metrics_df["metric"], metrics_df["value"]))
         
-        # Export XLSX if requested or default location
+        # Export XLSX with all sheets
         xlsx_path = xlsx_out_arg if xlsx_out_arg else report_dir / f"validation_{in_file.stem}.xlsx"
-        export_validation_xlsx(merged, xlsx_path, compare_config=compare_cfg)
+        export_validation_xlsx(
+            merged, 
+            xlsx_path, 
+            compare_config=compare_cfg,
+            metrics_df=metrics_df,
+            mismatches_df=mismatches,
+            # top100_df can be added later if needed
+        )
 
         return {
             "file": in_file.name,
