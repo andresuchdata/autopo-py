@@ -79,7 +79,7 @@ func (h *ValidationHandler) GetReportContent(c *gin.Context) {
 		return
 	}
 
-	// If sheet exists but has no data, return empty array (not 404)
+	// If sheet exists but has no data, return empty CSV/JSON (not 404)
 	if len(rows) == 0 {
 		if c.Query("format") == "csv" {
 			c.Header("Content-Type", "text/csv")
@@ -90,6 +90,22 @@ func (h *ValidationHandler) GetReportContent(c *gin.Context) {
 		return
 	}
 
+	// If only header row exists, return just the header
+	if len(rows) == 1 {
+		if c.Query("format") == "csv" {
+			c.Header("Content-Type", "text/csv")
+			// Write header with semicolon separator
+			for j, cell := range rows[0] {
+				if strings.ContainsAny(cell, ";\"\n") {
+					rows[0][j] = fmt.Sprintf("\"%s\"", strings.ReplaceAll(cell, "\"", "\"\""))
+				}
+			}
+			c.String(http.StatusOK, strings.Join(rows[0], ";"))
+		} else {
+			c.JSON(http.StatusOK, []interface{}{})
+		}
+		return
+	}
 	// Convert to JSON array of objects
 	headers := rows[0]
 	result := make([]map[string]string, 0, len(rows)-1)
@@ -121,17 +137,16 @@ func (h *ValidationHandler) GetReportContent(c *gin.Context) {
 		c.Header("Content-Type", "text/csv")
 		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.csv\"", sheet))
 
-		// Write CSV to response writer
-		// Simple CSV writer
+		// Write CSV to response writer with semicolon separator
 		w := c.Writer
 		for i, row := range rows {
 			// Escape fields if necessary (basic)
 			for j, cell := range row {
-				if strings.ContainsAny(cell, ",\"\n") {
+				if strings.ContainsAny(cell, ";\"\n") {
 					row[j] = fmt.Sprintf("\"%s\"", strings.ReplaceAll(cell, "\"", "\"\""))
 				}
 			}
-			w.WriteString(strings.Join(row, ",") + "\n")
+			w.WriteString(strings.Join(row, ";") + "\n") // Use semicolon separator
 			if i%100 == 0 {
 				w.Flush()
 			}
