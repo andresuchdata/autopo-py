@@ -12,6 +12,7 @@ export function Navigation() {
     { name: 'Stock Health Dashboard', href: '/' },
     { name: 'PO Dashboard', href: '/dashboard/po' },
     { name: 'Stores', href: '/stores' },
+    { name: 'Operations', href: '/operations' },
   ];
 
   return (

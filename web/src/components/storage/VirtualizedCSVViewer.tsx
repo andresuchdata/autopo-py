@@ -21,6 +21,7 @@ interface VirtualizedCSVViewerProps {
   fileKey: string;
   fileName: string;
   onClose: () => void;
+  downloadUrl?: string; // Optional custom download URL
 }
 
 interface CSVRow {
@@ -246,7 +247,7 @@ const FilterList = React.memo(({
 
 FilterList.displayName = "FilterList";
 
-export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: VirtualizedCSVViewerProps) {
+export function VirtualizedCSVViewer({ fileKey, fileName, onClose, downloadUrl }: VirtualizedCSVViewerProps) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -323,7 +324,10 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8080/api/v1';
-      const url = `${apiUrl}/storage/stream_csv?key=${encodeURIComponent(fileKey)}`;
+      // Use provided downloadUrl or fallback to default storage stream
+      const url = downloadUrl
+        ? `${apiUrl}${downloadUrl}`
+        : `${apiUrl}/storage/stream_csv?key=${encodeURIComponent(fileKey)}`;
 
       setIsLoadingChunk(true);
 
@@ -634,7 +638,10 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
 
   const handleDownload = () => {
     const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8080/api/v1';
-    window.open(`${apiUrl}/storage/download?key=${encodeURIComponent(fileKey)}`, '_blank');
+    const url = downloadUrl
+      ? `${apiUrl}${downloadUrl}`
+      : `${apiUrl}/storage/download?key=${encodeURIComponent(fileKey)}`;
+    window.open(url, '_blank');
   };
 
   const virtualColumns = columnVirtualizer.getVirtualItems();

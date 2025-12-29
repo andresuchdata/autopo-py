@@ -22,14 +22,21 @@ FROM alpine:3.18
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies including Python for validation script
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
     postgresql-client \
     bash \
     grep \
-    coreutils
+    coreutils \
+    python3 \
+    py3-pip \
+    py3-numpy \
+    py3-pandas
+
+# Install additional Python packages not available as apk packages
+RUN pip3 install --no-cache-dir openpyxl python-dotenv xlrd --break-system-packages
 
 # Copy the binaries from builder
 COPY --from=builder /app/bin/server /app/server
@@ -47,6 +54,9 @@ COPY data/seeds /app/data/seeds
 
 # Copy scripts
 COPY scripts /app/scripts
+
+# Copy notebook scripts directory for validation script
+COPY ../notebook/scripts /app/notebook/scripts
 
 # Expose port
 EXPOSE 8080

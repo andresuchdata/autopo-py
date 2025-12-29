@@ -228,8 +228,11 @@ func (p *StockHealthPipeline) Validate(inputFile string) error {
 	return nil
 }
 
+// Ensure StockHealthPipeline implements pipeline.Pipeline
+var _ pipeline.Pipeline = (*StockHealthPipeline)(nil)
+
 // Transform processes a single input file and returns transformed rows in a generic format.
-func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) ([]pipeline.TransformedRow, error) {
+func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (results []pipeline.TransformedRow, err error) {
 	// 1) Parse snapshot date from filename
 	snapshotDate, err := p.GetSnapshotDate(inputFile)
 	if err != nil {

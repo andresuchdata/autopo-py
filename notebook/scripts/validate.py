@@ -796,6 +796,7 @@ def _build_top100_comparison_df(
 
     out_sku = _find_col(df_out, ["SKU"])
     out_toko = _find_col(df_out, ["Toko"])
+
     if out_sku is None or out_toko is None:
         return pd.DataFrame([{ "error": "Output missing SKU/Toko" }])
 
@@ -1303,25 +1304,106 @@ def run_validation_for_date(
     return summary_df
 
 
-if __name__ == "__main__":
-    date_str = "20251229"  # YYYYMMDD
 
-    compare_config = {
-        "mode": "loose",
-        "number_locale": "auto",
-        "abs_tol": 1e-6,
-        "rel_tol": 0.0,
-        "treat_blank_as_zero": True,
+def main():
+    import argparse
+    import sys
+    import json
+
+    parser = argparse.ArgumentParser(description="Run stock health validation")
+    parser.add_argument("--date", required=True, help="Date to validate (YYYY-MM-DD)")
+    parser.add_argument("--base-dir", required=False, help="Base directory override")
+    parser.add_argument("--json-out", required=False, help="Path to write JSON metrics")
+    parser.add_argument("--xlsx-out", required=False, help="Path to write XLSX report")
+    parser.add_argument("--workers", type=int, default=5, help="Number of parallel workers (default: 5)")
+
+    args = parser.parse_args()
+
+    # Override BASE_DIR if provided
+    global BASE_DIR
+    if args.base_dir:
+        BASE_DIR = Path(args.base_dir)
+
+    # Resolve paths
+    date_str = pd.to_datetime(args.date).strftime("%Y%m%d")
+    input_files = _list_input_files_for_date(date_str)
+    
+    if not input_files:
+        print(f"No input files found for date {date_str}")
+        sys.exit(1)
+
+    results = []
+    
+    # Create output directory for reports if it doesn't exist
+    report_dir = BASE_DIR / "output" / date_str / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    # Helper function for parallel processing
+    def process_single_file(in_file):
+        out_file = _resolve_output_file(in_file, date_str)
+        if not out_file:
+            return {
+                "file": in_file.name,
+                "status": "missing_output",
+                "metrics": None
+            }
+
+        try:
+            merged, _ = validate_po_fields(in_file, out_file)
+            metrics_df = _build_metrics_df(in_file, out_file)
+            
+            # Convert metrics df to dict
+            metrics = dict(zip(metrics_df["metric"], metrics_df["value"]))
+            
+            # Export XLSX if requested or default location
+            xlsx_path = args.xlsx_out if args.xlsx_out else report_dir / f"validation_{in_file.stem}.xlsx"
+            export_validation_xlsx(merged, xlsx_path)
+
+            return {
+                "file": in_file.name,
+                "status": "success",
+                "output_file": str(out_file),
+                "report_file": str(xlsx_path),
+                "metrics": metrics
+            }
+
+        except Exception as e:
+            return {
+                "file": in_file.name,
+                "status": "error",
+                "error": str(e)
+            }
+
+    # Process files in parallel
+    from multiprocessing import Pool, cpu_count
+    num_workers = min(args.workers, cpu_count())
+    
+    if num_workers > 1 and len(input_files) > 1:
+        print(f"Processing {len(input_files)} files with {num_workers} workers...", file=sys.stderr)
+        with Pool(processes=num_workers) as pool:
+            results = pool.map(process_single_file, input_files)
+    else:
+        print(f"Processing {len(input_files)} files sequentially...", file=sys.stderr)
+        results = [process_single_file(f) for f in input_files]
+
+    # Write JSON output
+    output_data = {
+        "date": args.date,
+        "base_dir": str(BASE_DIR),
+        "results": results,
+        "summary": {
+            "total": len(input_files),
+            "success": len([r for r in results if r["status"] == "success"]),
+            "failed": len([r for r in results if r["status"] == "error"]),
+            "missing": len([r for r in results if r["status"] == "missing_output"])
+        }
     }
 
-    print(f"Running validation for date {date_str}...")
-    summary_df = run_validation_for_date(
-        date_str=date_str,
-        input_base_dir=BASE_DIR / "data/input",
-        output_base_dir=BASE_DIR / "output",
-        output_subdir="complete/csv",
-        output_exts=[".csv"],
-        compare_config=compare_config,
-        export_xlsx_per_store=True,
-    )
-    print("Done.")
+    if args.json_out:
+        with open(args.json_out, "w") as f:
+            json.dump(output_data, f, indent=2)
+    else:
+        print(json.dumps(output_data, indent=2))
+
+if __name__ == "__main__":
+    main()

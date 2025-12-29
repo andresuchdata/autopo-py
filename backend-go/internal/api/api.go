@@ -10,6 +10,7 @@ import (
 	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/storage"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/validation"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -22,6 +23,8 @@ type Services struct {
 	DashboardCache     cache.DashboardCache
 	LegacyDBConfig     config.LegacyDatabaseConfig
 	Storage            storage.ObjectStorage
+	PipelineService    *service.PipelineService
+	ValidationRunner   *validation.Runner
 }
 
 func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
@@ -118,6 +121,29 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 			storageGroup.DELETE("/file", storageHandler.DeleteFile)
 			storageGroup.DELETE("/files/bulk", storageHandler.BulkDeleteFiles)
 			storageGroup.DELETE("/prefix", storageHandler.DeletePrefix)
+		}
+
+		// Pipeline & Validation endpoints
+		if services.PipelineService != nil && services.ValidationRunner != nil {
+			pipelineHandler := handlers.NewPipelineHandler(services.PipelineService, services.ValidationRunner)
+
+			// Pipeline routes
+			pipelineGroup := apiGroup.Group("/pipelines")
+			{
+				pipelineGroup.POST("/:name/run", pipelineHandler.TriggerPipeline)
+			}
+
+			// Validation routes
+			validationHandler := handlers.NewPipelineHandler(nil, services.ValidationRunner) // Reuse pipeline handler for basic run
+			reportHandler := handlers.NewValidationHandler(services.Storage)
+
+			validationGroup := apiGroup.Group("/validation")
+			{
+				validationGroup.POST("/run", validationHandler.TriggerValidation)
+				validationGroup.GET("/results", validationHandler.GetValidationResults)
+				validationGroup.GET("/report-content", reportHandler.GetReportContent)
+				// validationGroup.GET("/results/:date", pipelineHandler.GetValidationResults) // To implement later
+			}
 		}
 	}
 

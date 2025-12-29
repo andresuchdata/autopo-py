@@ -8,16 +8,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/api"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/cache"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/repository/postgres"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/storage"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/validation"
 	"github.com/andresuchdata/autopo-py/backend-go/pkg/logger"
 	_ "github.com/lib/pq"
 )
@@ -80,9 +83,7 @@ func main() {
 	// Initialize storage
 	var storageClient storage.ObjectStorage
 	if cfg.CloudStorage.Enabled {
-		logger.Log.Info().Msg("Cloud storage is enabled, initializing client...")
-
-		storageClient, err = storage.NewNativeS3Client(storage.Config{
+		s3Config := storage.Config{
 			Endpoint:  cfg.CloudStorage.Endpoint,
 			AccessKey: cfg.CloudStorage.AccessKey,
 			SecretKey: cfg.CloudStorage.SecretKey,
@@ -90,20 +91,43 @@ func main() {
 			Region:    cfg.CloudStorage.Region,
 			UseSSL:    cfg.CloudStorage.UseSSL,
 			Prefix:    cfg.CloudStorage.Prefix,
-		})
-		if err != nil {
-			logger.Log.Warn().Err(err).Msg("Failed to initialize cloud storage client")
 		}
+		var s3Err error // Use a new error variable to avoid shadowing the main `err`
+		storageClient, s3Err = storage.NewS3Client(s3Config)
+		if s3Err != nil {
+			logger.Log.Fatal().Err(s3Err).Msg("Failed to initialize cloud storage")
+		}
+		logger.Log.Info().Msg("Cloud storage initialized")
 	}
+
+	// Determine notebook directory
+	notebookDir := os.Getenv("NOTEBOOK_DIR")
+	if notebookDir == "" {
+		// Default assumption: backend-go and notebook are siblings
+		cwd, _ := os.Getwd() // e.g. .../autopo/backend-go
+		notebookDir = filepath.Clean(filepath.Join(cwd, "..", "notebook"))
+	}
+
+	// Initialize pipeline service
+	pipelineConfig := pipeline.DefaultPipelineConfig("default")
+	// TODO: Load pipeline config from centralized application config
+	// Pipeline input directory (e.g. notebook/data/input)
+	pipelineInputDir := filepath.Join(notebookDir, "data", "input")
+	pipelineService := service.NewPipelineService(dbConn.DB.DB, pipelineConfig, pipelineInputDir, storageClient)
+
+	// Initialize validation runner
+	validationRunner := validation.NewRunner(notebookDir, storageClient)
 
 	// Initialize HTTP server
 	router := api.NewRouter(&api.Services{
 		POService:          poService,
 		StockHealthService: stockHealthService,
+		PipelineService:    pipelineService,
+		ValidationRunner:   validationRunner,
+		Storage:            storageClient,
+		LegacyDBConfig:     cfg.LegacyDatabase,
 		StockHealthCache:   stockHealthCache,
 		DashboardCache:     dashboardCache,
-		LegacyDBConfig:     cfg.LegacyDatabase,
-		Storage:            storageClient,
 	}, cfg.Server.AllowedOrigins)
 
 	srv := &http.Server{
