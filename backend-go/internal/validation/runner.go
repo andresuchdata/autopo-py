@@ -248,9 +248,9 @@ func (r *Runner) uploadReports(ctx context.Context, date time.Time, result *Vali
 				return
 			}
 
-			// Target key: validation/YYYY/MM/DD/<filename>
+			// Target key: stock_health/validation/YYYY/MM/DD/<filename>
 			filename := filepath.Base(res.ReportFile)
-			key := fmt.Sprintf("validation/%s/%s", date.Format("2006/01/02"), filename)
+			key := fmt.Sprintf("stock_health/validation/%s/%s", date.Format("2006/01/02"), filename)
 
 			if err := r.storage.UploadObject(ctx, key, data); err != nil {
 				logger.Log.Error().Err(err).Str("key", key).Msg("Failed to upload validation report")
@@ -272,8 +272,8 @@ func (r *Runner) uploadSummary(ctx context.Context, date time.Time, result *Vali
 		return
 	}
 
-	// Upload to cloud storage: validation/YYYY/MM/DD/_summary.json
-	key := fmt.Sprintf("validation/%s/_summary.json", date.Format("2006/01/02"))
+	// Upload to cloud storage: stock_health/validation/YYYY/MM/DD/_summary.json
+	key := fmt.Sprintf("stock_health/validation/%s/_summary.json", date.Format("2006/01/02"))
 	if err := r.storage.UploadObject(ctx, key, summaryData); err != nil {
 		logger.Log.Error().Err(err).Str("key", key).Msg("Failed to upload validation summary")
 	} else {
@@ -288,7 +288,7 @@ func (r *Runner) GetResults(ctx context.Context, date time.Time) (*ValidationRes
 	}
 
 	// Try to fetch summary JSON from cloud storage
-	key := fmt.Sprintf("validation/%s/_summary.json", date.Format("2006/01/02"))
+	key := fmt.Sprintf("stock_health/validation/%s/_summary.json", date.Format("2006/01/02"))
 	logger.Log.Info().Str("key", key).Msg("Fetching validation summary from cloud")
 
 	data, err := r.storage.GetObjectContent(ctx, key)

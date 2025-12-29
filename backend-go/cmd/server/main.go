@@ -128,6 +128,12 @@ func main() {
 		validationRunner.Workers = 5 // Default to 5 workers
 	}
 
+	// Sync top100 SKU files from cloud storage on startup
+	top100LocalDir := filepath.Join(notebookDir, "data", "top_100_sku")
+	if err := validation.SyncTop100FromCloud(context.Background(), storageClient, top100LocalDir); err != nil {
+		logger.Log.Warn().Err(err).Msg("Failed to sync top100 files, continuing without them")
+	}
+
 	// Initialize HTTP server
 	router := api.NewRouter(&api.Services{
 		POService:          poService,

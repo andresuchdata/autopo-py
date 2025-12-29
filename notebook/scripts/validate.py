@@ -1370,6 +1370,14 @@ def _process_single_validation_file(args_tuple):
         # Convert metrics df to dict
         metrics = dict(zip(metrics_df["metric"], metrics_df["value"]))
         
+        # Generate top100 comparison if possible
+        top100_df = None
+        try:
+            top100_df = _build_top100_comparison_df(in_file, out_file, in_file.parent.name, compare_config=compare_cfg)
+        except Exception as e:
+            # Top100 comparison is optional, don't fail if it errors
+            pass  # Silently skip if top100 data not available
+        
         # Export XLSX with all sheets
         xlsx_path = xlsx_out_arg if xlsx_out_arg else report_dir / f"validation_{in_file.stem}.xlsx"
         export_validation_xlsx(
@@ -1378,7 +1386,7 @@ def _process_single_validation_file(args_tuple):
             compare_config=compare_cfg,
             metrics_df=metrics_df,
             mismatches_df=mismatches,
-            # top100_df can be added later if needed
+            top100_df=top100_df,
         )
 
         return {

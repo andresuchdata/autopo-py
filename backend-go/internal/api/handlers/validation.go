@@ -66,8 +66,7 @@ func (h *ValidationHandler) GetReportContent(c *gin.Context) {
 	// Check if sheet exists
 	sheetIndex, err := f.GetSheetIndex(sheet)
 	if err != nil || sheetIndex == -1 {
-		// Fallback: try to finding "Details" or similar if requested one missing
-		// For now just error
+		// Sheet not found - return 404
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("sheet '%s' not found", sheet)})
 		return
 	}
@@ -80,8 +79,14 @@ func (h *ValidationHandler) GetReportContent(c *gin.Context) {
 		return
 	}
 
+	// If sheet exists but has no data, return empty array (not 404)
 	if len(rows) == 0 {
-		c.JSON(http.StatusOK, []interface{}{})
+		if c.Query("format") == "csv" {
+			c.Header("Content-Type", "text/csv")
+			c.String(http.StatusOK, "")
+		} else {
+			c.JSON(http.StatusOK, []interface{}{})
+		}
 		return
 	}
 
