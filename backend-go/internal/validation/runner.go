@@ -19,7 +19,7 @@ type Runner struct {
 	scriptPath string
 	baseIndex  string // Path to the autopo/notebook directory
 	storage    storage.ObjectStorage
-	Workers    int // Number of workers for parallel processing
+	Workers    int // Number of parallel workers
 }
 
 // ValidationResult represents the output from validate.py
@@ -56,14 +56,96 @@ func NewRunner(notebookBaseDir string, storageClient storage.ObjectStorage) *Run
 	}
 }
 
-// Run executes the validation script for a specific date
+// Run executes validation for all stores in parallel using goroutines
 func (r *Runner) Run(ctx context.Context, date time.Time) (*ValidationResult, error) {
+	dateStr := date.Format("2006-01-02")
+	logger.Log.Info().Str("date", dateStr).Msg("Starting validation run")
+
+	// 1. Discover input files
+	files, err := r.discoverInputFiles(date)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover input files: %w", err)
+	}
+
+	if len(files) == 0 {
+		return &ValidationResult{
+			Date:    dateStr,
+			BaseDir: r.baseIndex,
+			Results: []FileResult{},
+			Summary: Summary{Total: 0, Success: 0, Failed: 0, Missing: 0},
+		}, nil
+	}
+
+	// 2. Validate each file in parallel using goroutines
+	results := make([]FileResult, len(files))
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, r.Workers) // Limit concurrency
+
+	for i, file := range files {
+		wg.Add(1)
+		go func(idx int, filename string) {
+			defer wg.Done()
+			semaphore <- struct{}{}        // Acquire
+			defer func() { <-semaphore }() // Release
+
+			results[idx] = r.validateSingleStore(ctx, date, filename)
+		}(i, file)
+	}
+
+	wg.Wait()
+
+	// 3. Aggregate results
+	result := r.aggregateResults(date, results)
+
+	// 4. Upload reports to cloud storage if enabled
+	if r.storage != nil {
+		r.uploadReports(ctx, date, result)
+		r.uploadSummary(ctx, date, result)
+	}
+
+	logger.Log.Info().
+		Int("total", result.Summary.Total).
+		Int("success", result.Summary.Success).
+		Msg("Validation run completed")
+
+	return result, nil
+}
+
+// discoverInputFiles lists all CSV files in the input directory for the given date
+func (r *Runner) discoverInputFiles(date time.Time) ([]string, error) {
+	dateStr := date.Format("20060102") // YYYYMMDD format
+	inputDir := filepath.Join(r.baseIndex, "data", "input", dateStr)
+
+	entries, err := os.ReadDir(inputDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil // No input directory, return empty list
+		}
+		return nil, fmt.Errorf("failed to read input directory: %w", err)
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".csv" {
+			files = append(files, entry.Name())
+		}
+	}
+
+	return files, nil
+}
+
+// validateSingleStore runs validation for a single store file
+func (r *Runner) validateSingleStore(ctx context.Context, date time.Time, storeFile string) FileResult {
 	dateStr := date.Format("2006-01-02")
 
 	// Create a temp file for JSON output
 	tmpFile, err := os.CreateTemp("", "validation_*.json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file: %w", err)
+		return FileResult{
+			File:   storeFile,
+			Status: "error",
+			Error:  fmt.Sprintf("failed to create temp file: %v", err),
+		}
 	}
 	tmpPath := tmpFile.Name()
 	tmpFile.Close()
@@ -74,46 +156,65 @@ func (r *Runner) Run(ctx context.Context, date time.Time) (*ValidationResult, er
 		"--date", dateStr,
 		"--base-dir", r.baseIndex,
 		"--json-out", tmpPath,
-		"--workers", fmt.Sprintf("%d", r.Workers),
+		"--store", storeFile,
 	}
 
-	logger.Log.Info().Str("date", dateStr).Msg("Starting validation run")
-
 	cmd := exec.CommandContext(ctx, "python3", args...)
-
-	// Capture stderr for debug logging
 	cmd.Stderr = os.Stderr
-	// We can choose to capture stdout or ignore it since we use JSON output file
-	// cmd.Stdout = os.Stdout
 
 	if err := cmd.Run(); err != nil {
-		logger.Log.Error().Err(err).Msg("Validation script execution failed")
-		return nil, fmt.Errorf("validation script failed: %w", err)
+		return FileResult{
+			File:   storeFile,
+			Status: "error",
+			Error:  fmt.Sprintf("validation script failed: %v", err),
+		}
 	}
 
 	// Read result
 	data, err := os.ReadFile(tmpPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read validation output: %w", err)
+		return FileResult{
+			File:   storeFile,
+			Status: "error",
+			Error:  fmt.Sprintf("failed to read output: %v", err),
+		}
 	}
 
-	var result ValidationResult
+	var result FileResult
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse validation result: %w", err)
+		return FileResult{
+			File:   storeFile,
+			Status: "error",
+			Error:  fmt.Sprintf("failed to parse output: %v", err),
+		}
 	}
 
-	logger.Log.Info().
-		Int("total", result.Summary.Total).
-		Int("success", result.Summary.Success).
-		Msg("Validation run completed")
+	return result
+}
 
-	// Upload reports to cloud storage if enabled
-	if r.storage != nil {
-		r.uploadReports(ctx, date, &result)
-		r.uploadSummary(ctx, date, &result)
+// aggregateResults combines individual file results into a ValidationResult
+func (r *Runner) aggregateResults(date time.Time, results []FileResult) *ValidationResult {
+	summary := Summary{
+		Total: len(results),
 	}
 
-	return &result, nil
+	for _, res := range results {
+		switch res.Status {
+		case "success":
+			summary.Success++
+		case "error":
+			summary.Failed++
+		case "missing_output":
+			summary.Missing++
+		}
+	}
+
+	return &ValidationResult{
+		Date:    date.Format("2006-01-02"),
+		BaseDir: r.baseIndex,
+		Results: results,
+		Summary: summary,
+	}
 }
 
 func (r *Runner) uploadReports(ctx context.Context, date time.Time, result *ValidationResult) {

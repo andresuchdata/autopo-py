@@ -125,12 +125,14 @@ def _to_number_series(s: pd.Series, compare_config: dict | None = None) -> pd.Se
     s2 = s.astype(str).str.strip()
 
     na_tokens = set([str(t).strip().lower() for t in (cfg.get("na_tokens") or [])])
-    if cfg.get("treat_blank_as_null", True):
-        # Map values present in na_tokens to None
-        s2 = s2.map(lambda v: None if str(v).strip().lower() in na_tokens else v)
-
+    
+    # IMPORTANT: Check treat_blank_as_zero FIRST before converting to None
     if cfg.get("treat_blank_as_zero"):
-        s2 = s2.fillna("0") # fillna handles None from previous step
+        # Replace blank/empty values with "0" string before parsing
+        s2 = s2.map(lambda v: "0" if str(v).strip().lower() in na_tokens else v)
+    elif cfg.get("treat_blank_as_null", True):
+        # Only treat as null if NOT treating as zero
+        s2 = s2.map(lambda v: None if str(v).strip().lower() in na_tokens else v)
 
     locale = cfg.get("number_locale", "auto")
     return s2.map(lambda v: _parse_number_one(v, locale=locale))
@@ -1407,6 +1409,7 @@ def main():
     parser.add_argument("--json-out", required=False, help="Path to write JSON metrics")
     parser.add_argument("--xlsx-out", required=False, help="Path to write XLSX report")
     parser.add_argument("--workers", type=int, default=5, help="Number of parallel workers (default: 5)")
+    parser.add_argument("--store", help="Validate single store file (e.g., '1. Miss Glam Padang.csv')")
 
     args = parser.parse_args()
 
@@ -1417,6 +1420,37 @@ def main():
 
     # Resolve paths
     date_str = pd.to_datetime(args.date).strftime("%Y%m%d")
+    
+    # Single-store mode: validate only one store
+    if args.store:
+        input_file = BASE_DIR / "data/input" / date_str / args.store
+        if not input_file.exists():
+            output_data = {
+                "file": args.store,
+                "status": "error",
+                "error": f"Input file not found: {input_file}"
+            }
+            if args.json_out:
+                with open(args.json_out, "w") as f:
+                    json.dump(output_data, f, indent=2)
+            else:
+                print(json.dumps(output_data, indent=2))
+            return
+        
+        # Process single file
+        report_dir = BASE_DIR / "output" / date_str / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        
+        result = _process_single_validation_file((input_file, report_dir, args.xlsx_out))
+        
+        if args.json_out:
+            with open(args.json_out, "w") as f:
+                json.dump(result, f, indent=2)
+        else:
+            print(json.dumps(result, indent=2))
+        return
+    
+    # Batch mode: validate all stores
     input_files = _list_input_files_for_date(date_str)
     
     if not input_files:
