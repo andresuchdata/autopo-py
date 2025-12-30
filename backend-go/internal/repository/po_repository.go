@@ -18,6 +18,8 @@ type PORepository interface {
 	// Dashboard methods
 	GetDashboardSummary(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error)
 	GetDashboardSummaryV2(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error)
+	// Granular dashboard methods
+	GetDashboardStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error)
 	GetDashboardTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, error)
 	GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error)
 	GetPOTrend(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error)

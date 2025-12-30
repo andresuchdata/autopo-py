@@ -25,4 +25,5 @@ export type GenericFilterConfig<T extends string | number> = {
     width?: string;
     minHeight?: string;
     maxInlineSelected?: number;
+    triggerClassName?: string;
 };

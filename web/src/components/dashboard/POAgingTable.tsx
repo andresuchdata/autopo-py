@@ -10,6 +10,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
 
 interface POAgingTableProps {
     initialItems?: POAgingItem[];
@@ -33,6 +34,14 @@ const formatDate = (value: string | null) => {
 };
 
 export const POAgingTable: React.FC<POAgingTableProps> = ({ initialItems }) => {
+    const {
+        poTypeFilter,
+        releasedDateFilter,
+        storeIdsFilter,
+        brandIdsFilter,
+        supplierIdsFilter
+    } = usePODashboardFilter();
+
     const [items, setItems] = useState<POAgingItem[]>(initialItems ?? []);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
@@ -56,14 +65,23 @@ export const POAgingTable: React.FC<POAgingTableProps> = ({ initialItems }) => {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            // Force type assertion or check if response is array or object
-            const res = await getPOAging({
+            const params: any = {
                 page,
                 pageSize,
                 sortField,
                 sortDirection,
                 status: statusFilter
-            });
+            };
+
+            // Apply global filters
+            if (poTypeFilter !== 'ALL') params.poType = poTypeFilter;
+            if (releasedDateFilter) params.releasedDate = releasedDateFilter;
+            if (storeIdsFilter.length > 0) params.storeIds = storeIdsFilter;
+            if (brandIdsFilter.length > 0) params.brandIds = brandIdsFilter;
+            if (supplierIdsFilter.length > 0) params.supplierIds = supplierIdsFilter;
+
+            // Force type assertion or check if response is array or object
+            const res = await getPOAging(params);
 
             // Handle both legacy array response (if backend fails to switch) and new object response
             if (Array.isArray(res)) {
@@ -80,7 +98,7 @@ export const POAgingTable: React.FC<POAgingTableProps> = ({ initialItems }) => {
         } finally {
             setLoading(false);
         }
-    }, [page, pageSize, sortField, sortDirection, statusFilter]);
+    }, [page, pageSize, sortField, sortDirection, statusFilter, poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter]);
 
     useEffect(() => {
         if (!interactive) {
@@ -110,13 +128,22 @@ export const POAgingTable: React.FC<POAgingTableProps> = ({ initialItems }) => {
         enableInteractive();
         setIsDownloading(true);
         try {
-            const res = await getPOAging({
+            const params: any = {
                 page: 1,
                 pageSize: 10000,
                 sortField,
                 sortDirection,
                 status: statusFilter
-            });
+            };
+
+            // Apply global filters
+            if (poTypeFilter !== 'ALL') params.poType = poTypeFilter;
+            if (releasedDateFilter) params.releasedDate = releasedDateFilter;
+            if (storeIdsFilter.length > 0) params.storeIds = storeIdsFilter;
+            if (brandIdsFilter.length > 0) params.brandIds = brandIdsFilter;
+            if (supplierIdsFilter.length > 0) params.supplierIds = supplierIdsFilter;
+
+            const res = await getPOAging(params);
             let allItems: POAgingItem[] = [];
             if (Array.isArray(res)) {
                 allItems = res as any;

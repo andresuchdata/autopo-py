@@ -233,6 +233,11 @@ func (r *poRepository) getLatestSnapshotTotals(ctx context.Context, filter *doma
 	}, nil
 }
 
+// GetDashboardStatusSummary returns status summaries using the V2 logic (pure status column)
+func (r *poRepository) GetDashboardStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
+	return r.getStatusSummariesByStatusColumnV2(ctx, filter)
+}
+
 func (r *poRepository) GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 

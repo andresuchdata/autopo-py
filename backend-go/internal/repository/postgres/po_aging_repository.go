@@ -62,7 +62,6 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
                 MAX(fs.po_released_at) as po_released_at,
                 MAX(fs.po_sent_at) as po_sent_at,
                 MAX(fs.po_arrived_at) as po_arrived_at,
-                MAX(fs.po_arrived_at) as po_arrived_at,
                 MAX(fs.po_received_at) as po_received_at,
                 NULL::timestamptz as eta
             FROM filtered_snapshots fs
@@ -81,7 +80,6 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
             days_in_status,
             po_released_at,
             po_sent_at,
-            po_arrived_at,
             po_arrived_at,
             po_received_at,
             eta

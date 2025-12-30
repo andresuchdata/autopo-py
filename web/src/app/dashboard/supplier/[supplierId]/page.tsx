@@ -22,13 +22,13 @@ import {
 import {
     Pagination,
     PaginationContent,
-    PaginationEllipsis,
     PaginationItem,
     PaginationLink,
     PaginationNext,
     PaginationPrevious,
 } from "@/components/ui/pagination"
 import { Loader2, ArrowLeft, Search as SearchIcon, Filter as FilterIcon, Store as StoreIcon } from 'lucide-react';
+import { GenericFilter } from '@/components/GenericFilter';
 import { getSupplierDetails, PODetail, poService } from '@/services/api';
 import { useDebounce } from 'use-debounce';
 
@@ -191,8 +191,8 @@ export default function SupplierDetailPage() {
             </div>
 
             {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-lg border bg-card">
-                <div className="relative">
+            <div className="flex flex-col md:flex-row gap-4 p-4 rounded-lg border bg-card items-start md:items-center">
+                <div className="relative flex-1 max-w-sm">
                     <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Search PO number..."
@@ -202,42 +202,39 @@ export default function SupplierDetailPage() {
                     />
                 </div>
 
-                <Select
-                    value={status || "ALL"}
-                    onValueChange={(val) => updateFilters({ status: val === "ALL" ? null : val })}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Filter by Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ALL">All Statuses</SelectItem>
-                        <SelectItem value="Released">Released</SelectItem>
-                        <SelectItem value="Sent">Sent</SelectItem>
-                        <SelectItem value="Approved">Approved</SelectItem>
-                        <SelectItem value="Declined">Declined</SelectItem>
-                        <SelectItem value="Arrived">Arrived</SelectItem>
-                        <SelectItem value="Received">Received</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="w-full md:w-[200px]">
+                    <Select
+                        value={status || "ALL"}
+                        onValueChange={(val) => updateFilters({ status: val === "ALL" ? null : val })}
+                    >
+                        <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Filter by Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="ALL">All Statuses</SelectItem>
+                            <SelectItem value="Released">Released</SelectItem>
+                            <SelectItem value="Sent">Sent</SelectItem>
+                            <SelectItem value="Approved">Approved</SelectItem>
+                            <SelectItem value="Declined">Declined</SelectItem>
+                            <SelectItem value="Arrived">Arrived</SelectItem>
+                            <SelectItem value="Received">Received</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
-                <Select
-                    value={storeId ? String(storeId) : "ALL"}
-                    onValueChange={(val) => updateFilters({ store_id: val === "ALL" ? null : val })}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Filter by Store" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ALL">All Stores</SelectItem>
-                        {stores.map((store) => (
-                            <SelectItem key={store.id} value={String(store.id)}>
-                                {store.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <div className="w-full md:w-[250px]">
+                    <GenericFilter
+                        mode="single"
+                        selected={storeId ? String(storeId) : null}
+                        onChange={(val) => updateFilters({ store_id: val ? Number(val) : null })}
+                        options={stores.map(s => ({ id: String(s.id), label: s.name }))}
+                        placeholder="Filter by Store"
+                        searchable={true}
+                        triggerClassName="h-10 min-h-0"
+                    />
+                </div>
 
-                <div className="flex items-center justify-end">
+                <div className="flex items-center ml-auto">
                     <Button
                         variant="ghost"
                         onClick={() => {
@@ -269,6 +266,7 @@ export default function SupplierDetailPage() {
                             <TableHead className="text-right">Released Date</TableHead>
                             <TableHead className="text-right">Sent Date</TableHead>
                             <TableHead className="text-right">Approved Date</TableHead>
+                            <TableHead className="text-right">Received Date</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -307,6 +305,9 @@ export default function SupplierDetailPage() {
                                     </TableCell>
                                     <TableCell className="text-right text-muted-foreground">
                                         {formatDate(po.po_approved_at)}
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground">
+                                        {formatDate(po.po_received_at)}
                                     </TableCell>
                                 </TableRow>
                             ))

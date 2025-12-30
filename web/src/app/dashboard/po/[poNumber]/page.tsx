@@ -24,6 +24,14 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
 import { format } from 'date-fns';
 
 interface PODetailPageProps {
@@ -62,6 +70,10 @@ export default function PODetailPage() {
     const [isBulkUpdating, setIsBulkUpdating] = useState(false);
     const [isBulkOpen, setIsBulkOpen] = useState(false);
     const [editingItems, setEditingItems] = useState<Record<string, string>>({}); // sku -> eta
+
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     const loadPO = useCallback(async () => {
         setLoading(true);
@@ -158,7 +170,10 @@ export default function PODetailPage() {
 
     const statusColor = getStatusColor(po.status);
     const isEditable = ['Sent', 'Approved'].includes(po.status); // Only editable in Sent or Approved status
-    const items = po.items || [];
+
+    const allItems = po.items || [];
+    const totalPages = Math.ceil(allItems.length / pageSize);
+    const shownItems = allItems.slice((page - 1) * pageSize, page * pageSize);
 
     return (
         <div className="container mx-auto py-8">
@@ -202,7 +217,7 @@ export default function PODetailPage() {
                                 Bulk Apply ETA
                             </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="sm:max-w-[40%]">
                             <DialogHeader>
                                 <DialogTitle>Bulk Apply ETA</DialogTitle>
                                 <DialogDescription>
@@ -266,14 +281,14 @@ export default function PODetailPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {items.length === 0 ? (
+                        {shownItems.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={isEditable ? 7 : 6} className="h-24 text-center text-muted-foreground">
                                     No items found.
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            items.map((item) => (
+                            shownItems.map((item) => (
                                 <TableRow key={item.sku}>
                                     <TableCell className="font-medium">{item.sku}</TableCell>
                                     <TableCell className="truncate max-w-[200px]" title={item.product_name}>{item.product_name}</TableCell>
@@ -309,6 +324,34 @@ export default function PODetailPage() {
                     </TableBody>
                 </Table>
             </div>
+
+            {totalPages > 1 && (
+                <div className="mt-4">
+                    <Pagination>
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious
+                                    onClick={() => setPage(Math.max(1, page - 1))}
+                                    className={page === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                            </PaginationItem>
+
+                            <PaginationItem>
+                                <div className="flex items-center px-4 text-sm font-medium">
+                                    Page {page} of {totalPages}
+                                </div>
+                            </PaginationItem>
+
+                            <PaginationItem>
+                                <PaginationNext
+                                    onClick={() => setPage(Math.min(totalPages, page + 1))}
+                                    className={page === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    </Pagination>
+                </div>
+            )}
         </div>
     );
 }

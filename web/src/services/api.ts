@@ -217,9 +217,63 @@ export const getDashboardSummary = async (params?: DashboardSummaryParams, optio
     }
 };
 
-export const getPOTrend = async (interval: string = 'day') => {
+export const getDashboardTotals = async (params?: DashboardSummaryParams, options?: RequestOptions) => {
     try {
-        const response = await api.get('/po/analytics/trend', { params: { interval } });
+        const query = buildQueryParams({
+            po_type: params?.poType,
+            released_date: params?.releasedDate,
+            store_ids: joinIds(params?.storeIds),
+            brand_ids: joinIds(params?.brandIds),
+            supplier_ids: joinIds(params?.supplierIds),
+        });
+        const response = await api.get('/po/analytics/totals', {
+            params: query,
+            signal: options?.signal,
+        });
+        return response.data;
+    } catch (error) {
+        if (error instanceof Error && (error.name === 'CanceledError' || error.name === 'AbortError')) {
+            throw error;
+        }
+        console.error('Error fetching dashboard totals:', error);
+        throw error;
+    }
+};
+
+export const getDashboardStatusSummary = async (params?: DashboardSummaryParams, options?: RequestOptions) => {
+    try {
+        const query = buildQueryParams({
+            po_type: params?.poType,
+            released_date: params?.releasedDate,
+            store_ids: joinIds(params?.storeIds),
+            brand_ids: joinIds(params?.brandIds),
+            supplier_ids: joinIds(params?.supplierIds),
+        });
+        const response = await api.get('/po/analytics/status-summary', {
+            params: query,
+            signal: options?.signal,
+        });
+        return response.data;
+    } catch (error) {
+        if (error instanceof Error && (error.name === 'CanceledError' || error.name === 'AbortError')) {
+            throw error;
+        }
+        console.error('Error fetching dashboard status summary:', error);
+        throw error;
+    }
+};
+
+export const getDashboardTrend = async (interval: string = 'day', params?: DashboardSummaryParams) => {
+    try {
+        const query = buildQueryParams({
+            interval,
+            po_type: params?.poType,
+            released_date: params?.releasedDate,
+            store_ids: joinIds(params?.storeIds),
+            brand_ids: joinIds(params?.brandIds),
+            supplier_ids: joinIds(params?.supplierIds),
+        });
+        const response = await api.get('/po/analytics/trend', { params: query });
         return response.data;
     } catch (error) {
         console.error('Error fetching PO trend:', error);
@@ -248,7 +302,7 @@ export interface POAgingItemsResponse {
     total_pages: number;
 }
 
-interface POAgingParams {
+interface POAgingParams extends DashboardSummaryParams {
     page?: number;
     pageSize?: number;
     sortField?: string;
@@ -264,6 +318,11 @@ export const getPOAging = async (params?: POAgingParams) => {
             sort_field: params?.sortField,
             sort_direction: params?.sortDirection,
             status: params?.status,
+            po_type: params?.poType,
+            released_date: params?.releasedDate,
+            store_ids: joinIds(params?.storeIds),
+            brand_ids: joinIds(params?.brandIds),
+            supplier_ids: joinIds(params?.supplierIds),
         });
         const response = await api.get('/po/analytics/aging', { params: query });
         return response.data;
@@ -290,7 +349,7 @@ export interface SupplierPerformanceResponse {
     total_pages: number;
 }
 
-interface SupplierPerformanceParams {
+interface SupplierPerformanceParams extends DashboardSummaryParams {
     page?: number;
     pageSize?: number;
     sortField?: string;
@@ -304,6 +363,11 @@ export const getSupplierPerformance = async (params?: SupplierPerformanceParams)
             page_size: params?.pageSize,
             sort_field: params?.sortField,
             sort_direction: params?.sortDirection,
+            po_type: params?.poType,
+            released_date: params?.releasedDate,
+            store_ids: joinIds(params?.storeIds),
+            brand_ids: joinIds(params?.brandIds),
+            supplier_ids: joinIds(params?.supplierIds),
         });
         const response = await api.get('/po/analytics/supplier-performance', { params: query });
         return response.data;

@@ -238,7 +238,7 @@ func (h *POHandler) GetDashboardSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, summary)
 }
 
-// GetStatusSummaryRaw returns PO status summary grouped directly by stored status codes
+// GetStatusSummaryRaw returns PO snapshot summary grouped directly by stored status
 func (h *POHandler) GetStatusSummaryRaw(c *gin.Context) {
 	filter := h.parseDashboardFilter(c)
 	summary, err := h.poService.GetPOSnapshotStatusSummaryRaw(c.Request.Context(), filter)
@@ -247,6 +247,28 @@ func (h *POHandler) GetStatusSummaryRaw(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, summary)
+}
+
+// GetStatusSummary returns status summaries (granular)
+func (h *POHandler) GetStatusSummary(c *gin.Context) {
+	filter := h.parseDashboardFilter(c)
+	summary, err := h.poService.GetDashboardStatusSummary(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch status summary"})
+		return
+	}
+	c.JSON(http.StatusOK, summary)
+}
+
+// GetTotals returns dashboard totals (granular)
+func (h *POHandler) GetTotals(c *gin.Context) {
+	filter := h.parseDashboardFilter(c)
+	totals, err := h.poService.GetDashboardTotals(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch dashboard totals"})
+		return
+	}
+	c.JSON(http.StatusOK, totals)
 }
 
 // GetPOTrend returns the trend data
