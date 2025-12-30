@@ -282,24 +282,24 @@ export default function POStatusPage() {
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col">
             {/* Header */}
-            <div className="flex-none p-6 pb-4 border-b border-border/40 bg-background/95 backdrop-blur z-10 sticky top-0">
+            <div className="flex-none p-4 pb-2 border-b border-border/40 bg-background/95 backdrop-blur z-10 sticky top-0">
                 <div className="max-w-[1600px] mx-auto w-full">
-                    <Button variant="ghost" size="sm" onClick={() => router.back()} className="mb-4 text-muted-foreground hover:text-foreground">
+                    <Button variant="ghost" size="sm" onClick={() => router.back()} className="mb-2 text-muted-foreground hover:text-foreground h-8 px-2 -ml-2">
                         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
                     </Button>
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                         <div>
-                            <h1 className="flex items-center gap-3 text-2xl font-bold tracking-tight">
+                            <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
                                 <div
-                                    className="flex h-5 w-5 rounded-full shadow-md ring-2 ring-offset-2 ring-offset-background"
+                                    className="flex h-4 w-4 rounded-full shadow-md ring-2 ring-offset-2 ring-offset-background"
                                     style={{ backgroundColor: statusColor, boxShadow: `0 0 10px ${statusColor}60` }}
                                 />
                                 {displayStatus ? `PO ${displayStatus}` : 'Purchase Orders'}
-                                <span className="text-sm font-normal text-muted-foreground ml-2 px-2 py-0.5 rounded-full bg-muted border border-border/50">
+                                <span className="text-xs font-normal text-muted-foreground ml-2 px-2 py-0.5 rounded-full bg-muted border border-border/50">
                                     {grandTotals.totalPOS.toLocaleString('id-ID')} Orders
                                 </span>
                             </h1>
-                            <p className="text-base mt-2 text-muted-foreground/80 max-w-2xl">
+                            <p className="text-sm mt-1 text-muted-foreground/80 max-w-2xl">
                                 Detailed breakdown of purchase orders currently in <span className="font-medium text-foreground">{displayStatus}</span> status.
                                 Showing {items.length} items on this page.
                             </p>
@@ -319,34 +319,34 @@ export default function POStatusPage() {
                     </div>
 
                     {/* Stats Cards */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
-                        <div className="p-4 rounded-xl border border-border/40 bg-card/40">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                        <div className="px-4 py-3 rounded-xl border border-border/40 bg-card/40">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Total Value</span>
-                                <DollarSign size={16} className="text-primary/70" />
+                                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Total Value</span>
+                                <DollarSign size={14} className="text-primary/70" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold tracking-tight">{formatCurrency(grandTotals.totalValue)}</div>
+                            <div className="mt-1 text-lg font-bold tracking-tight">{formatCurrency(grandTotals.totalValue)}</div>
                         </div>
-                        <div className="p-4 rounded-xl border border-border/40 bg-card/40">
+                        <div className="px-4 py-3 rounded-xl border border-border/40 bg-card/40">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Total Qty</span>
-                                <Package size={16} className="text-blue-500/70" />
+                                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Total Qty</span>
+                                <Package size={14} className="text-blue-500/70" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold tracking-tight">{grandTotals.totalQty.toLocaleString('id-ID')}</div>
+                            <div className="mt-1 text-lg font-bold tracking-tight">{grandTotals.totalQty.toLocaleString('id-ID')}</div>
                         </div>
-                        <div className="p-4 rounded-xl border border-border/40 bg-card/40">
+                        <div className="px-4 py-3 rounded-xl border border-border/40 bg-card/40">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Total SKUs</span>
-                                <Layers size={16} className="text-purple-500/70" />
+                                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Total SKUs</span>
+                                <Layers size={14} className="text-purple-500/70" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold tracking-tight">{grandTotals.totalSKUs.toLocaleString('id-ID')}</div>
+                            <div className="mt-1 text-lg font-bold tracking-tight">{grandTotals.totalSKUs.toLocaleString('id-ID')}</div>
                         </div>
-                        <div className="p-4 rounded-xl border border-border/40 bg-card/40">
+                        <div className="px-4 py-3 rounded-xl border border-border/40 bg-card/40">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Total POs</span>
-                                <ShoppingCart size={16} className="text-amber-500/70" />
+                                <span className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider">Total POs</span>
+                                <ShoppingCart size={14} className="text-amber-500/70" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold tracking-tight">{grandTotals.totalPOS.toLocaleString('id-ID')}</div>
+                            <div className="mt-1 text-lg font-bold tracking-tight">{grandTotals.totalPOS.toLocaleString('id-ID')}</div>
                         </div>
                     </div>
                 </div>
@@ -354,7 +354,7 @@ export default function POStatusPage() {
 
             {/* Table Section */}
             <div className="flex-1 overflow-auto">
-                <div className="max-w-[1600px] mx-auto w-full p-6">
+                <div className="max-w-[1600px] mx-auto w-full p-4">
                     <div className="rounded-md border bg-card shadow-sm">
                         <Table>
                             <TableHeader>
