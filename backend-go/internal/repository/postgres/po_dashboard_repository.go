@@ -138,8 +138,8 @@ func (r *poRepository) getStatusSummariesByDate(ctx context.Context, filter *dom
 	            COUNT(DISTINCT po_sku_identifier) as sku_count,
 	            COALESCE(SUM(quantity_ordered), 0) as total_qty,
 	            COALESCE(SUM(total_amount), 0) as total_value,
-	            COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400), 0) as avg_days,
-	            COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400)::int, 0) as diff_days
+	            COALESCE(AVG(CURRENT_DATE - status_change_at::date), 0) as avg_days,
+	            COALESCE(MAX(CURRENT_DATE - status_change_at::date), 0) as diff_days
 	        FROM po_values
 	        GROUP BY status_code
 	        ORDER BY status_code

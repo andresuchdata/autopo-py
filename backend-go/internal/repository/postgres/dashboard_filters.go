@@ -94,6 +94,11 @@ func buildDerivedStatusCase(alias string) string {
 	return fmt.Sprintf(`CASE
 			WHEN %[1]sstatus = 2 THEN 2
 			WHEN %[1]sstatus = 9 THEN 9
+			WHEN %[1]sstatus = 5 THEN 5
+			WHEN %[1]sstatus = 4 THEN 4
+			WHEN %[1]sstatus = 3 THEN 3
+			WHEN %[1]sstatus = 1 THEN 1
+			WHEN %[1]sstatus = 0 THEN 0
 	        WHEN %[1]spo_received_at IS NOT NULL THEN 3
 	        WHEN %[1]spo_arrived_at IS NOT NULL THEN 5
 	        WHEN %[1]spo_approved_at IS NOT NULL THEN 1
@@ -116,6 +121,11 @@ func buildDerivedStatusTimestampCase(alias, fallbackColumn string) string {
 
 	return fmt.Sprintf(`CASE
         WHEN %[1]sstatus = 2 THEN %[1]spo_approved_at
+        WHEN %[1]sstatus = 5 THEN %[1]spo_arrived_at
+        WHEN %[1]sstatus = 4 THEN %[1]spo_sent_at
+        WHEN %[1]sstatus = 3 THEN %[1]spo_received_at
+        WHEN %[1]sstatus = 1 THEN %[1]spo_approved_at
+        WHEN %[1]sstatus = 0 THEN %[1]spo_released_at
         WHEN %[1]spo_received_at IS NOT NULL THEN %[1]spo_received_at
         WHEN %[1]spo_arrived_at IS NOT NULL THEN %[1]spo_arrived_at
         WHEN %[1]spo_approved_at IS NOT NULL THEN %[1]spo_approved_at

@@ -52,3 +52,8 @@ app-up:
 
 app-build:
 	@bash -c 'set -a && source .env && set +a && docker compose up -d --build app'
+
+# Run PO snapshot pipeline locally
+seed-po-snapshot:
+	go build -o bin/seed ./cmd/seed
+	@bash -c 'set -a && source .env && set +a && ./bin/seed pipeline-po-snapshots --db-url "$$DATABASE_URL"'
