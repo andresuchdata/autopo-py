@@ -18,6 +18,8 @@ type PORepository interface {
 	// Dashboard methods
 	GetDashboardSummary(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error)
 	GetDashboardSummaryV2(ctx context.Context, filter *domain.DashboardFilter) (*domain.DashboardSummary, error)
+	// Granular dashboard methods
+	GetDashboardStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error)
 	GetDashboardTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, error)
 	GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error)
 	GetPOTrend(ctx context.Context, interval string, filter *domain.DashboardFilter) ([]domain.POTrend, error)
@@ -28,5 +30,7 @@ type PORepository interface {
 	GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string) (*domain.POAgingResponse, error)
 	GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPerformanceResponse, error)
 	UpdatePOItemETA(ctx context.Context, poNumber string, sku *string, eta string) error
+	GetSupplier(ctx context.Context, id int64) (*domain.Supplier, error)
+	GetSupplierPOs(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, search, status string) ([]*domain.PODetail, int, error)
 	GetPODetails(ctx context.Context, poNumber string) (*domain.PODetail, error)
 }

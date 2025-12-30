@@ -18,6 +18,8 @@ import (
 const (
 	dashboardSummaryKeyPrefix          = "dashboard:summary"
 	dashboardStatusSummaryRawPrefix    = "dashboard:status_summary_raw"
+	dashboardStatusSummaryPrefix       = "dashboard:status_summary"
+	dashboardTotalsPrefix              = "dashboard:totals"
 	dashboardTrendKeyPrefix            = "dashboard:trend"
 	dashboardAgingKeyPrefix            = "dashboard:aging"
 	dashboardSupplierPerformancePrefix = "dashboard:supplier_performance"
@@ -36,6 +38,11 @@ type DashboardCache interface {
 	SetAging(ctx context.Context, filter *domain.DashboardFilter, items []domain.POAging) error
 	GetSupplierPerformance(ctx context.Context, filter *domain.DashboardFilter) ([]domain.SupplierPerformance, bool, error)
 	SetSupplierPerformance(ctx context.Context, filter *domain.DashboardFilter, items []domain.SupplierPerformance) error
+	// Granular methods
+	GetStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, bool, error)
+	SetStatusSummary(ctx context.Context, filter *domain.DashboardFilter, summary []domain.POStatusSummary) error
+	GetTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, bool, error)
+	SetTotals(ctx context.Context, filter *domain.DashboardFilter, totals *domain.PODashboardTotals) error
 	InvalidateAll(ctx context.Context) error
 }
 
@@ -225,10 +232,68 @@ func (c *redisDashboardCache) SetSupplierPerformance(ctx context.Context, filter
 	return nil
 }
 
+func (c *redisDashboardCache) GetStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, bool, error) {
+	key := buildStatusSummaryKey(filter)
+	payload, err := c.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("redis get failed: %w", err)
+	}
+	var summary []domain.POStatusSummary
+	if err := json.Unmarshal(payload, &summary); err != nil {
+		return nil, false, fmt.Errorf("decode status summary cache: %w", err)
+	}
+	return summary, true, nil
+}
+
+func (c *redisDashboardCache) SetStatusSummary(ctx context.Context, filter *domain.DashboardFilter, summary []domain.POStatusSummary) error {
+	key := buildStatusSummaryKey(filter)
+	payload, err := json.Marshal(summary)
+	if err != nil {
+		return fmt.Errorf("encode status summary cache: %w", err)
+	}
+	if err := c.client.Set(ctx, key, payload, c.ttl).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
+	return nil
+}
+
+func (c *redisDashboardCache) GetTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, bool, error) {
+	key := buildTotalsKey(filter)
+	payload, err := c.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("redis get failed: %w", err)
+	}
+	var totals domain.PODashboardTotals
+	if err := json.Unmarshal(payload, &totals); err != nil {
+		return nil, false, fmt.Errorf("decode totals cache: %w", err)
+	}
+	return &totals, true, nil
+}
+
+func (c *redisDashboardCache) SetTotals(ctx context.Context, filter *domain.DashboardFilter, totals *domain.PODashboardTotals) error {
+	key := buildTotalsKey(filter)
+	payload, err := json.Marshal(totals)
+	if err != nil {
+		return fmt.Errorf("encode totals cache: %w", err)
+	}
+	if err := c.client.Set(ctx, key, payload, c.ttl).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
+	return nil
+}
+
 func (c *redisDashboardCache) InvalidateAll(ctx context.Context) error {
 	prefixes := []string{
 		dashboardSummaryKeyPrefix,
 		dashboardStatusSummaryRawPrefix,
+		dashboardStatusSummaryPrefix,
+		dashboardTotalsPrefix,
 		dashboardTrendKeyPrefix,
 		dashboardAgingKeyPrefix,
 		dashboardSupplierPerformancePrefix,
@@ -310,12 +375,36 @@ func (n *noopDashboardCache) InvalidateAll(ctx context.Context) error {
 	return nil
 }
 
+func (n *noopDashboardCache) GetStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, bool, error) {
+	return nil, false, nil
+}
+
+func (n *noopDashboardCache) SetStatusSummary(ctx context.Context, filter *domain.DashboardFilter, summary []domain.POStatusSummary) error {
+	return nil
+}
+
+func (n *noopDashboardCache) GetTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, bool, error) {
+	return nil, false, nil
+}
+
+func (n *noopDashboardCache) SetTotals(ctx context.Context, filter *domain.DashboardFilter, totals *domain.PODashboardTotals) error {
+	return nil
+}
+
 func buildDashboardSummaryKey(filter *domain.DashboardFilter) string {
 	return fmt.Sprintf("%s:%s", dashboardSummaryKeyPrefix, buildFilterHash(filter))
 }
 
 func buildStatusSummaryRawKey(filter *domain.DashboardFilter) string {
 	return fmt.Sprintf("%s:%s", dashboardStatusSummaryRawPrefix, buildFilterHash(filter))
+}
+
+func buildStatusSummaryKey(filter *domain.DashboardFilter) string {
+	return fmt.Sprintf("%s:%s", dashboardStatusSummaryPrefix, buildFilterHash(filter))
+}
+
+func buildTotalsKey(filter *domain.DashboardFilter) string {
+	return fmt.Sprintf("%s:%s", dashboardTotalsPrefix, buildFilterHash(filter))
 }
 
 func buildTrendKey(interval string, filter *domain.DashboardFilter) string {

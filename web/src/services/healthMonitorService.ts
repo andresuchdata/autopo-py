@@ -88,7 +88,7 @@ export class HealthMonitorService {
 
     try {
       // Use our API utility for consistent request handling
-      const files = await fetchFromAPI<Array<{name: string}>>(`/api/drive?folderId=${folderId}`);
+      const files = await fetchFromAPI<Array<{ name: string }>>(`/api/drive?folderId=${folderId}`);
       const dates = files
         .map((file) => file.name.replace('.csv', ''))
         .filter((date) => /^\d{8}$/.test(date))

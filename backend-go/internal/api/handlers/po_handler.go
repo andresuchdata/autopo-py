@@ -238,7 +238,7 @@ func (h *POHandler) GetDashboardSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, summary)
 }
 
-// GetStatusSummaryRaw returns PO status summary grouped directly by stored status codes
+// GetStatusSummaryRaw returns PO snapshot summary grouped directly by stored status
 func (h *POHandler) GetStatusSummaryRaw(c *gin.Context) {
 	filter := h.parseDashboardFilter(c)
 	summary, err := h.poService.GetPOSnapshotStatusSummaryRaw(c.Request.Context(), filter)
@@ -247,6 +247,28 @@ func (h *POHandler) GetStatusSummaryRaw(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, summary)
+}
+
+// GetStatusSummary returns status summaries (granular)
+func (h *POHandler) GetStatusSummary(c *gin.Context) {
+	filter := h.parseDashboardFilter(c)
+	summary, err := h.poService.GetDashboardStatusSummary(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch status summary"})
+		return
+	}
+	c.JSON(http.StatusOK, summary)
+}
+
+// GetTotals returns dashboard totals (granular)
+func (h *POHandler) GetTotals(c *gin.Context) {
+	filter := h.parseDashboardFilter(c)
+	totals, err := h.poService.GetDashboardTotals(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch dashboard totals"})
+		return
+	}
+	c.JSON(http.StatusOK, totals)
 }
 
 // GetPOTrend returns the trend data
@@ -415,7 +437,48 @@ func (h *POHandler) GetPODetails(c *gin.Context) {
 
 	details, err := h.poService.GetPODetails(c.Request.Context(), poNumber)
 	if err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			c.JSON(http.StatusOK, nil)
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch po details", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, details)
+}
+
+// GetSupplierDetails returns details for a supplier including their PO list
+func (h *POHandler) GetSupplierDetails(c *gin.Context) {
+	supplierIDStr := c.Param("supplier_id")
+	if supplierIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "supplier_id is required"})
+		return
+	}
+
+	supplierID, err := strconv.ParseInt(supplierIDStr, 10, 64)
+	if err != nil || supplierID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid supplier_id value"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	var storeID *int64
+	if storeIDStr := c.Query("store_id"); storeIDStr != "" {
+		if id, err := strconv.ParseInt(storeIDStr, 10, 64); err == nil {
+			storeID = &id
+		}
+	}
+
+	search := c.Query("search")
+	status := c.Query("status")
+
+	details, err := h.poService.GetSupplierDetails(c.Request.Context(), supplierID, page, pageSize, storeID, search, status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier details", "details": err.Error()})
 		return
 	}
 

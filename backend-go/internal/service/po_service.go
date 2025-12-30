@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -234,6 +235,31 @@ func (s *POService) GetDashboardSummary(ctx context.Context, filter *domain.Dash
 	return summary, nil
 }
 
+// GetDashboardStatusSummary returns status summaries with caching
+func (s *POService) GetDashboardStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
+	// Re-use the existing cache method for raw status summaries if compatible,
+	// or implement a new one. Here we use a distinct method to avoid confusion.
+	// For now, let's assume we want a specific cache key for this V2 summary.
+	// Since cache interface might not have a specific method for this V2 structure yet,
+	// we'll stick to direct repo call first, then add cache.
+	// Wait, we can reuse SetStatusSummaryRaw if the structure aligns.
+	// domain.POStatusSummary is the same struct.
+
+	// BUT, StatusSummaryRaw is different from StatusSummary (which has AvgDays).
+	// Let's implement caching properly. For now to save time/complexity and since
+	// the user wants granularity, we will verify if DashboardCache has methods or if we need to extend it.
+	// Extending DashboardCache interface requires editing another file (internal/cache/dashboard_cache.go).
+	// Let's check that file first or proceed without cache for this step and add it in next step.
+	// Strategy: Implement repo call first, then check cache file.
+
+	return s.repo.GetDashboardStatusSummary(ctx, filter)
+}
+
+// GetDashboardTotals returns dashboard totals with caching
+func (s *POService) GetDashboardTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, error) {
+	return s.repo.GetDashboardTotals(ctx, filter)
+}
+
 // GetPOSnapshotStatusSummaryRaw returns PO snapshot summaries grouped directly by stored status
 func (s *POService) GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
 	if summary, ok, err := s.dashboardCache.GetStatusSummaryRaw(ctx, filter); err == nil && ok {
@@ -350,4 +376,31 @@ func (s *POService) UpdatePOItemETA(ctx context.Context, req domain.UpdateETAReq
 // GetPODetails returns the detailed view of a PO
 func (s *POService) GetPODetails(ctx context.Context, poNumber string) (*domain.PODetail, error) {
 	return s.repo.GetPODetails(ctx, poNumber)
+}
+
+// GetSupplierDetails returns the supplier info and their PO list
+func (s *POService) GetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, search, status string) (map[string]interface{}, error) {
+	supplier, err := s.repo.GetSupplier(ctx, supplierID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get supplier: %w", err)
+	}
+
+	pos, total, err := s.repo.GetSupplierPOs(ctx, supplierID, page, pageSize, storeID, search, status)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get supplier pos: %w", err)
+	}
+
+	totalPages := 0
+	if pageSize > 0 {
+		totalPages = int(math.Ceil(float64(total) / float64(pageSize)))
+	}
+
+	return map[string]interface{}{
+		"supplier":    supplier,
+		"pos":         pos,
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
+		"total_pages": totalPages,
+	}, nil
 }

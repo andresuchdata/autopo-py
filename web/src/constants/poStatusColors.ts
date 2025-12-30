@@ -29,10 +29,14 @@ export const PO_STATUS_NAMES: Record<number, string> = {
 };
 
 /**
- * Get color for a PO status by name
+ * Get color for a PO status by name (case-insensitive)
  */
 export const getStatusColor = (status: string): string => {
-    return PO_STATUS_COLORS[status] || '#6B7280'; // Default to gray if not found
+    if (!status) return '#6B7280';
+
+    // Normalize status: first letter uppercase, rest lowercase to match keys
+    const normalized = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+    return PO_STATUS_COLORS[normalized] || '#6B7280'; // Default to gray if not found
 };
 
 /**

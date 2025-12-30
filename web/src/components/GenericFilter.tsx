@@ -37,6 +37,7 @@ export function GenericFilter<T extends string | number>({
     width = "w-[280px]",
     minHeight,
     maxInlineSelected = 2,
+    triggerClassName,
 }: GenericFilterConfig<T>) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -250,7 +251,7 @@ export function GenericFilter<T extends string | number>({
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-auto min-h-12 py-2 px-3 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm">
+                <Button variant="outline" role="combobox" aria-expanded={open} className={cn("w-full justify-between font-normal h-auto min-h-12 py-2 px-3 bg-background border-border hover:bg-muted/50 transition-colors rounded-lg shadow-sm disconnect-min-h", triggerClassName)}>
                     {renderTriggerContent()}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>

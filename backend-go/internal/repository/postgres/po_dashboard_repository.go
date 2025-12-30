@@ -233,6 +233,11 @@ func (r *poRepository) getLatestSnapshotTotals(ctx context.Context, filter *doma
 	}, nil
 }
 
+// GetDashboardStatusSummary returns status summaries using the V2 logic (pure status column)
+func (r *poRepository) GetDashboardStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
+	return r.getStatusSummariesByStatusColumnV2(ctx, filter)
+}
+
 func (r *poRepository) GetPOSnapshotStatusSummaryRaw(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
@@ -817,6 +822,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT
 				s.po_number,
 				COALESCE(b.name, '') as brand_name,
+				COALESCE(s.supplier_id, 0) as supplier_id,
 				COALESCE(sup.name, '') as supplier_name,
 				s.sku,
 				s.product_name,
@@ -830,7 +836,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
 				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
 				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
-				NULL as eta
+				TO_CHAR(s.eta, 'YYYY-MM-DD') as eta
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 			LEFT JOIN brands b ON s.brand_id = b.id
@@ -858,6 +864,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT
 				s.po_number,
 				COALESCE(b.name, '') as brand_name,
+				COALESCE(s.supplier_id, 0) as supplier_id,
 				COALESCE(sup.name, '') as supplier_name,
 				s.sku,
 				s.product_name,
@@ -871,7 +878,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
 				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
 				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
-				NULL as eta
+				TO_CHAR(s.eta, 'YYYY-MM-DD') as eta
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 			LEFT JOIN brands b ON s.brand_id = b.id

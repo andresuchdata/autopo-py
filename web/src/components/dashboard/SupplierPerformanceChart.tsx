@@ -13,6 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
 
 interface SupplierPerformanceChartProps {
     initialItems?: SupplierPerformance[];
@@ -51,6 +52,14 @@ const CustomYAxisTick = (props: any) => {
 };
 
 export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> = ({ initialItems }) => {
+    const {
+        poTypeFilter,
+        releasedDateFilter,
+        storeIdsFilter,
+        brandIdsFilter,
+        supplierIdsFilter
+    } = usePODashboardFilter();
+
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedSupplier, setSelectedSupplier] = useState<{ id: number; name: string; avgLeadTime: number } | null>(null);
     const [isDownloading, setIsDownloading] = useState(false);
@@ -75,12 +84,21 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await getSupplierPerformance({
+            const params: any = {
                 page,
                 pageSize,
                 sortField: 'avg_lead_time',
                 sortDirection,
-            });
+            };
+
+            // Apply global filters
+            if (poTypeFilter !== 'ALL') params.poType = poTypeFilter;
+            if (releasedDateFilter) params.releasedDate = releasedDateFilter;
+            if (storeIdsFilter.length > 0) params.storeIds = storeIdsFilter;
+            if (brandIdsFilter.length > 0) params.brandIds = brandIdsFilter;
+            if (supplierIdsFilter.length > 0) params.supplierIds = supplierIdsFilter;
+
+            const res = await getSupplierPerformance(params);
 
             if (res && 'items' in res) {
                 const response = res as SupplierPerformanceResponse;
@@ -97,7 +115,7 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
         } finally {
             setLoading(false);
         }
-    }, [page, pageSize, sortDirection]);
+    }, [page, pageSize, sortDirection, poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter]);
 
     useEffect(() => {
         if (!interactive) {
@@ -117,12 +135,22 @@ export const SupplierPerformanceChart: React.FC<SupplierPerformanceChartProps> =
         enableInteractive();
         setIsDownloading(true);
         try {
-            const res = await getSupplierPerformance({
+            const params: any = {
                 page: 1,
                 pageSize: 10000,
                 sortField: 'avg_lead_time',
                 sortDirection,
-            });
+            };
+
+            // Apply global filters
+            if (poTypeFilter !== 'ALL') params.poType = poTypeFilter;
+            if (releasedDateFilter) params.releasedDate = releasedDateFilter;
+            if (storeIdsFilter.length > 0) params.storeIds = storeIdsFilter;
+            if (brandIdsFilter.length > 0) params.brandIds = brandIdsFilter;
+            if (supplierIdsFilter.length > 0) params.supplierIds = supplierIdsFilter;
+
+            const res = await getSupplierPerformance(params);
+
             let allItems: SupplierPerformance[] = [];
             if (res && 'items' in res) {
                 const response = res as SupplierPerformanceResponse;
