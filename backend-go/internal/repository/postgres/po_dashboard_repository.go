@@ -439,8 +439,8 @@ func (r *poRepository) getStatusSummariesByStatusColumnV2(ctx context.Context, f
         age_stats AS (
             SELECT 
                 status_code,
-                AVG(EXTRACT(EPOCH FROM (NOW() AT TIME ZONE 'UTC' - status_change_at))/86400) AS avg_days,
-                MAX(EXTRACT(EPOCH FROM (NOW() AT TIME ZONE 'UTC' - status_change_at))/86400)::int AS diff_days
+                AVG(CURRENT_DATE - status_change_at::date) AS avg_days,
+                MAX(CURRENT_DATE - status_change_at::date) AS diff_days
             FROM po_values
             WHERE status_code IN (0,1,2,3,4,5,9)
             GROUP BY status_code
