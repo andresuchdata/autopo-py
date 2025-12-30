@@ -88,6 +88,10 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 					dashboardGroup.GET("/items", poHandler.GetPOSnapshotItems)
 					dashboardGroup.GET("/supplier_items", poHandler.GetSupplierPOItems)
 				}
+
+				// Detail and Action routes
+				poGroup.GET("/:po_number", poHandler.GetPODetails)
+				poGroup.POST("/eta", poHandler.UpdatePOItemETA)
 			}
 		}
 

@@ -1304,7 +1304,7 @@ def run_validation_for_date(
 
 
 if __name__ == "__main__":
-    date_str = "20251229"  # YYYYMMDD
+    date_str = "20251230"  # YYYYMMDD
 
     compare_config = {
         "mode": "loose",

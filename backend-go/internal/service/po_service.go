@@ -341,3 +341,13 @@ func (s *POService) GetSupplierPOItems(ctx context.Context, supplierID int64, pa
 func (s *POService) GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPerformanceResponse, error) {
 	return s.repo.GetSupplierPerformanceItems(ctx, page, pageSize, sortField, sortDirection)
 }
+
+// UpdatePOItemETA updates the ETA for a PO item
+func (s *POService) UpdatePOItemETA(ctx context.Context, req domain.UpdateETARequest) error {
+	return s.repo.UpdatePOItemETA(ctx, req.PONumber, req.SKU, req.ETA)
+}
+
+// GetPODetails returns the detailed view of a PO
+func (s *POService) GetPODetails(ctx context.Context, poNumber string) (*domain.PODetail, error) {
+	return s.repo.GetPODetails(ctx, poNumber)
+}

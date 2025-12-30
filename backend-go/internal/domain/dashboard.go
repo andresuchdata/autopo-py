@@ -30,6 +30,7 @@ type SupplierPOItem struct {
 	POApprovedAt *string `json:"po_approved_at" db:"po_approved_at"`
 	POArrivedAt  *string `json:"po_arrived_at" db:"po_arrived_at"`
 	POReceivedAt *string `json:"po_received_at" db:"po_received_at"`
+	ETA          *string `json:"eta" db:"eta"`
 	SnapshotTime *string `json:"snapshot_time" db:"snapshot_time"`
 }
 
@@ -69,6 +70,7 @@ type POAging struct {
 	POSentAt     *string `json:"po_sent_at" db:"po_sent_at"`
 	POArrivedAt  *string `json:"po_arrived_at" db:"po_arrived_at"`
 	POReceivedAt *string `json:"po_received_at" db:"po_received_at"`
+	ETA          *string `json:"eta" db:"eta"`
 }
 
 // POAgingResponse represents paginated aging items
@@ -144,6 +146,7 @@ type POSnapshotItem struct {
 	POApprovedAt *string `json:"po_approved_at" db:"po_approved_at"`
 	POArrivedAt  *string `json:"po_arrived_at" db:"po_arrived_at"`
 	POReceivedAt *string `json:"po_received_at" db:"po_received_at"`
+	ETA          *string `json:"eta" db:"eta"`
 	SnapshotTime *string `json:"snapshot_time" db:"snapshot_time"`
 }
 

@@ -139,6 +139,7 @@ export interface SupplierPOItem {
     po_approved_at: string | null;
     po_arrived_at: string | null;
     po_received_at: string | null;
+    eta: string | null;
 }
 
 export interface SupplierPOItemsResponse {
@@ -329,6 +330,7 @@ export interface POSnapshotItem {
     po_approved_at: string | null;
     po_arrived_at: string | null;
     po_received_at: string | null;
+    eta: string | null;
 }
 
 export interface POSnapshotItemsResponse {
@@ -483,4 +485,42 @@ export const storageService = {
         });
         return response.data;
     },
+};
+
+export const updatePOETA = async (poNumber: string, eta: string, sku?: string) => {
+    try {
+        const response = await api.post('/po/eta', { po_number: poNumber, eta, sku });
+        return response.data;
+    } catch (error) {
+        console.error('Error updating PO ETA:', error);
+        throw error;
+    }
+};
+
+export interface PODetail {
+    po_number: string;
+    supplier_id: number;
+    supplier_name: string;
+    store_name: string;
+    brand_name: string;
+    status: string;
+    po_qty: number;
+    received_qty: number;
+    total_amount: number;
+    po_released_at: string | null;
+    po_sent_at: string | null;
+    po_approved_at: string | null;
+    po_arrived_at: string | null;
+    po_received_at: string | null;
+    items: POSnapshotItem[];
+}
+
+export const getPODetails = async (poNumber: string) => {
+    try {
+        const response = await api.get(`/po/${poNumber}`);
+        return response.data as PODetail;
+    } catch (error) {
+        console.error(`Error fetching PO details for ${poNumber}:`, error);
+        throw error;
+    }
 };

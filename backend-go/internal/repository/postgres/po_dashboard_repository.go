@@ -406,33 +406,56 @@ func (r *poRepository) getStatusSummariesByStatusColumnV2(ctx context.Context, f
             SELECT
                 fs.po_number,
                 fs.sku,
+                CONCAT(fs.po_number, '::', fs.sku) AS po_sku_identifier,
                 COALESCE(fs.status, -1) AS status_code,
                 COALESCE(fs.quantity_ordered, 0) AS quantity_ordered,
                 COALESCE(fs.total_amount, 0) AS total_amount,
-                CASE 
-                    WHEN COALESCE(fs.status, -1) = 0 THEN fs.po_released_at
-                    WHEN COALESCE(fs.status, -1) = 1 THEN fs.po_approved_at
-                    WHEN COALESCE(fs.status, -1) = 2 THEN fs.po_approved_at
-                    WHEN COALESCE(fs.status, -1) = 3 THEN fs.po_received_at
-                    WHEN COALESCE(fs.status, -1) = 4 THEN fs.po_sent_at
-                    WHEN COALESCE(fs.status, -1) = 5 THEN fs.po_arrived_at
-                    ELSE fs.time
-                END AS status_change_at
+                COALESCE(
+                    CASE 
+                        WHEN COALESCE(fs.status, -1) = 0 THEN fs.po_released_at
+                        WHEN COALESCE(fs.status, -1) = 1 THEN fs.po_approved_at
+                        WHEN COALESCE(fs.status, -1) = 2 THEN fs.po_approved_at
+                        WHEN COALESCE(fs.status, -1) = 3 THEN fs.po_received_at
+                        WHEN COALESCE(fs.status, -1) = 4 THEN fs.po_sent_at
+                        WHEN COALESCE(fs.status, -1) = 5 THEN fs.po_arrived_at
+                        ELSE NULL
+                    END,
+                    fs.time
+                ) AS status_change_at
             FROM filtered_snapshots fs
             JOIN latest_snapshot ls ON fs.po_number = ls.po_number AND fs.sku = ls.sku AND fs.time = ls.latest_time
+        ),
+        status_totals AS (
+            SELECT 
+                status_code,
+                COUNT(DISTINCT po_number) as po_count,
+                COUNT(DISTINCT po_sku_identifier) as sku_count,
+                COALESCE(SUM(quantity_ordered), 0) as total_qty,
+                COALESCE(SUM(total_amount), 0) as total_value
+            FROM po_values
+            WHERE status_code IN (0,1,2,3,4,5,9)
+            GROUP BY status_code
+        ),
+        age_stats AS (
+            SELECT 
+                status_code,
+                AVG(EXTRACT(EPOCH FROM (NOW() AT TIME ZONE 'UTC' - status_change_at))/86400) AS avg_days,
+                MAX(EXTRACT(EPOCH FROM (NOW() AT TIME ZONE 'UTC' - status_change_at))/86400)::int AS diff_days
+            FROM po_values
+            WHERE status_code IN (0,1,2,3,4,5,9)
+            GROUP BY status_code
         )
         SELECT 
-            status_code,
-            COUNT(DISTINCT po_number) as po_count,
-            COUNT(DISTINCT sku) as sku_count,
-            COALESCE(SUM(quantity_ordered), 0) as total_qty,
-            COALESCE(SUM(total_amount), 0) as total_value,
-            COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400), 0) as avg_days,
-            COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - status_change_at))/86400)::int, 0) as diff_days
-        FROM po_values
-        WHERE status_code IN (0,1,2,3,4,5,9)
-        GROUP BY status_code
-        ORDER BY status_code
+            st.status_code,
+            st.po_count,
+            st.sku_count,
+            st.total_qty,
+            st.total_value,
+            COALESCE(age.avg_days, 0) as avg_days,
+            COALESCE(age.diff_days, 0) as diff_days
+        FROM status_totals st
+        LEFT JOIN age_stats age ON age.status_code = st.status_code
+        ORDER BY st.status_code
     `, filterClause)
 
 	if filterClause != "" {
@@ -806,7 +829,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
 				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
 				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
-				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time
+				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
+				NULL as eta
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 			LEFT JOIN brands b ON s.brand_id = b.id
@@ -846,7 +870,8 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
 				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
 				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
-				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time
+				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
+				NULL as eta
 			FROM po_snapshots s
 			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 			LEFT JOIN brands b ON s.brand_id = b.id

@@ -130,8 +130,12 @@ export const POStatusCard: React.FC<POStatusCardProps> = ({
                     <div className="flex items-center gap-1">
                         <span className="text-sm font-bold">
                             {(() => {
-                                const rounded = Number(avgDays.toFixed(0));
-                                return Object.is(rounded, -0) ? 0 : rounded;
+                                if (!Number.isFinite(avgDays)) {
+                                    return '0.00';
+                                }
+                                const rounded = Number(avgDays.toFixed(2));
+                                const normalized = Object.is(rounded, -0) ? 0 : rounded;
+                                return normalized.toFixed(2);
                             })()}
                         </span>
                     </div>

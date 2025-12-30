@@ -652,12 +652,13 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                     <SortableHead field="po_approved_at" label="Approved" align="right" className="text-right font-semibold text-foreground/80" />
                                     <SortableHead field="po_arrived_at" label="Arrived" align="right" className="text-right font-semibold text-foreground/80" />
                                     <SortableHead field="po_received_at" label="Received" align="right" className="text-right font-semibold text-foreground/80" />
+                                    <TableHead className="text-right font-semibold text-foreground/80">ETA</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {!status && (
                                     <TableRow>
-                                        <TableCell colSpan={13} className="h-48 text-center text-muted-foreground">
+                                        <TableCell colSpan={14} className="h-48 text-center text-muted-foreground">
                                             Select a status card to view details.
                                         </TableCell>
                                     </TableRow>
@@ -699,7 +700,11 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                             <TableCell className="text-xs text-muted-foreground">
                                                 {formatDate(item.snapshot_time)}
                                             </TableCell>
-                                            <TableCell className="font-mono text-xs font-medium text-foreground/90">{item.po_number}</TableCell>
+                                            <TableCell className="font-mono text-xs font-medium text-foreground/90">
+                                                <a href={`/dashboard/po/${encodeURIComponent(item.po_number)}`} className="hover:underline text-primary" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                                                    {item.po_number}
+                                                </a>
+                                            </TableCell>
                                             <TableCell className="font-mono text-xs text-muted-foreground group-hover:text-foreground/90">{item.sku}</TableCell>
                                             <TableCell>
                                                 <div className="max-w-[250px] truncate font-medium text-sm text-foreground/90" title={item.product_name}>
@@ -722,6 +727,7 @@ export function POSnapshotDialog({ status, open, onOpenChange, summaryDefaults }
                                             <TableCell className="text-right text-xs text-muted-foreground">{formatDate(item.po_approved_at)}</TableCell>
                                             <TableCell className="text-right text-xs text-muted-foreground">{formatDate(item.po_arrived_at)}</TableCell>
                                             <TableCell className="text-right text-xs text-muted-foreground">{formatDate(item.po_received_at)}</TableCell>
+                                            <TableCell className="text-right text-xs text-muted-foreground font-medium text-blue-600">{formatDate(item.eta)}</TableCell>
                                         </TableRow>
                                     ))}
                             </TableBody>

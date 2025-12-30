@@ -379,3 +379,45 @@ func (h *POHandler) GetSupplierPOItems(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+// UpdatePOItemETA updates the ETA for a PO item
+func (h *POHandler) UpdatePOItemETA(c *gin.Context) {
+	var req domain.UpdateETARequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if req.PONumber == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "po_number is required"})
+		return
+	}
+	if req.ETA == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "eta is required"})
+		return
+	}
+
+	if err := h.poService.UpdatePOItemETA(c.Request.Context(), req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update eta", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "eta updated successfully"})
+}
+
+// GetPODetails returns the detailed view of a PO
+func (h *POHandler) GetPODetails(c *gin.Context) {
+	poNumber := c.Param("po_number")
+	if poNumber == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "po_number is required"})
+		return
+	}
+
+	details, err := h.poService.GetPODetails(c.Request.Context(), poNumber)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch po details", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, details)
+}

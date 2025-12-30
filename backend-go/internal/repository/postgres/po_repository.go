@@ -1,4 +1,3 @@
-// backend-go/internal/repository/postgres/po_repository.go
 package postgres
 
 import (
@@ -247,4 +246,126 @@ func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset
 	}
 
 	return products, nil
+}
+
+// UpdatePOItemETA updates the ETA for a specific item (SKU) or all items in a PO
+func (r *poRepository) UpdatePOItemETA(ctx context.Context, poNumber string, sku *string, eta string) error {
+	var query string
+	var args []interface{}
+
+	if sku != nil && *sku != "" {
+		// Update specific SKU
+		query = `
+			UPDATE purchase_order_items poi
+			SET eta = $1, updated_at = NOW()
+			FROM purchase_orders po
+			WHERE poi.po_id = po.id AND po.po_number = $2 AND poi.sku = $3
+		`
+		args = []interface{}{eta, poNumber, *sku}
+	} else {
+		// Update all items in PO
+		query = `
+			UPDATE purchase_order_items poi
+			SET eta = $1, updated_at = NOW()
+			FROM purchase_orders po
+			WHERE poi.po_id = po.id AND po.po_number = $2
+		`
+		args = []interface{}{eta, poNumber}
+	}
+
+	result, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update eta: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("no items updated, po not found or sku mismatch")
+	}
+
+	return nil
+}
+
+// GetPODetails retrieves detailed information for a PO including its items
+func (r *poRepository) GetPODetails(ctx context.Context, poNumber string) (*domain.PODetail, error) {
+	// 1. Get PO Header info
+	queryHeader := `
+		SELECT 
+			po.po_number,
+			po.supplier_id,
+			COALESCE(s.name, '') as supplier_name,
+			COALESCE(st.name, '') as store_name,
+			COALESCE(b.name, '') as brand_name,
+			po.status as status_code,
+			TO_CHAR(po.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
+			TO_CHAR(po.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
+			TO_CHAR(po.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
+			TO_CHAR(po.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
+			TO_CHAR(po.po_received_at, 'YYYY-MM-DD HH24:MI:SS') as po_received_at
+		FROM purchase_orders po
+		LEFT JOIN suppliers s ON po.supplier_id = s.id
+		LEFT JOIN stores st ON po.store_id = st.id
+		LEFT JOIN brands b ON po.brand_id = b.id
+		WHERE po.po_number = $1
+	`
+
+	var header domain.PODetail
+	if err := r.db.GetContext(ctx, &header, queryHeader, poNumber); err != nil {
+		return nil, fmt.Errorf("failed to get po details: %w", err)
+	}
+
+	header.Status = domain.POStatusLabel(header.StatusCode)
+
+	// 2. Get Items
+	queryItems := `
+		SELECT 
+			po.po_number,
+			COALESCE(b.name, '') as brand_name,
+			COALESCE(s.name, '') as supplier_name,
+			poi.sku,
+			poi.product_name,
+			COALESCE(st.name, '') as store_name,
+			poi.price as unit_price,
+			poi.amount as total_amount,
+			poi.quantity as po_qty,
+			poi.received_quantity as received_qty,
+			TO_CHAR(poi.eta, 'YYYY-MM-DD') as eta
+		FROM purchase_orders po
+		JOIN purchase_order_items poi ON po.id = poi.po_id
+		LEFT JOIN brands b ON po.brand_id = b.id
+		LEFT JOIN suppliers s ON po.supplier_id = s.id
+		LEFT JOIN stores st ON po.store_id = st.id
+		WHERE po.po_number = $1
+		ORDER BY poi.sku
+	`
+
+	var items []domain.POSnapshotItem
+	// We map the result to POSnapshotItem but some fields will be empty/default since we don't query them (like timestamps from items, we use PO level or item level specific)
+	// Actually POSnapshotItem struct is convenient here.
+	if err := sqlx.SelectContext(ctx, r.db, &items, queryItems, poNumber); err != nil {
+		return nil, fmt.Errorf("failed to get po items: %w", err)
+	}
+
+	// Calculate totals for header
+	var totalQty int
+	var receivedQty int
+	var totalAmount float64
+
+	for i := range items {
+		totalQty += items[i].POQty
+		if items[i].ReceivedQty != nil {
+			receivedQty += *items[i].ReceivedQty
+		}
+		totalAmount += items[i].TotalAmount
+	}
+
+	header.Items = items
+	header.POQty = totalQty
+	header.ReceivedQty = receivedQty
+	header.TotalAmount = totalAmount
+
+	return &header, nil
 }
