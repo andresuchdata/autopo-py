@@ -421,3 +421,26 @@ func (h *POHandler) GetPODetails(c *gin.Context) {
 
 	c.JSON(http.StatusOK, details)
 }
+
+// GetSupplierDetails returns details for a supplier including their PO list
+func (h *POHandler) GetSupplierDetails(c *gin.Context) {
+	supplierIDStr := c.Param("supplier_id")
+	if supplierIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "supplier_id is required"})
+		return
+	}
+
+	supplierID, err := strconv.ParseInt(supplierIDStr, 10, 64)
+	if err != nil || supplierID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid supplier_id value"})
+		return
+	}
+
+	details, err := h.poService.GetSupplierDetails(c.Request.Context(), supplierID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier details", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, details)
+}

@@ -524,3 +524,24 @@ export const getPODetails = async (poNumber: string) => {
         throw error;
     }
 };
+
+export interface SupplierDetailResponse {
+    supplier: {
+        id: number;
+        name: string;
+        created_at: string;
+        updated_at: string;
+    };
+    pos: PODetail[];
+}
+
+export const getSupplierDetails = async (supplierId: number) => {
+    try {
+        const response = await api.get(`/po/suppliers/${supplierId}`);
+        return response.data as SupplierDetailResponse;
+    } catch (error) {
+        console.error(`Error fetching supplier details for ${supplierId}:`, error);
+        throw error;
+    }
+};
+

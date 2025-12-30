@@ -351,3 +351,21 @@ func (s *POService) UpdatePOItemETA(ctx context.Context, req domain.UpdateETAReq
 func (s *POService) GetPODetails(ctx context.Context, poNumber string) (*domain.PODetail, error) {
 	return s.repo.GetPODetails(ctx, poNumber)
 }
+
+// GetSupplierDetails returns the supplier info and their PO list
+func (s *POService) GetSupplierDetails(ctx context.Context, supplierID int64) (map[string]interface{}, error) {
+	supplier, err := s.repo.GetSupplier(ctx, supplierID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get supplier: %w", err)
+	}
+
+	pos, err := s.repo.GetSupplierPOs(ctx, supplierID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get supplier pos: %w", err)
+	}
+
+	return map[string]interface{}{
+		"supplier": supplier,
+		"pos":      pos,
+	}, nil
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
     Table,
@@ -12,14 +12,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Loader2, ArrowLeft } from 'lucide-react';
-import { getSupplierPOItems, SupplierPOItem } from '@/services/api';
-import { format } from 'date-fns';
-
-interface SupplierDetailPageProps {
-    params: {
-        supplierId: string;
-    };
-}
+import { getSupplierDetails, PODetail } from '@/services/api';
 
 const formatDate = (value: string | null) => {
     if (!value) return '-';
@@ -32,37 +25,47 @@ const formatDate = (value: string | null) => {
     });
 };
 
-export default function SupplierDetailPage({ params }: SupplierDetailPageProps) {
-    const { supplierId } = params;
+const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+    }).format(amount);
+};
+
+export default function SupplierDetailPage() {
+    const params = useParams();
+    const supplierId = params.supplierId as string;
     const router = useRouter();
-    const [items, setItems] = useState<SupplierPOItem[]>([]);
-    const [supplierName, setSupplierName] = useState<string>('');
+
+    const [pos, setPos] = useState<PODetail[]>([]);
+    const [supplier, setSupplier] = useState<{ id: number; name: string } | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const loadItems = useCallback(async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             const id = parseInt(supplierId, 10);
             if (isNaN(id)) {
                 throw new Error('Invalid supplier ID');
             }
-            const data = await getSupplierPOItems({ supplierId: id, pageSize: 100 });
-            setItems(data.items);
-            if (data.items.length > 0) {
-                setSupplierName(data.items[0].supplier_name);
-            }
+            const data = await getSupplierDetails(id);
+            setSupplier(data.supplier);
+            setPos(data.pos);
             setError(null);
         } catch (err: any) {
-            setError(err.message || 'Failed to load supplier items');
+            console.error(err);
+            setError(err.message || 'Failed to load supplier details');
         } finally {
             setLoading(false);
         }
     }, [supplierId]);
 
     useEffect(() => {
-        loadItems();
-    }, [loadItems]);
+        loadData();
+    }, [loadData]);
 
     if (loading) {
         return (
@@ -90,8 +93,8 @@ export default function SupplierDetailPage({ params }: SupplierDetailPageProps) 
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div>
-                    <h1 className="text-2xl font-bold">Supplier Details: {supplierName || `ID ${supplierId}`}</h1>
-                    <p className="text-muted-foreground">Active Purchase Orders</p>
+                    <h1 className="text-2xl font-bold">Supplier: {supplier?.name || `ID ${supplierId}`}</h1>
+                    <p className="text-muted-foreground">Purchase Order History</p>
                 </div>
             </div>
 
@@ -100,44 +103,44 @@ export default function SupplierDetailPage({ params }: SupplierDetailPageProps) 
                     <TableHeader>
                         <TableRow>
                             <TableHead>PO Number</TableHead>
-                            <TableHead>SKU</TableHead>
-                            <TableHead>Product Name</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Total Qty</TableHead>
+                            <TableHead className="text-right">Total Amount</TableHead>
+                            <TableHead className="text-right">Released Date</TableHead>
                             <TableHead className="text-right">Sent Date</TableHead>
-                            <TableHead className="text-right">Arrived Date</TableHead>
-                            <TableHead className="text-right">ETA</TableHead>
+                            <TableHead className="text-right">Approved Date</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {items.length === 0 ? (
+                        {pos.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                    No active items found for this supplier.
+                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                    No purchase orders found for this supplier.
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            items.map((item) => (
-                                <TableRow key={`${item.po_number}-${item.sku}`}>
+                            pos.map((po) => (
+                                <TableRow key={po.po_number}>
                                     <TableCell className="font-medium">
-                                        <a href={`/dashboard/po/${encodeURIComponent(item.po_number)}`} className="text-primary hover:underline">
-                                            {item.po_number}
+                                        <a href={`/dashboard/po/${encodeURIComponent(po.po_number)}`} className="text-primary hover:underline">
+                                            {po.po_number}
                                         </a>
                                     </TableCell>
-                                    <TableCell>{item.sku}</TableCell>
-                                    <TableCell className="max-w-[300px] truncate" title={item.product_name}>
-                                        {item.product_name}
+                                    <TableCell>
+                                        <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
+                                            {po.status}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell className="text-right">{po.po_qty.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(po.total_amount)}</TableCell>
+                                    <TableCell className="text-right text-muted-foreground">
+                                        {formatDate(po.po_released_at)}
                                     </TableCell>
                                     <TableCell className="text-right text-muted-foreground">
-                                        {formatDate(item.po_sent_at)}
+                                        {formatDate(po.po_sent_at)}
                                     </TableCell>
                                     <TableCell className="text-right text-muted-foreground">
-                                        {formatDate(item.po_arrived_at)}
-                                    </TableCell>
-                                    {/* Note: SupplierPOItem interface in api.ts might need ETA field logic if not already present in response */}
-                                    {/* The backend added ETA to SupplierPOItem, so frontend interface (if updated automatically or manually) should have it */}
-                                    {/* I updated backend struct, but I should check if I updated frontend interface in prior step. No, I updated POSnapshotItem but not SupplierPOItem in api.ts */}
-                                    {/* Wait, I should update SupplierPOItem in api.ts first? */}
-                                    <TableCell className="text-right font-medium text-blue-600">
-                                        {(item as any).eta ? formatDate((item as any).eta) : '-'}
+                                        {formatDate(po.po_approved_at)}
                                     </TableCell>
                                 </TableRow>
                             ))

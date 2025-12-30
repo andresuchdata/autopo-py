@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { DollarSign, Filter as FilterIcon, Layers, Package, ShoppingCart, RefreshCw } from 'lucide-react';
 import { POStatusCard } from '@/components/dashboard/POStatusCard';
 import { POFunnelChart } from '@/components/dashboard/POFunnelChart';
@@ -8,9 +9,8 @@ import { POTrendChart } from '@/components/dashboard/POTrendChart';
 import { POAgingTable } from '@/components/dashboard/POAgingTable';
 import { SupplierPerformanceChart } from '@/components/dashboard/SupplierPerformanceChart';
 import { getDashboardSummary, type DashboardSummaryParams, poService, invalidatePOSnapshotCache } from '@/services/api';
-import { POSnapshotDialog } from '@/components/dashboard/POSnapshotDialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PODashboardFilterProvider, usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
+import { usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
 import { PODashboardFilter } from '@/components/dashboard/PODashboardFilter';
 import { formatCurrencyIDR, formatNumberID } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
@@ -30,11 +30,10 @@ interface DashboardData {
 }
 
 function PODashboardContent() {
+    const router = useRouter();
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-    const [statusModalOpen, setStatusModalOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
     const isLoading = loading || refreshing;
@@ -244,10 +243,9 @@ function PODashboardContent() {
                                 skuCount={summary.sku_count}
                                 totalQty={summary.total_qty}
                                 avgDays={summary.avg_days}
-                                isActive={statusModalOpen && summary.status === selectedStatus}
+                                isActive={false}
                                 onClick={() => {
-                                    setSelectedStatus(summary.status);
-                                    setStatusModalOpen(true);
+                                    router.push(`/dashboard/po/status/${encodeURIComponent(summary.status.toLowerCase())}`);
                                 }}
                             />
                         ))}
@@ -363,38 +361,11 @@ function PODashboardContent() {
                         <SupplierPerformanceChart initialItems={supplierPerformanceData} />
                     )}
                 </div>
-
-                {/* Find the summary for the selected status to pass totals */}
-                {(() => {
-                    const selectedSummary = statusSummaries.find((s: any) => s.status === selectedStatus);
-                    return (
-                        <POSnapshotDialog
-                            status={selectedStatus}
-                            open={statusModalOpen}
-                            onOpenChange={(open: boolean) => {
-                                setStatusModalOpen(open);
-                                if (!open) {
-                                    setSelectedStatus(null);
-                                }
-                            }}
-                            summaryDefaults={selectedSummary ? {
-                                totalPOs: selectedSummary.count,
-                                totalQty: selectedSummary.total_qty,
-                                totalValue: selectedSummary.total_value,
-                                totalSkus: selectedSummary.sku_count
-                            } : undefined}
-                        />
-                    );
-                })()}
             </div>
         </div>
     );
 }
 
 export default function PODashboardPage() {
-    return (
-        <PODashboardFilterProvider>
-            <PODashboardContent />
-        </PODashboardFilterProvider>
-    );
+    return <PODashboardContent />;
 }

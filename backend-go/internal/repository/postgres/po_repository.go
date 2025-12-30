@@ -248,6 +248,56 @@ func (r *poRepository) GetSkus(ctx context.Context, search string, limit, offset
 	return products, nil
 }
 
+func (r *poRepository) GetSupplier(ctx context.Context, id int64) (*domain.Supplier, error) {
+	query := `
+		SELECT id, name, created_at, updated_at
+		FROM suppliers
+		WHERE id = $1
+	`
+	var supplier domain.Supplier
+	if err := r.db.GetContext(ctx, &supplier, query, id); err != nil {
+		return nil, fmt.Errorf("failed to get supplier: %w", err)
+	}
+	return &supplier, nil
+}
+
+func (r *poRepository) GetSupplierPOs(ctx context.Context, supplierID int64) ([]*domain.PODetail, error) {
+	query := `
+		SELECT 
+			po.po_number,
+			po.supplier_id,
+			COALESCE(s.name, '') as supplier_name,
+			COALESCE(st.name, '') as store_name,
+			COALESCE(b.name, '') as brand_name,
+			po.status as status_code,
+			TO_CHAR(po.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
+			TO_CHAR(po.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
+			TO_CHAR(po.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
+			TO_CHAR(po.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
+			TO_CHAR(po.po_received_at, 'YYYY-MM-DD HH24:MI:SS') as po_received_at,
+			po.po_qty,
+			po.received_qty,
+			po.total_amount
+		FROM purchase_orders po
+		LEFT JOIN suppliers s ON po.supplier_id = s.id
+		LEFT JOIN stores st ON po.store_id = st.id
+		LEFT JOIN brands b ON po.brand_id = b.id
+		WHERE po.supplier_id = $1
+		ORDER BY po.po_sent_at DESC NULLS LAST, po.created_at DESC
+	`
+
+	var pos []*domain.PODetail
+	if err := sqlx.SelectContext(ctx, r.db, &pos, query, supplierID); err != nil {
+		return nil, fmt.Errorf("failed to get supplier pos: %w", err)
+	}
+
+	for _, po := range pos {
+		po.Status = domain.POStatusLabel(po.StatusCode)
+	}
+
+	return pos, nil
+}
+
 // UpdatePOItemETA updates the ETA for a specific item (SKU) or all items in a PO
 func (r *poRepository) UpdatePOItemETA(ctx context.Context, poNumber string, sku *string, eta string) error {
 	var query string

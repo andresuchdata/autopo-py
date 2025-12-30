@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -50,8 +50,9 @@ const formatDate = (value: string | null) => {
     });
 };
 
-export default function PODetailPage({ params }: PODetailPageProps) {
-    const { poNumber } = params;
+export default function PODetailPage() {
+    const params = useParams();
+    const poNumber = params.poNumber as string;
     const router = useRouter();
     // const { toast } = useToast();
     const [po, setPO] = useState<PODetail | null>(null);
@@ -59,6 +60,7 @@ export default function PODetailPage({ params }: PODetailPageProps) {
     const [error, setError] = useState<string | null>(null);
     const [bulkETA, setBulkETA] = useState('');
     const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+    const [isBulkOpen, setIsBulkOpen] = useState(false);
     const [editingItems, setEditingItems] = useState<Record<string, string>>({}); // sku -> eta
 
     const loadPO = useCallback(async () => {
@@ -123,6 +125,7 @@ export default function PODetailPage({ params }: PODetailPageProps) {
             // Reload to get fresh server state
             await loadPO();
             setBulkETA(''); // Reset bulk input
+            setIsBulkOpen(false); // Close dialog
         } catch (err: any) {
             alert(`Failed to bulk update ETA: ${err.message}`);
         } finally {
@@ -150,6 +153,8 @@ export default function PODetailPage({ params }: PODetailPageProps) {
     }
 
     const statusColor = getStatusColor(po.status);
+    const isEditable = ['Sent', 'Approved'].includes(po.status); // Only editable in Sent or Approved status
+    const items = po.items || [];
 
     return (
         <div className="container mx-auto py-8">
@@ -172,36 +177,41 @@ export default function PODetailPage({ params }: PODetailPageProps) {
                     </div>
                 </div>
 
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <Button>
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            Bulk Apply ETA
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Bulk Apply ETA</DialogTitle>
-                            <DialogDescription>
-                                Set the same Estimated Time of Arrival for all items in this Purchase Order.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4">
-                            <Input
-                                type="date"
-                                value={bulkETA}
-                                onChange={(e) => setBulkETA(e.target.value)}
-                            />
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setBulkETA('')}>Cancel</Button>
-                            <Button onClick={handleBulkApply} disabled={isBulkUpdating || !bulkETA}>
-                                {isBulkUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Apply to All
+                {isEditable && (
+                    <Dialog open={isBulkOpen} onOpenChange={setIsBulkOpen}>
+                        <DialogTrigger asChild>
+                            <Button>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                Bulk Apply ETA
                             </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Bulk Apply ETA</DialogTitle>
+                                <DialogDescription>
+                                    Set the same Estimated Time of Arrival for all items in this Purchase Order.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-4">
+                                <Input
+                                    type="date"
+                                    value={bulkETA}
+                                    onChange={(e) => setBulkETA(e.target.value)}
+                                />
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => {
+                                    setBulkETA('');
+                                    setIsBulkOpen(false);
+                                }}>Cancel</Button>
+                                <Button onClick={handleBulkApply} disabled={isBulkUpdating || !bulkETA}>
+                                    {isBulkUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Apply to All
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                )}
             </div>
 
             {/* PO Info Cards */}
@@ -234,41 +244,51 @@ export default function PODetailPage({ params }: PODetailPageProps) {
                             <TableHead className="text-right">Qty</TableHead>
                             <TableHead className="text-right">Unit Price</TableHead>
                             <TableHead className="text-right">Total</TableHead>
-                            <TableHead className="w-[200px]">ETA</TableHead>
+                            {isEditable && <TableHead className="w-[200px]">ETA</TableHead>}
                             <TableHead className="w-[80px]"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {po.items.map((item) => (
-                            <TableRow key={item.sku}>
-                                <TableCell className="font-medium">{item.sku}</TableCell>
-                                <TableCell className="truncate max-w-[200px]" title={item.product_name}>{item.product_name}</TableCell>
-                                <TableCell className="text-right">{item.po_qty.toLocaleString()}</TableCell>
-                                <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
-                                <TableCell className="text-right">{formatCurrency(item.total_amount)}</TableCell>
-                                <TableCell>
-                                    <Input
-                                        type="date"
-                                        value={editingItems[item.sku] || ''}
-                                        onChange={(e) => handleETAChange(item.sku, e.target.value)}
-                                        className="h-8"
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                    {editingItems[item.sku] !== item.eta && (
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            className="h-8 w-8 text-primary hover:text-primary/80"
-                                            title="Save ETA"
-                                            onClick={() => saveSingleETA(item.sku)}
-                                        >
-                                            <Save className="h-4 w-4" />
-                                        </Button>
-                                    )}
+                        {items.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={isEditable ? 7 : 6} className="h-24 text-center text-muted-foreground">
+                                    No items found.
                                 </TableCell>
                             </TableRow>
-                        ))}
+                        ) : (
+                            items.map((item) => (
+                                <TableRow key={item.sku}>
+                                    <TableCell className="font-medium">{item.sku}</TableCell>
+                                    <TableCell className="truncate max-w-[200px]" title={item.product_name}>{item.product_name}</TableCell>
+                                    <TableCell className="text-right">{item.po_qty.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(item.total_amount)}</TableCell>
+                                    {isEditable && (
+                                        <TableCell>
+                                            <Input
+                                                type="date"
+                                                value={editingItems[item.sku] || ''}
+                                                onChange={(e) => handleETAChange(item.sku, e.target.value)}
+                                                className="h-8"
+                                            />
+                                        </TableCell>
+                                    )}
+                                    <TableCell>
+                                        {isEditable && editingItems[item.sku] !== item.eta && (
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8 text-primary hover:text-primary/80"
+                                                title="Save ETA"
+                                                onClick={() => saveSingleETA(item.sku)}
+                                            >
+                                                <Save className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        )}
                     </TableBody>
                 </Table>
             </div>

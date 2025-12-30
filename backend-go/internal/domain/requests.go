@@ -15,7 +15,7 @@ type PODetail struct {
 	StoreName    string           `json:"store_name" db:"store_name"`
 	BrandName    string           `json:"brand_name" db:"brand_name"`
 	Status       string           `json:"status" db:"-"`
-	StatusCode   int              `json:"status_code" db:"status"`
+	StatusCode   int              `json:"status_code" db:"status_code"`
 	POQty        int              `json:"po_qty" db:"po_qty"`
 	ReceivedQty  int              `json:"received_qty" db:"received_qty"`
 	TotalAmount  float64          `json:"total_amount" db:"total_amount"` // Actually sum of items amount? Or from PO table?
