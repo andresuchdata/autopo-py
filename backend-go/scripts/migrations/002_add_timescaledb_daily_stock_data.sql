@@ -63,8 +63,8 @@ ALTER TABLE daily_stock_data SET (
 -- Create compression policy (compress chunks older than 7 days)
 SELECT add_compression_policy('daily_stock_data', INTERVAL '7 days');
 
--- Create retention policy (keep data for 1 year)
-SELECT add_retention_policy('daily_stock_data', INTERVAL '1 year');
+-- Create retention policy (keep data for 2 days)
+SELECT add_retention_policy('daily_stock_data', INTERVAL '2 days');
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_daily_stock_time ON daily_stock_data (time DESC);

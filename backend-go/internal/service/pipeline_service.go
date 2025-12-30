@@ -7,8 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/andresuchdata/autopo-py/backend-go/internal/config"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/datasource"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/models"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/pipeline/stock_health"
+	"github.com/andresuchdata/autopo-py/backend-go/internal/repository"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/storage"
 	"github.com/andresuchdata/autopo-py/backend-go/pkg/logger"
 )
@@ -20,41 +24,61 @@ const (
 
 // PipelineService manages pipeline executions
 type PipelineService struct {
-	db              *sql.DB
+	repo            *repository.PipelineRepository
 	stockHealthPipe *stock_health.StockHealthPipeline
 	defaultConfig   pipeline.PipelineConfig
 	inputDir        string
 	storage         storage.ObjectStorage
+	credentials     string
+	dsFactory       *datasource.Factory
 }
 
 // NewPipelineService creates a new pipeline service
-func NewPipelineService(db *sql.DB, config pipeline.PipelineConfig, inputDir string, storageClient storage.ObjectStorage) *PipelineService {
+func NewPipelineService(db *sql.DB, repo *repository.PipelineRepository, config pipeline.PipelineConfig, inputDir string, storageClient storage.ObjectStorage, credentials string, legacyDBConfig config.LegacyDatabaseConfig) *PipelineService {
 	// Initialize stock health pipeline
-	// Note: We might need to inject dependencies properly here later or load config
 	shConfig := stock_health.Config{
 		// Set defaults or load from env if needed
+		TempDir: filepath.Join(inputDir, "temp"),
 	}
 	shPipe, _ := stock_health.NewStockHealthPipeline(shConfig)
 
 	return &PipelineService{
-		db:              db,
+		repo:            repo,
 		stockHealthPipe: shPipe,
 		defaultConfig:   config,
 		inputDir:        inputDir,
 		storage:         storageClient,
+		credentials:     credentials,
+		dsFactory:       datasource.NewFactory(legacyDBConfig, credentials),
 	}
 }
 
 // TriggerPipeline starts a pipeline run in the background
 func (s *PipelineService) TriggerPipeline(ctx context.Context, name string, date time.Time, inputFiles []string) (int64, error) {
+	// 1. Create pipeline run record
+	run := &models.PipelineRun{
+		PipelineName: name,
+		Date:         date,
+		Status:       models.StatusPending,
+		StartedAt:    time.Now(),
+		TotalFiles:   len(inputFiles),
+	}
+
+	if err := s.repo.CreateRun(ctx, run); err != nil {
+		return 0, fmt.Errorf("failed to create pipeline run: %w", err)
+	}
+
+	runID := run.ID
+
+	// 2. Resolve pipeline implementation
 	var pipe pipeline.Pipeline
 	switch name {
 	case PipelineStockHealth:
 		pipe = s.stockHealthPipe
 	case PipelinePOSnapshot:
-		return 0, fmt.Errorf("po snapshot pipeline not yet implemented")
+		return runID, fmt.Errorf("po snapshot pipeline not yet implemented")
 	default:
-		return 0, fmt.Errorf("unknown pipeline: %s", name)
+		return runID, fmt.Errorf("unknown pipeline: %s", name)
 	}
 
 	// Auto-discovery of files if none provided
@@ -107,17 +131,42 @@ func (s *PipelineService) TriggerPipeline(ctx context.Context, name string, date
 		}
 	}
 
-	worker := pipeline.NewWorker(pipe, s.defaultConfig, s.db)
+	worker := pipeline.NewWorkerWithRepo(pipe, s.defaultConfig, s.repo)
 
 	// Fire and forget
 	go func() {
 		bgCtx := context.Background()
-		if err := worker.ProcessBatch(bgCtx, date, inputFiles); err != nil {
-			logger.Log.Error().Err(err).Str("pipeline", name).Msg("Pipeline background run failed")
+		if err := worker.ProcessBatchWithRun(bgCtx, run, inputFiles); err != nil {
+			logger.Log.Error().Err(err).Str("pipeline", name).Int64("run_id", runID).Msg("Pipeline background run failed")
 		}
 	}()
 
-	// TODO: Create the run record first if we want to return a real ID.
-	// For now return 0 to indicate async accepted.
-	return 0, nil
+	return runID, nil
+}
+
+// TriggerPipelineWithConfig starts a pipeline run with full configuration
+func (s *PipelineService) TriggerPipelineWithConfig(ctx context.Context, name string, date time.Time, config *models.PipelineConfig) (int64, error) {
+	if config == nil {
+		return s.TriggerPipeline(ctx, name, date, nil)
+	}
+
+	// 1. Initialize data source
+	dsCfg := datasource.DataSourceConfig{
+		Type:          string(config.DataSource),
+		DriveFolderID: config.DriveFolderID,
+	}
+
+	ds, err := s.dsFactory.Create(dsCfg, s.inputDir)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create data source: %w", err)
+	}
+
+	// 2. Fetch data
+	inputFiles, err := ds.FetchData(ctx, date, config.StoreIDs)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch data: %w", err)
+	}
+
+	// 3. Trigger pipeline with fetched files
+	return s.TriggerPipeline(ctx, name, date, inputFiles)
 }

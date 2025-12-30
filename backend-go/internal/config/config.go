@@ -17,6 +17,7 @@ type Config struct {
 	App            AppConfig
 	Cache          CacheConfig
 	CloudStorage   CloudStorageConfig
+	GoogleDrive    GoogleDriveConfig
 }
 
 type CloudStorageConfig struct {
@@ -28,6 +29,10 @@ type CloudStorageConfig struct {
 	Region    string
 	UseSSL    bool
 	Prefix    string
+}
+
+type GoogleDriveConfig struct {
+	FolderID string
 }
 
 type ServerConfig struct {
@@ -54,6 +59,7 @@ type LegacyDatabaseConfig struct {
 	Password string
 	DBName   string
 	Timezone string
+	Enabled  bool
 }
 
 type AppConfig struct {
@@ -116,6 +122,7 @@ func Load() *Config {
 		viper.SetDefault("CLOUD_STORAGE_REGION", "us-east-1")
 		viper.SetDefault("CLOUD_STORAGE_USE_SSL", true)
 		viper.SetDefault("CLOUD_STORAGE_PREFIX", "")
+		viper.SetDefault("STOCK_HEALTH_DRIVE_FOLDER_ID", "")
 
 		// Read from environment variables
 		viper.AutomaticEnv()
@@ -147,6 +154,7 @@ func Load() *Config {
 				Password: viper.GetString("LEGACY_DB_PASSWORD"),
 				DBName:   viper.GetString("LEGACY_DB_NAME"),
 				Timezone: viper.GetString("LEGACY_DB_TIMEZONE"),
+				Enabled:  viper.GetString("LEGACY_DB_HOST") != "",
 			},
 			App: AppConfig{
 				UploadDir: viper.GetString("APP_UPLOAD_DIR"),
@@ -171,6 +179,9 @@ func Load() *Config {
 				Region:    viper.GetString("CLOUD_STORAGE_REGION"),
 				UseSSL:    viper.GetBool("CLOUD_STORAGE_USE_SSL"),
 				Prefix:    viper.GetString("CLOUD_STORAGE_PREFIX"),
+			},
+			GoogleDrive: GoogleDriveConfig{
+				FolderID: viper.GetString("STOCK_HEALTH_DRIVE_FOLDER_ID"),
 			},
 		}
 	})

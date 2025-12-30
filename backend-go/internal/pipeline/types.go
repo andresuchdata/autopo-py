@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 	"time"
+
+	"github.com/andresuchdata/autopo-py/backend-go/internal/models"
 )
 
 // Pipeline defines the interface that all data pipelines must implement
@@ -11,12 +13,13 @@ type Pipeline interface {
 	Name() string
 
 	// Transform processes a single input file and returns the transformed data
-	Transform(ctx context.Context, inputFile string) ([]TransformedRow, error)
+	Transform(ctx context.Context, inputFile string, snapshotDate time.Time) ([]TransformedRow, error)
 
 	// GetOutputTable returns the target database table name
 	GetOutputTable() string
 
 	// GetSnapshotDate extracts the date from the filename
+	// Deprecated: preferring batch date from orchestrator
 	GetSnapshotDate(filename string) (time.Time, error)
 
 	// Validate checks if the input file is valid for this pipeline
@@ -57,51 +60,30 @@ func DefaultPipelineConfig(name string) PipelineConfig {
 	}
 }
 
-// PipelineStatus represents the current state of a pipeline run
-type PipelineStatus string
+// Re-using global models to ensure consistency
+type PipelineStatus = models.PipelineStatus
+type PipelineStage = models.PipelineStage
 
 const (
-	StatusPending    PipelineStatus = "pending"
-	StatusProcessing PipelineStatus = "processing"
-	StatusCompleted  PipelineStatus = "completed"
-	StatusFailed     PipelineStatus = "failed"
+	StatusPending    = models.StatusPending
+	StatusProcessing = models.StatusProcessing
+	StatusCompleted  = models.StatusCompleted
+	StatusFailed     = models.StatusFailed
 )
 
-// FileJobStatus represents the state of a single file processing job
-type FileJobStatus string
-
+// FileJob statuses map to pipeline statuses in models
 const (
-	FileStatusQueued     FileJobStatus = "queued"
-	FileStatusProcessing FileJobStatus = "processing"
-	FileStatusCompleted  FileJobStatus = "completed"
-	FileStatusFailed     FileJobStatus = "failed"
+	FileStatusQueued     = models.StatusPending
+	FileStatusProcessing = models.StatusProcessing
+	FileStatusCompleted  = models.StatusCompleted
+	FileStatusFailed     = models.StatusFailed
 )
 
 // PipelineRun tracks a single execution of a pipeline for a specific date
-type PipelineRun struct {
-	ID             int64
-	PipelineName   string
-	Date           time.Time
-	Status         PipelineStatus
-	TotalFiles     int
-	ProcessedFiles int
-	TotalRows      int
-	StartedAt      time.Time
-	CompletedAt    *time.Time
-	ErrorMessage   string
-}
+type PipelineRun = models.PipelineRun
 
 // FileJob tracks the processing of a single file
-type FileJob struct {
-	ID            int64
-	PipelineRunID int64
-	FilePath      string
-	StoreID       *int64 // Nullable for non-store files
-	Status        FileJobStatus
-	ErrorMessage  string
-	ProcessedAt   *time.Time
-	RetryCount    int
-}
+type FileJob = models.PipelineFileJob
 
 // PipelineMetrics holds metrics for monitoring
 type PipelineMetrics struct {

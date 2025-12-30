@@ -125,6 +125,7 @@ type Config struct {
 	CloudSecretKey      string
 	CloudUseSSL         bool
 	CloudPrefix         string
+	TempDir             string // Temporary directory for cloud downloads
 }
 
 // ProcessingSummary holds summary statistics for a processed file

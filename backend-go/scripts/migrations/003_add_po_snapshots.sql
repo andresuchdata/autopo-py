@@ -54,6 +54,9 @@ CREATE TABLE po_snapshots (
 -- Convert to hypertable for time-series data
 SELECT create_hypertable('po_snapshots', 'time');
 
+-- Create retention policy (keep data for 2 days)
+SELECT add_retention_policy('po_snapshots', INTERVAL '2 days');
+
 -- Create indexes for better query performance
 CREATE INDEX idx_po_snapshots_time ON po_snapshots (time DESC);
 CREATE INDEX idx_po_snapshots_po_number ON po_snapshots (po_number, time DESC);

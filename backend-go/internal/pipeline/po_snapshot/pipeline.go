@@ -85,7 +85,7 @@ func (p *Pipeline) Validate(inputFile string) error {
 	return nil
 }
 
-func (p *Pipeline) Transform(ctx context.Context, inputFile string) ([]pipeline.TransformedRow, error) {
+func (p *Pipeline) Transform(ctx context.Context, inputFile string, snapshotDate time.Time) ([]pipeline.TransformedRow, error) {
 	rows, err := readRawRows(inputFile)
 	if err != nil {
 		return nil, err

@@ -2,17 +2,41 @@
 
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { operationsService, ValidationResponse } from '@/services/operations';
+import { operationsService, type ValidationResponse, type PipelineConfig } from '@/services/operations';
 import { format } from 'date-fns';
-import { Loader2, AlertCircle } from "lucide-react";
+import {
+    Loader2,
+    AlertCircle,
+    Eye,
+    Play,
+    History,
+    Activity,
+    Settings2,
+    ChevronRight,
+    ArrowUpRight,
+    RefreshCw,
+    Plus
+} from "lucide-react";
 import { clsx } from "clsx";
 import { useRouter } from 'next/navigation';
-import { Eye } from "lucide-react";
+import {
+    PipelineConfigPanel,
+    RealtimeProgress,
+    PipelineRunHistory
+} from '@/components/pipeline';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+    SheetTrigger,
+} from "@/components/ui/sheet";
 
 export default function OperationsPage() {
     const router = useRouter();
@@ -20,12 +44,15 @@ export default function OperationsPage() {
     const [pipelineLoading, setPipelineLoading] = useState(false);
     const [validationLoading, setValidationLoading] = useState(false);
 
-    const [pipelineResult, setPipelineResult] = useState<any>(null);
+    const [activeRunId, setActiveRunId] = useState<number | null>(null);
+    const [configOpen, setConfigOpen] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+
     const [validationResult, setValidationResult] = useState<ValidationResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loadingExisting, setLoadingExisting] = useState(false);
 
-    const handleViewDetails = (reportKey: string | undefined, fileName: string) => {
+    const handleViewDetails = (reportKey: string | undefined) => {
         if (!reportKey) return;
         // Navigate to the validation details page
         router.push(`/operations/validation/${encodeURIComponent(reportKey)}`);
@@ -43,7 +70,7 @@ export default function OperationsPage() {
                 } else {
                     setValidationResult(null);
                 }
-            } catch (err: any) {
+            } catch (err) {
                 console.error('Failed to fetch existing results:', err);
                 setValidationResult(null);
             } finally {
@@ -54,18 +81,7 @@ export default function OperationsPage() {
         fetchExistingResults();
     }, [date]);
 
-    const handleTriggerPipeline = async (name: string) => {
-        setPipelineLoading(true);
-        setError(null);
-        try {
-            const res = await operationsService.triggerPipeline(name, date);
-            setPipelineResult(res);
-        } catch (err: any) {
-            setError(err.message || "Failed to trigger pipeline");
-        } finally {
-            setPipelineLoading(false);
-        }
-    };
+    // Removed handleTriggerPipeline as handleConfigureSubmit is now the main entry point
 
     const handleRunValidation = async () => {
         setValidationLoading(true);
@@ -73,10 +89,24 @@ export default function OperationsPage() {
         try {
             const res = await operationsService.runValidation(date);
             setValidationResult(res);
-        } catch (err: any) {
-            setError(err.message || "Failed to run validation");
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to run validation");
         } finally {
             setValidationLoading(false);
+        }
+    };
+
+    const handleConfigureSubmit = async (config: PipelineConfig) => {
+        setPipelineLoading(true);
+        setError(null);
+        try {
+            const res = await operationsService.configurePipeline('stock_health', config);
+            setActiveRunId(res.run_id);
+            setConfigOpen(false);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to trigger pipeline");
+        } finally {
+            setPipelineLoading(false);
         }
     };
 
@@ -85,214 +115,222 @@ export default function OperationsPage() {
             <main className="flex-1 flex flex-col overflow-hidden min-h-0 container mx-auto p-4 sm:p-8">
                 <div className="flex flex-col gap-8 h-full min-h-0 overflow-y-auto pb-8">
 
-                    <div className="flex justify-between items-center">
+                    {/* Header Section */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
                         <div>
-                            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Operations Dashboard</h1>
-                            <p className="text-sm text-gray-500">Manage data pipelines and validations</p>
+                            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                <Settings2 className="h-8 w-8 text-indigo-600" />
+                                Operations Dashboard
+                            </h1>
+                            <p className="text-muted-foreground mt-1">
+                                Command center for stock health and PO snapshot pipelines.
+                            </p>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <Label htmlFor="date-picker">Process Date:</Label>
-                            <Input
-                                id="date-picker"
-                                type="date"
-                                className="w-48"
-                                value={date}
-                                onChange={(e) => setDate(e.target.value)}
-                            />
+
+                        <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-end">
+                                <Label htmlFor="date-picker" className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-1">Context Date</Label>
+                                <Input
+                                    id="date-picker"
+                                    type="date"
+                                    className="w-40 h-9 bg-white dark:bg-gray-900 shadow-sm"
+                                    value={date}
+                                    onChange={(e) => setDate(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
 
                     {error && (
-                        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-2">
-                            <AlertCircle className="w-5 h-5" />
-                            {error}
+                        <div className="bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 p-4 rounded-xl flex items-center gap-3 border border-rose-100 animate-in fade-in zoom-in duration-300">
+                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <p className="text-sm font-medium">{error}</p>
                         </div>
                     )}
 
                     <Tabs defaultValue="stock_health" className="w-full">
-                        <TabsList className="mb-4">
-                            <TabsTrigger value="stock_health">Stock Health</TabsTrigger>
-                            <TabsTrigger value="po_snapshot">PO Snapshot</TabsTrigger>
-                        </TabsList>
+                        <div className="flex items-center justify-between mb-6">
+                            <TabsList className="bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm border p-1 h-11">
+                                <TabsTrigger value="stock_health" className="px-6 h-9 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                                    <Activity className="h-4 w-4 mr-2" />
+                                    Stock Health
+                                </TabsTrigger>
+                                <TabsTrigger value="po_snapshot" className="px-6 h-9 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                                    <History className="h-4 w-4 mr-2" />
+                                    PO Snapshot
+                                </TabsTrigger>
+                            </TabsList>
+                        </div>
 
-                        <TabsContent value="stock_health" className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Pipeline Control</CardTitle>
-                                        <CardDescription>Trigger the Stock Health pipeline execution</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-sm text-gray-500">
-                                                This will start the pipeline for <strong>{date}</strong>.
-                                                It runs asynchronously in the background.
-                                            </p>
-                                            <Button
-                                                onClick={() => handleTriggerPipeline('stock_health')}
-                                                disabled={pipelineLoading}
-                                                className="w-full sm:w-auto"
-                                            >
-                                                {pipelineLoading ? (
-                                                    <>
-                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                        Triggering...
-                                                    </>
-                                                ) : (
-                                                    "Trigger Pipeline"
-                                                )}
-                                            </Button>
-                                            {pipelineResult && (
-                                                <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded text-sm">
-                                                    Job Started (ID: {pipelineResult.run_id})
-                                                </div>
-                                            )}
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                        <TabsContent value="stock_health" className="space-y-12 animate-in fade-in duration-500">
 
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Validation</CardTitle>
-                                        <CardDescription>Verify output data against input CSVs</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-sm text-gray-500">
-                                                Runs the python validation script for <strong>{date}</strong>.
-                                            </p>
-                                            {loadingExisting ? (
-                                                <div className="text-sm text-gray-500 flex items-center gap-2">
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                    Checking for existing results...
-                                                </div>
-                                            ) : validationResult ? (
-                                                <div className="text-sm text-green-600 flex items-center gap-2 mb-2">
-                                                    ✓ Results already exist for this date
-                                                </div>
-                                            ) : null}
-                                            <Button
-                                                variant={validationResult ? "outline" : "default"}
-                                                onClick={handleRunValidation}
-                                                disabled={validationLoading || loadingExisting}
-                                                className="w-full sm:w-auto"
-                                            >
-                                                {validationLoading ? (
-                                                    <>
-                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                        Validating...
-                                                    </>
-                                                ) : validationResult ? (
-                                                    "Re-run Validation"
-                                                ) : (
-                                                    "Run Validation Check"
-                                                )}
+                            {/* Section 1: Pipeline Management */}
+                            <div className="space-y-6">
+                                <div className="flex items-center justify-between border-b pb-4">
+                                    <h2 className="text-xl font-bold flex items-center gap-2">
+                                        <Activity className="h-5 w-5 text-indigo-600" />
+                                        Pipeline Management
+                                    </h2>
+
+                                    <Sheet open={configOpen} onOpenChange={setConfigOpen}>
+                                        <SheetTrigger asChild>
+                                            <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 shadow-md gap-2">
+                                                <Plus className="h-4 w-4" />
+                                                Launch Pipeline
                                             </Button>
+                                        </SheetTrigger>
+                                        <SheetContent className="w-[90%] sm:w-[600px] sm:max-w-[700px] overflow-y-auto">
+                                            <SheetHeader className="mb-6">
+                                                <SheetTitle className="text-2xl">Pipeline Configuration</SheetTitle>
+                                                <SheetDescription>
+                                                    Define the parameters for your next pipeline execution.
+                                                </SheetDescription>
+                                            </SheetHeader>
+                                            <PipelineConfigPanel
+                                                pipelineName="stock_health"
+                                                isLoading={pipelineLoading}
+                                                onSubmit={handleConfigureSubmit}
+                                            />
+                                        </SheetContent>
+                                    </Sheet>
+                                </div>
+
+                                {/* Live Monitoring */}
+                                {activeRunId && (
+                                    <div className="animate-in fade-in slide-in-from-top-4 duration-500">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                            <h2 className="text-sm font-bold uppercase tracking-widest text-emerald-600">Active Execution</h2>
                                         </div>
-                                    </CardContent>
+                                        <RealtimeProgress
+                                            pipelineName="stock_health"
+                                            runId={activeRunId}
+                                            isPaused={isPaused}
+                                            onPause={() => setIsPaused(true)}
+                                            onResume={() => setIsPaused(false)}
+                                        />
+                                    </div>
+                                )}
+
+                                <Card className="border-none shadow-sm shadow-indigo-100 overflow-hidden">
+                                    <PipelineRunHistory
+                                        pipelineName="stock_health"
+                                        onViewRun={(runId) => {
+                                            setActiveRunId(runId);
+                                            const scrollContainer = document.querySelector('.overflow-y-auto');
+                                            if (scrollContainer) {
+                                                scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+                                            }
+                                        }}
+                                    />
                                 </Card>
                             </div>
 
-                            {validationResult && (
-                                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <Card>
-                                            <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm font-medium text-gray-500">Total Files</CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <div className="text-2xl font-bold">{validationResult.summary.total}</div>
-                                            </CardContent>
-                                        </Card>
-                                        <Card>
-                                            <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm font-medium text-gray-500">Success</CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <div className="text-2xl font-bold text-green-600">{validationResult.summary.success}</div>
-                                            </CardContent>
-                                        </Card>
-                                        <Card>
-                                            <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm font-medium text-gray-500">Errors</CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <div className="text-2xl font-bold text-red-600">{validationResult.summary.failed}</div>
-                                            </CardContent>
-                                        </Card>
-                                        <Card>
-                                            <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm font-medium text-gray-500">Missing Output</CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <div className="text-2xl font-bold text-orange-500">{validationResult.summary.missing}</div>
-                                            </CardContent>
-                                        </Card>
-                                    </div>
+                            {/* Section 2: Data Validation Results */}
+                            <div className="space-y-6">
+                                <div className="flex items-center justify-between border-b pb-4">
+                                    <h2 className="text-xl font-bold flex items-center gap-2">
+                                        <ChevronRight className="h-5 w-5 text-indigo-600" />
+                                        Data Validation
+                                    </h2>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleRunValidation}
+                                        disabled={validationLoading || loadingExisting}
+                                        className="gap-2"
+                                    >
+                                        {validationLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                        {validationResult ? "Re-sync Results" : "Run Validation"}
+                                    </Button>
+                                </div>
 
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle>Validation Details</CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="rounded-md border">
+                                {validationResult ? (
+                                    <div className="space-y-6">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            {[
+                                                { label: 'Total Files', value: validationResult.summary.total, color: 'text-gray-900', bg: 'bg-gray-50' },
+                                                { label: 'Success', value: validationResult.summary.success, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                                                { label: 'Errors', value: validationResult.summary.failed, color: 'text-rose-600', bg: 'bg-rose-50' },
+                                                { label: 'Missing', value: validationResult.summary.missing, color: 'text-amber-600', bg: 'bg-amber-50' },
+                                            ].map((stat) => (
+                                                <Card key={stat.label} className={clsx("border-none shadow-sm shadow-indigo-100", stat.bg)}>
+                                                    <CardHeader className="pb-2 pt-4">
+                                                        <CardTitle className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{stat.label}</CardTitle>
+                                                    </CardHeader>
+                                                    <CardContent className="pb-4">
+                                                        <div className={clsx("text-2xl font-black", stat.color)}>{stat.value}</div>
+                                                    </CardContent>
+                                                </Card>
+                                            ))}
+                                        </div>
+
+                                        <Card className="border-none shadow-lg shadow-gray-200/50 overflow-hidden">
+                                            <div className="rounded-md">
                                                 <Table>
-                                                    <TableHeader>
+                                                    <TableHeader className="bg-gray-50/50">
                                                         <TableRow>
-                                                            <TableHead>File</TableHead>
-                                                            <TableHead>Status</TableHead>
-                                                            <TableHead>Report</TableHead>
-                                                            <TableHead>Key Metrics</TableHead>
-                                                            <TableHead>Actions</TableHead>
+                                                            <TableHead className="font-bold">File</TableHead>
+                                                            <TableHead className="font-bold">Status</TableHead>
+                                                            <TableHead className="font-bold">Key Metrics</TableHead>
+                                                            <TableHead className="text-right font-bold w-[120px]">Actions</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
                                                         {validationResult.results.map((res) => (
-                                                            <TableRow key={res.file}>
-                                                                <TableCell className="font-medium">{res.file}</TableCell>
+                                                            <TableRow key={res.file} className="hover:bg-indigo-50/30 transition-colors">
+                                                                <TableCell className="font-medium py-4">
+                                                                    <div className="flex flex-col">
+                                                                        <span>{res.file}</span>
+                                                                        {res.report_file && (
+                                                                            <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[150px]">
+                                                                                {res.report_file.split('/').pop()}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </TableCell>
                                                                 <TableCell>
                                                                     <div className={clsx(
-                                                                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                                                                        res.status === 'success' ? "bg-green-100 text-green-800" :
-                                                                            res.status === 'error' ? "bg-red-100 text-red-800" :
-                                                                                "bg-yellow-100 text-yellow-800"
+                                                                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider",
+                                                                        res.status === 'success' ? "bg-emerald-100 text-emerald-800" :
+                                                                            res.status === 'error' ? "bg-rose-100 text-rose-800" :
+                                                                                "bg-amber-100 text-amber-800"
                                                                     )}>
                                                                         {res.status}
                                                                     </div>
-                                                                    {res.error && <div className="text-xs text-red-500 mt-1">{res.error}</div>}
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    {res.report_file && (
-                                                                        <span className="text-xs text-gray-500 font-mono truncate max-w-[200px] block" title={res.report_file}>
-                                                                            {res.report_file.split('/').pop()}
-                                                                        </span>
-                                                                    )}
+                                                                    {res.error && <div className="text-[10px] text-rose-500 mt-1">{res.error}</div>}
                                                                 </TableCell>
                                                                 <TableCell>
                                                                     {res.metrics && (
-                                                                        <div className="text-xs space-y-1">
-                                                                            <div className="flex justify-between gap-4">
-                                                                                <span className="text-gray-500">Sum Cost:</span>
-                                                                                <span className="font-mono">
+                                                                        <div className="text-[11px] space-y-1">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-muted-foreground">Cost:</span>
+                                                                                <span className="font-bold">
                                                                                     {typeof res.metrics.sum_final_updated_po_cost === 'number'
-                                                                                        ? res.metrics.sum_final_updated_po_cost.toLocaleString('id-ID', { style: 'currency', currency: 'IDR' })
+                                                                                        ? res.metrics.sum_final_updated_po_cost.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
                                                                                         : '-'}
                                                                                 </span>
                                                                             </div>
-                                                                            <div className="flex justify-between gap-4">
-                                                                                <span className="text-gray-500">Mismatches:</span>
-                                                                                <span className={clsx("font-mono font-bold", (res.metrics.updated_vs_initial_qty_mismatch_count as number) > 0 ? "text-red-500" : "text-green-600")}>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-muted-foreground">Mismatches:</span>
+                                                                                <span className={clsx("font-black", (res.metrics.updated_vs_initial_qty_mismatch_count as number) > 0 ? "text-rose-500" : "text-emerald-600")}>
                                                                                     {res.metrics.updated_vs_initial_qty_mismatch_count}
                                                                                 </span>
                                                                             </div>
                                                                         </div>
                                                                     )}
                                                                 </TableCell>
-                                                                <TableCell>
+                                                                <TableCell className="text-right">
                                                                     {res.report_file && (
-                                                                        <Button variant="ghost" size="sm" onClick={() => handleViewDetails(res.report_file, res.file)}>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            className="hover:text-indigo-600 hover:bg-indigo-50"
+                                                                            onClick={() => handleViewDetails(res.report_file)}
+                                                                        >
                                                                             <Eye className="w-4 h-4 mr-2" />
-                                                                            View Details
+                                                                            Details
+                                                                            <ArrowUpRight className="w-3 h-3 ml-1" />
                                                                         </Button>
                                                                     )}
                                                                 </TableCell>
@@ -301,28 +339,37 @@ export default function OperationsPage() {
                                                     </TableBody>
                                                 </Table>
                                             </div>
-                                        </CardContent>
+                                        </Card>
+                                    </div>
+                                ) : (
+                                    <Card className="border-dashed border-2 flex flex-col items-center justify-center py-20 bg-gray-50/50">
+                                        <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                                            <Settings2 className="h-6 w-6 text-gray-400" />
+                                        </div>
+                                        <p className="text-sm font-medium text-gray-900">No results for this date</p>
+                                        <p className="text-xs text-gray-500 mt-1">Run validation to see the analysis</p>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="mt-6"
+                                            onClick={handleRunValidation}
+                                            disabled={validationLoading}
+                                        >
+                                            {validationLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
+                                            Start Validation
+                                        </Button>
                                     </Card>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </TabsContent>
 
-                        <TabsContent value="po_snapshot">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>PO Snapshot Pipeline</CardTitle>
-                                    <CardDescription>Trigger the Purchase Order Snapshot pipeline</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex flex-col gap-4">
-                                        <p className="text-sm text-gray-500">
-                                            This functionality is currently under development. Triggering will store raw snapshots from source.
-                                        </p>
-                                        <Button disabled variant="secondary">
-                                            Execute Pipeline (Coming Soon)
-                                        </Button>
-                                    </div>
-                                </CardContent>
+                        <TabsContent value="po_snapshot" className="space-y-6 animate-in fade-in duration-500">
+                            <Card className="border-dashed border-2 flex flex-col items-center justify-center py-32 bg-gray-50/50">
+                                <History className="h-12 w-12 text-gray-300 mb-4" />
+                                <h3 className="text-lg font-bold">PO Snapshot Management</h3>
+                                <p className="text-muted-foreground max-w-sm text-center mt-2 px-8">
+                                    This module is currently being optimized. Visit the legacy dashboard for snapshot operations.
+                                </p>
                             </Card>
                         </TabsContent>
                     </Tabs>

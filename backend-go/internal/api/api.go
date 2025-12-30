@@ -17,14 +17,16 @@ import (
 )
 
 type Services struct {
-	POService          *service.POService
-	StockHealthService *service.StockHealthService
-	StockHealthCache   cache.StockHealthCache
-	DashboardCache     cache.DashboardCache
-	LegacyDBConfig     config.LegacyDatabaseConfig
-	Storage            storage.ObjectStorage
-	PipelineService    *service.PipelineService
-	ValidationRunner   *validation.Runner
+	POService            *service.POService
+	StockHealthService   *service.StockHealthService
+	StockHealthCache     cache.StockHealthCache
+	DashboardCache       cache.DashboardCache
+	LegacyDBConfig       config.LegacyDatabaseConfig
+	Storage              storage.ObjectStorage
+	PipelineService      *service.PipelineService
+	PipelineManagement   *service.PipelineManagementService
+	ValidationRunner     *validation.Runner
+	DefaultDriveFolderID string
 }
 
 func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
@@ -124,17 +126,44 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 		}
 
 		// Pipeline & Validation endpoints
-		if services.PipelineService != nil && services.ValidationRunner != nil {
-			pipelineHandler := handlers.NewPipelineHandler(services.PipelineService, services.ValidationRunner)
+		if services.PipelineService != nil && services.ValidationRunner != nil && services.PipelineManagement != nil {
+			pipelineHandler := handlers.NewPipelineHandler(
+				services.PipelineService,
+				services.ValidationRunner,
+				services.PipelineManagement,
+				services.DefaultDriveFolderID,
+			)
+			sseHandler := handlers.NewSSEHandler(services.PipelineManagement)
 
 			// Pipeline routes
 			pipelineGroup := apiGroup.Group("/pipelines")
 			{
+				// Legacy endpoint for backward compatibility
 				pipelineGroup.POST("/:name/run", pipelineHandler.TriggerPipeline)
+
+				// New configuration-based endpoint
+				pipelineGroup.POST("/:name/configure", pipelineHandler.ConfigureAndRunPipeline)
+
+				// Run management
+				pipelineGroup.GET("/:name/runs", pipelineHandler.ListPipelineRuns)
+				pipelineGroup.GET("/:name/runs/:id", pipelineHandler.GetPipelineRun)
+				pipelineGroup.GET("/:name/runs/:id/summary", pipelineHandler.GetPipelineRunSummary)
+				pipelineGroup.GET("/:name/runs/:id/stores", pipelineHandler.GetStoreProgress)
+
+				// SSE streaming endpoint
+				pipelineGroup.GET("/:name/runs/:id/stream", sseHandler.StreamPipelineProgress)
+
+				// Control endpoints
+				pipelineGroup.POST("/:name/runs/:id/pause", pipelineHandler.PausePipelineRun)
+				pipelineGroup.POST("/:name/runs/:id/resume", pipelineHandler.ResumePipelineRun)
+				pipelineGroup.POST("/:name/runs/:id/retry", pipelineHandler.RetryFailedStores)
 			}
 
+			// Store selection endpoint
+			apiGroup.GET("/stores", pipelineHandler.GetAllStores)
+
 			// Validation routes
-			validationHandler := handlers.NewPipelineHandler(nil, services.ValidationRunner) // Reuse pipeline handler for basic run
+			validationHandler := handlers.NewPipelineHandler(nil, services.ValidationRunner, nil, "") // Validation handler doesn't need folder ID
 			reportHandler := handlers.NewValidationHandler(services.Storage)
 
 			validationGroup := apiGroup.Group("/validation")

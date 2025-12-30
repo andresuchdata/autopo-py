@@ -63,6 +63,7 @@ func main() {
 	// Initialize repository
 	poRepo := postgres.NewPORepository(dbConn)
 	stockHealthRepo := repository.NewStockHealthRepository(dbConn.DB)
+	pipelineRepo := repository.NewPipelineRepository(dbConn.DB.DB)
 
 	// Initialize caches
 	dashboardCache, err := cache.NewDashboardCache(cfg.Cache)
@@ -114,7 +115,11 @@ func main() {
 	// TODO: Load pipeline config from centralized application config
 	// Pipeline input directory (e.g. notebook/data/input)
 	pipelineInputDir := filepath.Join(notebookDir, "data", "input")
-	pipelineService := service.NewPipelineService(dbConn.DB.DB, pipelineConfig, pipelineInputDir, storageClient)
+	credsJSON := os.Getenv("GOOGLE_DRIVE_CREDENTIALS_JSON")
+	pipelineService := service.NewPipelineService(dbConn.DB.DB, pipelineRepo, pipelineConfig, pipelineInputDir, storageClient, credsJSON, cfg.LegacyDatabase)
+
+	// Initialize pipeline management service
+	pipelineManagement := service.NewPipelineManagementService(db)
 
 	// Initialize validation runner
 	validationRunner := validation.NewRunner(notebookDir, storageClient)
@@ -136,14 +141,16 @@ func main() {
 
 	// Initialize HTTP server
 	router := api.NewRouter(&api.Services{
-		POService:          poService,
-		StockHealthService: stockHealthService,
-		PipelineService:    pipelineService,
-		ValidationRunner:   validationRunner,
-		Storage:            storageClient,
-		LegacyDBConfig:     cfg.LegacyDatabase,
-		StockHealthCache:   stockHealthCache,
-		DashboardCache:     dashboardCache,
+		POService:            poService,
+		StockHealthService:   stockHealthService,
+		PipelineService:      pipelineService,
+		PipelineManagement:   pipelineManagement,
+		ValidationRunner:     validationRunner,
+		Storage:              storageClient,
+		LegacyDBConfig:       cfg.LegacyDatabase,
+		StockHealthCache:     stockHealthCache,
+		DashboardCache:       dashboardCache,
+		DefaultDriveFolderID: cfg.GoogleDrive.FolderID,
 	}, cfg.Server.AllowedOrigins)
 
 	srv := &http.Server{

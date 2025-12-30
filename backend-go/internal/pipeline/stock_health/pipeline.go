@@ -193,23 +193,41 @@ func (p *StockHealthPipeline) GetOutputTable() string {
 	return "daily_stock_data"
 }
 
-// GetSnapshotDate extracts the snapshot date from the filename using the configured format.
+// GetSnapshotDate extracts the snapshot date from the filename.
+// Deprecated: preferring batch date from orchestrator/worker
 func (p *StockHealthPipeline) GetSnapshotDate(filename string) (time.Time, error) {
 	base := filepath.Base(filename)
 	base = strings.TrimSuffix(base, filepath.Ext(base))
 
-	// Expect date at the beginning of the filename using InputDateFormat
-	if p.config.InputDateFormat == "" {
-		// Fallback to YYYYMMDD
-		p.config.InputDateFormat = "20060102"
-	}
-
+	// Layout should be something like "20060102"
 	layout := p.config.InputDateFormat
-	if len(base) < len(layout) {
-		return time.Time{}, fmt.Errorf("filename %s does not contain date with layout %s", filename, layout)
+	if layout == "" {
+		layout = "20060102"
 	}
 
-	return time.Parse(layout, base[:len(layout)])
+	// Try splitting by common delimiters to find a date part
+	parts := strings.FieldsFunc(base, func(r rune) bool {
+		return r == '_' || r == '-' || r == ' ' || r == '.'
+	})
+
+	for _, part := range parts {
+		if len(part) == len(layout) {
+			t, err := time.Parse(layout, part)
+			if err == nil {
+				return t, nil
+			}
+		}
+	}
+
+	// Try parsing whole base[:len(layout)] as fallback (old behavior)
+	if len(base) >= len(layout) {
+		t, err := time.Parse(layout, base[:len(layout)])
+		if err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("failed to parse snapshot date from %s", filename)
 }
 
 // Validate performs basic validation on the input file.
@@ -232,14 +250,8 @@ func (p *StockHealthPipeline) Validate(inputFile string) error {
 var _ pipeline.Pipeline = (*StockHealthPipeline)(nil)
 
 // Transform processes a single input file and returns transformed rows in a generic format.
-func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string) (results []pipeline.TransformedRow, err error) {
-	// 1) Parse snapshot date from filename
-	snapshotDate, err := p.GetSnapshotDate(inputFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse snapshot date: %w", err)
-	}
-
-	// 2) Read and clean raw rows
+func (p *StockHealthPipeline) Transform(ctx context.Context, inputFile string, snapshotDate time.Time) (results []pipeline.TransformedRow, err error) {
+	// 1) Read and clean raw rows
 	cleanedRows, header, err := p.readAndCleanCSV(inputFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read/clean file %s: %w", inputFile, err)
