@@ -49,11 +49,12 @@ func (s *LegacyDBSource) GetName() string {
 }
 
 // FetchData queries the legacy database and exports data to CSV files
-func (s *LegacyDBSource) FetchData(ctx context.Context, date time.Time, storeIDs []int) ([]string, error) {
+func (s *LegacyDBSource) FetchData(ctx context.Context, date time.Time, storeIDs []int, storeNames []string) ([]string, error) {
 	logger.Log.Info().
 		Str("source", "legacy_db").
 		Str("date", date.Format("2006-01-02")).
 		Int("store_count", len(storeIDs)).
+		Int("name_count", len(storeNames)).
 		Msg("Fetching data from legacy database")
 
 	var exportedFiles []string

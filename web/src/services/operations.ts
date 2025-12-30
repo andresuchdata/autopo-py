@@ -142,6 +142,16 @@ export const operationsService = {
         return response.data;
     },
 
+    async stopPipelineRun(name: string, runId: number): Promise<{ message: string; run_id: number }> {
+        const response = await api.post<{ message: string; run_id: number }>(`/pipelines/${name}/runs/${runId}/stop`);
+        return response.data;
+    },
+
+    async stopAllPipelines(): Promise<{ message: string }> {
+        const response = await api.post<{ message: string }>('/pipelines/stop-all');
+        return response.data;
+    },
+
     async getAllStores(): Promise<{ stores: Store[] }> {
         const response = await api.get<{ stores: Store[] }>('/stores');
         return response.data;

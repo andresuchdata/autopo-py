@@ -51,6 +51,11 @@ func NewWorkerWithRepo(pipeline Pipeline, config PipelineConfig, repo *repositor
 	return NewWorker(pipeline, config, repo.GetDB())
 }
 
+// SetRowFilter sets a custom row filter for the worker
+func (w *Worker) SetRowFilter(f *RowFilter) {
+	w.rowFilter = f
+}
+
 // ProcessBatch processes a batch of files for a specific date
 func (w *Worker) ProcessBatch(ctx context.Context, date time.Time, files []string) error {
 	log.Printf("[%s] Starting batch processing for %s: %d files",
@@ -196,6 +201,12 @@ func (w *Worker) processFilesParallel(ctx context.Context, run *PipelineRun, job
 
 // processFile processes a single file
 func (w *Worker) processFile(ctx context.Context, run *PipelineRun, job *FileJob) error {
+	// Check if run was cancelled
+	currentRun, err := w.repo.GetRun(ctx, run.ID)
+	if err == nil && currentRun != nil && currentRun.Status == StatusCancelled {
+		return fmt.Errorf("pipeline run %d was cancelled", run.ID)
+	}
+
 	startTime := time.Now()
 
 	inputPath := job.FilePath

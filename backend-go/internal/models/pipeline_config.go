@@ -35,6 +35,7 @@ const (
 	StatusCompleted  PipelineStatus = "completed"
 	StatusFailed     PipelineStatus = "failed"
 	StatusPaused     PipelineStatus = "paused"
+	StatusCancelled  PipelineStatus = "cancelled"
 )
 
 // RetryConfig defines retry behavior for failed jobs

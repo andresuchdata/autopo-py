@@ -330,6 +330,37 @@ func (h *PipelineHandler) RetryFailedStores(c *gin.Context) {
 	})
 }
 
+// StopPipelineRun stops a running pipeline run
+func (h *PipelineHandler) StopPipelineRun(c *gin.Context) {
+	runID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid run ID"})
+		return
+	}
+
+	if err := h.managementService.CancelRun(c.Request.Context(), runID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to stop pipeline run"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Pipeline run stopping...",
+		"run_id":  runID,
+	})
+}
+
+// StopAllRuns stops all active pipeline runs
+func (h *PipelineHandler) StopAllRuns(c *gin.Context) {
+	if err := h.managementService.CancelAllRuns(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to stop all runs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "All active pipeline runs are being stopped",
+	})
+}
+
 // GetAllStores retrieves all stores for selection
 func (h *PipelineHandler) GetAllStores(c *gin.Context) {
 	stores, err := h.managementService.GetAllStores(c.Request.Context())

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/drive"
@@ -43,11 +44,12 @@ func (s *GoogleDriveSource) GetName() string {
 }
 
 // FetchData downloads files from Google Drive for the given date and stores
-func (s *GoogleDriveSource) FetchData(ctx context.Context, date time.Time, storeIDs []int) ([]string, error) {
+func (s *GoogleDriveSource) FetchData(ctx context.Context, date time.Time, storeIDs []int, storeNames []string) ([]string, error) {
 	logger.Log.Info().
 		Str("source", "google_drive").
 		Str("date", date.Format("2006-01-02")).
 		Int("store_count", len(storeIDs)).
+		Int("name_count", len(storeNames)).
 		Msg("Fetching data from Google Drive")
 
 	// 1. Find a subfolder matching the date
@@ -55,8 +57,6 @@ func (s *GoogleDriveSource) FetchData(ctx context.Context, date time.Time, store
 	if err != nil {
 		logger.Log.Warn().Err(err).Msg("Failed to find date-specific subfolder, falling back to parent folder")
 		targetFolderID = s.folderID
-	} else {
-		logger.Log.Info().Str("folder_id", targetFolderID).Msg("Found date-specific subfolder")
 	}
 
 	// 2. List files in the target folder
@@ -65,7 +65,26 @@ func (s *GoogleDriveSource) FetchData(ctx context.Context, date time.Time, store
 		return nil, fmt.Errorf("failed to list files: %w", err)
 	}
 
-	logger.Log.Info().Int("file_count", len(files)).Msg("Found files in Google Drive")
+	// If no CSV files are found, check for an 'input' subfolder
+	hasCSV := false
+	for _, f := range files {
+		if filepath.Ext(f.Name) == ".csv" {
+			hasCSV = true
+			break
+		}
+	}
+
+	if !hasCSV {
+		for _, f := range files {
+			if f.MimeType == "application/vnd.google-apps.folder" && (strings.EqualFold(f.Name, "input")) {
+				subFiles, err := s.driveService.ListFiles(f.ID)
+				if err == nil && len(subFiles) > 0 {
+					files = subFiles
+					break
+				}
+			}
+		}
+	}
 
 	var downloadedFiles []string
 
@@ -76,28 +95,32 @@ func (s *GoogleDriveSource) FetchData(ctx context.Context, date time.Time, store
 			continue
 		}
 
+		// Filter by store names if provided
+		if len(storeNames) > 0 {
+			match := false
+			lowerFileName := strings.ToLower(file.Name)
+			for _, name := range storeNames {
+				if strings.Contains(lowerFileName, strings.ToLower(name)) {
+					match = true
+					break
+				}
+			}
+			if !match {
+				logger.Log.Debug().Str("file", file.Name).Msg("Skipping file (no store name match)")
+				continue
+			}
+		}
+
 		localPath := filepath.Join(s.localDir, file.Name)
-
-		logger.Log.Debug().
-			Str("file", file.Name).
-			Str("local_path", localPath).
-			Msg("Downloading file from Google Drive")
-
 		f, err := os.Create(localPath)
 		if err != nil {
-			logger.Log.Error().
-				Err(err).
-				Str("file", file.Name).
-				Msg("Failed to create local file")
+			logger.Log.Error().Err(err).Str("file", file.Name).Msg("Failed to create local file")
 			continue
 		}
 
 		if err := s.driveService.DownloadFile(file.ID, f); err != nil {
 			f.Close()
-			logger.Log.Error().
-				Err(err).
-				Str("file", file.Name).
-				Msg("Failed to download file")
+			logger.Log.Error().Err(err).Str("file", file.Name).Msg("Failed to download file")
 			continue
 		}
 		f.Close()
@@ -107,13 +130,13 @@ func (s *GoogleDriveSource) FetchData(ctx context.Context, date time.Time, store
 
 	logger.Log.Info().
 		Int("downloaded", len(downloadedFiles)).
-		Int("total", len(files)).
+		Int("total_listed", len(files)).
 		Msg("Completed Google Drive download")
 
 	return downloadedFiles, nil
 }
 
-func (s *GoogleDriveSource) findSubfolderForDate(ctx context.Context, date time.Time) (string, error) {
+func (s *GoogleDriveSource) findSubfolderForDate(_ context.Context, date time.Time) (string, error) {
 	items, err := s.driveService.ListFiles(s.folderID)
 	if err != nil {
 		return "", err

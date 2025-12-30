@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Pause, Play, RotateCcw, Activity, CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
+import { Pause, Play, RotateCcw, Activity, CheckCircle2, XCircle, Clock, Loader2, Square } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState } from 'react';
 import type { StoreProgress } from '@/services/operations';
@@ -170,6 +170,7 @@ function StoreProgressCard({ store }: { store: StoreProgress }) {
         switch (status) {
             case 'completed': return <CheckCircle2 className="h-4 w-4 text-green-600" />;
             case 'failed': return <XCircle className="h-4 w-4 text-red-600" />;
+            case 'cancelled': return <Square className="h-4 w-4 text-gray-500 fill-current" />;
             case 'processing': return <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />;
             default: return <Clock className="h-4 w-4 text-gray-600" />;
         }

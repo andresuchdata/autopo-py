@@ -69,6 +69,7 @@ const (
 	StatusProcessing = models.StatusProcessing
 	StatusCompleted  = models.StatusCompleted
 	StatusFailed     = models.StatusFailed
+	StatusCancelled  = models.StatusCancelled
 )
 
 // FileJob statuses map to pipeline statuses in models

@@ -13,6 +13,21 @@ type RowFilter struct {
 	excludeSuppliers map[string]struct{}
 	includeSKUs      map[string]struct{}
 	excludeSKUs      map[string]struct{}
+	includeStores    map[string]struct{}
+	excludeStores    map[string]struct{}
+}
+
+func NewRowFilter() *RowFilter {
+	return &RowFilter{
+		includeBrands:    make(map[string]struct{}),
+		excludeBrands:    make(map[string]struct{}),
+		includeSuppliers: make(map[string]struct{}),
+		excludeSuppliers: make(map[string]struct{}),
+		includeSKUs:      make(map[string]struct{}),
+		excludeSKUs:      make(map[string]struct{}),
+		includeStores:    make(map[string]struct{}),
+		excludeStores:    make(map[string]struct{}),
+	}
 }
 
 func NewRowFilterFromEnv() *RowFilter {
@@ -29,6 +44,21 @@ func NewRowFilterFromEnv() *RowFilter {
 		return nil
 	}
 	return f
+}
+
+func (f *RowFilter) SetIncludeStores(stores []string) {
+	if len(stores) == 0 {
+		return
+	}
+	if f.includeStores == nil {
+		f.includeStores = make(map[string]struct{})
+	}
+	for _, s := range stores {
+		n := normalize(s)
+		if n != "" {
+			f.includeStores[n] = struct{}{}
+		}
+	}
 }
 
 func (f *RowFilter) FilterRows(rows []TransformedRow) (kept []TransformedRow, dropped int) {
@@ -61,6 +91,12 @@ func (f *RowFilter) allowRow(r TransformedRow) bool {
 	if !matchesIncludeExclude(sku, f.includeSKUs, f.excludeSKUs) {
 		return false
 	}
+
+	store := extractString(r.Data, []string{"store", "Store", "toko", "Toko", "Store Name"})
+	if !matchesIncludeExclude(store, f.includeStores, f.excludeStores) {
+		return false
+	}
+
 	return true
 }
 

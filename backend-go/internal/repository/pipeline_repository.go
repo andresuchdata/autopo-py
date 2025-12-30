@@ -112,14 +112,14 @@ func (r *PipelineRepository) UpdateRunStatus(ctx context.Context, id int64, stat
 func (r *PipelineRepository) UpdateRun(ctx context.Context, run *models.PipelineRun) error {
 	query := `
 		UPDATE pipeline_runs
-		SET status = $1, processed_files = $2, total_rows = $3,
-		    completed_at = $4, error_message = $5, updated_at = NOW()
-		WHERE id = $6
+		SET status = $1, processed_files = $2, total_rows = $3, total_files = $4,
+		    completed_at = $5, error_message = $6, updated_at = NOW()
+		WHERE id = $7
 	`
 
 	_, err := r.db.ExecContext(
 		ctx, query,
-		run.Status, run.ProcessedFiles, run.TotalRows,
+		run.Status, run.ProcessedFiles, run.TotalRows, run.TotalFiles,
 		run.CompletedAt, run.ErrorMessage, run.ID,
 	)
 
@@ -186,6 +186,28 @@ func (r *PipelineRepository) ResumeRun(ctx context.Context, id int64) error {
 	}
 
 	return nil
+}
+
+// CancelRun cancels a running or pending pipeline
+func (r *PipelineRepository) CancelRun(ctx context.Context, id int64) error {
+	query := `
+		UPDATE pipeline_runs
+		SET status = 'cancelled', updated_at = NOW()
+		WHERE id = $1 AND status IN ('pending', 'processing', 'paused')
+	`
+	_, err := r.db.ExecContext(ctx, query, id)
+	return err
+}
+
+// CancelAllActiveRuns cancels all running or pending pipelines
+func (r *PipelineRepository) CancelAllActiveRuns(ctx context.Context) error {
+	query := `
+		UPDATE pipeline_runs
+		SET status = 'cancelled', updated_at = NOW()
+		WHERE status IN ('pending', 'processing', 'paused')
+	`
+	_, err := r.db.ExecContext(ctx, query)
+	return err
 }
 
 // ListRuns lists pipeline runs with optional filters

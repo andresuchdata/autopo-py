@@ -12,7 +12,7 @@ type DataSource interface {
 
 	// FetchData retrieves data for the given date and stores
 	// Returns a list of file paths or data identifiers
-	FetchData(ctx context.Context, date time.Time, storeIDs []int) ([]string, error)
+	FetchData(ctx context.Context, date time.Time, storeIDs []int, storeNames []string) ([]string, error)
 
 	// Validate checks if the data source is properly configured
 	Validate() error

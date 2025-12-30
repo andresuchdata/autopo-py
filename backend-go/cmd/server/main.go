@@ -64,6 +64,7 @@ func main() {
 	poRepo := postgres.NewPORepository(dbConn)
 	stockHealthRepo := repository.NewStockHealthRepository(dbConn.DB)
 	pipelineRepo := repository.NewPipelineRepository(dbConn.DB.DB)
+	storeRepo := repository.NewStoreRepository(dbConn.DB.DB)
 
 	// Initialize caches
 	dashboardCache, err := cache.NewDashboardCache(cfg.Cache)
@@ -111,12 +112,12 @@ func main() {
 	}
 
 	// Initialize pipeline service
-	pipelineConfig := pipeline.DefaultPipelineConfig("default")
+	pipelineConfig := pipeline.DefaultPipelineConfig("stock_health")
 	// TODO: Load pipeline config from centralized application config
 	// Pipeline input directory (e.g. notebook/data/input)
 	pipelineInputDir := filepath.Join(notebookDir, "data", "input")
 	credsJSON := os.Getenv("GOOGLE_DRIVE_CREDENTIALS_JSON")
-	pipelineService := service.NewPipelineService(dbConn.DB.DB, pipelineRepo, pipelineConfig, pipelineInputDir, storageClient, credsJSON, cfg.LegacyDatabase)
+	pipelineService := service.NewPipelineService(dbConn.DB.DB, pipelineRepo, storeRepo, pipelineConfig, pipelineInputDir, storageClient, credsJSON, cfg.LegacyDatabase)
 
 	// Initialize pipeline management service
 	pipelineManagement := service.NewPipelineManagementService(db)

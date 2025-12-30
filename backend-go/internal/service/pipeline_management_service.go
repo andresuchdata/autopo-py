@@ -72,6 +72,16 @@ func (s *PipelineManagementService) UpdateRunStatus(ctx context.Context, id int6
 	return s.pipelineRepo.UpdateRunStatus(ctx, id, status, errorMsg)
 }
 
+// CancelRun cancels a running or pending pipeline
+func (s *PipelineManagementService) CancelRun(ctx context.Context, id int64) error {
+	return s.pipelineRepo.CancelRun(ctx, id)
+}
+
+// CancelAllRuns cancels all running or pending pipelines
+func (s *PipelineManagementService) CancelAllRuns(ctx context.Context) error {
+	return s.pipelineRepo.CancelAllActiveRuns(ctx)
+}
+
 // GetAllStores retrieves all stores
 func (s *PipelineManagementService) GetAllStores(ctx context.Context) ([]repository.Store, error) {
 	return s.storeRepo.GetAllStores(ctx)

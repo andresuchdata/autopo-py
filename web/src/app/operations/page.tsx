@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import {
     Loader2,
     AlertCircle,
+    AlertTriangle,
     Eye,
     Play,
     History,
@@ -20,7 +21,9 @@ import {
     ChevronRight,
     ArrowUpRight,
     RefreshCw,
-    Plus
+    Plus,
+    Square,
+    XCircle
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useRouter } from 'next/navigation';
@@ -37,6 +40,16 @@ import {
     SheetTitle,
     SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function OperationsPage() {
     const router = useRouter();
@@ -51,6 +64,8 @@ export default function OperationsPage() {
     const [validationResult, setValidationResult] = useState<ValidationResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loadingExisting, setLoadingExisting] = useState(false);
+    const [showWarning, setShowWarning] = useState(false);
+    const [pendingConfig, setPendingConfig] = useState<PipelineConfig | null>(null);
 
     const handleViewDetails = (reportKey: string | undefined) => {
         if (!reportKey) return;
@@ -59,7 +74,7 @@ export default function OperationsPage() {
     };
 
     // Auto-fetch existing results when date changes
-    React.useEffect(() => {
+    useEffect(() => {
         const fetchExistingResults = async () => {
             setLoadingExisting(true);
             setError(null);
@@ -97,16 +112,53 @@ export default function OperationsPage() {
     };
 
     const handleConfigureSubmit = async (config: PipelineConfig) => {
+        // Check if a run already exists for this date
+        try {
+            const { runs } = await operationsService.listPipelineRuns('stock_health', 1, 0);
+            const existingRun = runs.find(run =>
+                format(new Date(run.date), 'yyyy-MM-dd') === config.run_date
+            );
+
+            if (existingRun) {
+                // Show warning dialog
+                setPendingConfig(config);
+                setShowWarning(true);
+                return;
+            }
+        } catch (err) {
+            console.error('Failed to check existing runs:', err);
+        }
+
+        // No existing run, proceed directly
+        await executePipeline(config);
+    };
+
+    const executePipeline = async (config: PipelineConfig) => {
         setPipelineLoading(true);
         setError(null);
         try {
             const res = await operationsService.configurePipeline('stock_health', config);
             setActiveRunId(res.run_id);
             setConfigOpen(false);
+            setShowWarning(false);
+            setPendingConfig(null);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Failed to trigger pipeline");
         } finally {
             setPipelineLoading(false);
+        }
+    };
+
+    const handleStopAll = async () => {
+        if (!confirm("Are you sure you want to stop all active pipeline processing?")) return;
+
+        try {
+            await operationsService.stopAllPipelines();
+            setActiveRunId(null);
+            setError(null);
+        } catch (err) {
+            console.error('Failed to stop all runs:', err);
+            setError("Failed to stop processing. Please try again.");
         }
     };
 
@@ -172,27 +224,39 @@ export default function OperationsPage() {
                                         Pipeline Management
                                     </h2>
 
-                                    <Sheet open={configOpen} onOpenChange={setConfigOpen}>
-                                        <SheetTrigger asChild>
-                                            <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 shadow-md gap-2">
-                                                <Plus className="h-4 w-4" />
-                                                Launch Pipeline
-                                            </Button>
-                                        </SheetTrigger>
-                                        <SheetContent className="w-[90%] sm:w-[600px] sm:max-w-[700px] overflow-y-auto">
-                                            <SheetHeader className="mb-6">
-                                                <SheetTitle className="text-2xl">Pipeline Configuration</SheetTitle>
-                                                <SheetDescription>
-                                                    Define the parameters for your next pipeline execution.
-                                                </SheetDescription>
-                                            </SheetHeader>
-                                            <PipelineConfigPanel
-                                                pipelineName="stock_health"
-                                                isLoading={pipelineLoading}
-                                                onSubmit={handleConfigureSubmit}
-                                            />
-                                        </SheetContent>
-                                    </Sheet>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-900/10 gap-2 h-9"
+                                            onClick={handleStopAll}
+                                        >
+                                            <Square className="h-4 w-4 fill-current" />
+                                            Stop All
+                                        </Button>
+
+                                        <Sheet open={configOpen} onOpenChange={setConfigOpen}>
+                                            <SheetTrigger asChild>
+                                                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 shadow-md gap-2 h-9">
+                                                    <Plus className="h-4 w-4" />
+                                                    Launch Pipeline
+                                                </Button>
+                                            </SheetTrigger>
+                                            <SheetContent className="w-[90%] sm:w-[600px] sm:max-w-[700px] overflow-y-auto">
+                                                <SheetHeader className="mb-6">
+                                                    <SheetTitle className="text-2xl">Pipeline Configuration</SheetTitle>
+                                                    <SheetDescription>
+                                                        Define the parameters for your next pipeline execution.
+                                                    </SheetDescription>
+                                                </SheetHeader>
+                                                <PipelineConfigPanel
+                                                    pipelineName="stock_health"
+                                                    isLoading={pipelineLoading}
+                                                    onSubmit={handleConfigureSubmit}
+                                                />
+                                            </SheetContent>
+                                        </Sheet>
+                                    </div>
                                 </div>
 
                                 {/* Live Monitoring */}
@@ -375,6 +439,31 @@ export default function OperationsPage() {
                     </Tabs>
                 </div>
             </main>
+
+            {/* Warning Dialog for Existing Runs */}
+            <AlertDialog open={showWarning} onOpenChange={setShowWarning}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-amber-500" />
+                            Pipeline Run Already Exists
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            A pipeline run already exists for the selected date ({pendingConfig?.run_date}).
+                            Proceeding will reset the existing run and start fresh. All previous progress will be lost.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => pendingConfig && executePipeline(pendingConfig)}
+                            className="bg-amber-500 hover:bg-amber-600"
+                        >
+                            Continue Anyway
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

@@ -148,6 +148,8 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 				pipelineGroup.GET("/:name/runs", pipelineHandler.ListPipelineRuns)
 				pipelineGroup.GET("/:name/runs/:id", pipelineHandler.GetPipelineRun)
 				pipelineGroup.GET("/:name/runs/:id/summary", pipelineHandler.GetPipelineRunSummary)
+				pipelineGroup.POST("/:name/runs/:id/stop", pipelineHandler.StopPipelineRun)
+				pipelineGroup.POST("/stop-all", pipelineHandler.StopAllRuns)
 				pipelineGroup.GET("/:name/runs/:id/stores", pipelineHandler.GetStoreProgress)
 
 				// SSE streaming endpoint

@@ -40,7 +40,7 @@ export function usePipelineSSE({
     const connect = useCallback(() => {
         if (!runId || eventSourceRef.current) return;
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+        const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000/api/v1';
         const url = `${apiUrl}/pipelines/${pipelineName}/runs/${runId}/stream`;
 
         console.log('[SSE] Connecting to:', url);
