@@ -12,7 +12,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Calendar as CalendarIcon, Save } from 'lucide-react';
+import { Loader2, ArrowLeft, Calendar as CalendarIcon, Save, Store as StoreIcon } from 'lucide-react';
 import { getPODetails, updatePOETA, PODetail, POSnapshotItem } from '@/services/api';
 import { getStatusColor } from '@/constants/poStatusColors';
 import {
@@ -67,6 +67,10 @@ export default function PODetailPage() {
         setLoading(true);
         try {
             const data = await getPODetails(decodeURIComponent(poNumber));
+            if (!data) {
+                throw new Error('PO data not found');
+            }
+
             setPO(data);
             setError(null);
 
@@ -173,7 +177,20 @@ export default function PODetailPage() {
                                 {po.status}
                             </span>
                         </h1>
-                        <p className="text-muted-foreground">{po.supplier_name}</p>
+                        <div className="flex flex-col gap-1 mt-1">
+                            <p className="text-muted-foreground flex items-center gap-2">
+                                {po.supplier_name}
+                                {po.store_name && (
+                                    <>
+                                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                                        <span className="flex items-center gap-1.5 text-foreground/80 font-medium">
+                                            <StoreIcon className="h-3.5 w-3.5" />
+                                            {po.store_name}
+                                        </span>
+                                    </>
+                                )}
+                            </p>
+                        </div>
                     </div>
                 </div>
 

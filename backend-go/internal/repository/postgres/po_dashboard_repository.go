@@ -817,6 +817,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT
 				s.po_number,
 				COALESCE(b.name, '') as brand_name,
+				COALESCE(s.supplier_id, 0) as supplier_id,
 				COALESCE(sup.name, '') as supplier_name,
 				s.sku,
 				s.product_name,
@@ -858,6 +859,7 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			SELECT
 				s.po_number,
 				COALESCE(b.name, '') as brand_name,
+				COALESCE(s.supplier_id, 0) as supplier_id,
 				COALESCE(sup.name, '') as supplier_name,
 				s.sku,
 				s.product_name,

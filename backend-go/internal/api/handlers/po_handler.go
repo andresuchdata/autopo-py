@@ -415,6 +415,11 @@ func (h *POHandler) GetPODetails(c *gin.Context) {
 
 	details, err := h.poService.GetPODetails(c.Request.Context(), poNumber)
 	if err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			c.JSON(http.StatusOK, nil)
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch po details", "details": err.Error()})
 		return
 	}
@@ -436,7 +441,20 @@ func (h *POHandler) GetSupplierDetails(c *gin.Context) {
 		return
 	}
 
-	details, err := h.poService.GetSupplierDetails(c.Request.Context(), supplierID)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	var storeID *int64
+	if storeIDStr := c.Query("store_id"); storeIDStr != "" {
+		if id, err := strconv.ParseInt(storeIDStr, 10, 64); err == nil {
+			storeID = &id
+		}
+	}
+
+	search := c.Query("search")
+	status := c.Query("status")
+
+	details, err := h.poService.GetSupplierDetails(c.Request.Context(), supplierID, page, pageSize, storeID, search, status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier details", "details": err.Error()})
 		return

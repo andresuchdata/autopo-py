@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
     Table,
@@ -56,15 +56,22 @@ const excelSafeText = (value: string | number | null) => {
 export default function POStatusPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const pathname = usePathname();
+
     const status = decodeURIComponent(params.status as string);
     const displayStatus = status ? status.charAt(0).toUpperCase() + status.slice(1).toLowerCase() : '';
     const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter } = usePODashboardFilter();
 
     const [items, setItems] = useState<POSnapshotItem[]>([]);
-    const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(20);
-    const [sortField, setSortField] = useState('total_amount');
-    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+    // Get params from URL
+    const page = Number(searchParams.get('page')) || 1;
+    const pageSize = Number(searchParams.get('pageSize')) || 20;
+    const sortField = searchParams.get('sortField') || 'total_amount';
+    const sortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc') || 'desc';
+    const storeIdParam = searchParams.get('store_id');
+
     const [total, setTotal] = useState(0);
     const [grandTotals, setGrandTotals] = useState({
         totalPOS: 0,
@@ -82,21 +89,44 @@ export default function POStatusPage() {
     const currentValueTotal = useMemo(() => items.reduce((sum, item) => sum + (item.total_amount ?? 0), 0), [items]);
     const currentQtyTotal = useMemo(() => items.reduce((sum, item) => sum + (item.po_qty ?? 0), 0), [items]);
 
+    // Helper to update URL params
+    const updateParams = useCallback((newParams: Record<string, string | number>) => {
+        const current = new URLSearchParams(searchParams.toString());
+
+        Object.entries(newParams).forEach(([key, value]) => {
+            current.set(key, String(value));
+        });
+
+        const searchString = current.toString();
+        router.push(`${pathname}?${searchString}`);
+    }, [searchParams, pathname, router]);
+
     const loadItems = useCallback(
-        async (pageValue: number, pageSizeValue: number, sortFieldValue: string, sortDirectionValue: 'asc' | 'desc') => {
+        async () => {
             setLoading(true);
             setError(null);
 
             try {
+                // effectiveStoreIds: URL param takes precedence over context if present
+                // Support both store_id (singular) and store_ids (plural/comma-separated)
+                let effectiveStoreIds = storeIdsFilter;
+
+                const storeIdsParam = searchParams.get('store_ids');
+                if (storeIdsParam) {
+                    effectiveStoreIds = storeIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+                } else if (storeIdParam) {
+                    effectiveStoreIds = [parseInt(storeIdParam)];
+                }
+
                 const response = await getPOSnapshotItems({
                     status,
-                    page: pageValue,
-                    pageSize: pageSizeValue,
-                    sortField: sortFieldValue,
-                    sortDirection: sortDirectionValue,
+                    page,
+                    pageSize,
+                    sortField,
+                    sortDirection,
                     poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
                     releasedDate: releasedDateFilter || undefined,
-                    storeIds: storeIdsFilter,
+                    storeIds: effectiveStoreIds,
                     brandIds: brandIdsFilter,
                     supplierIds: supplierIdsFilter,
                 });
@@ -108,8 +138,6 @@ export default function POStatusPage() {
                     totalValue: response.total_value ?? 0,
                     totalSKUs: response.total_skus ?? 0,
                 });
-                setPage(pageValue);
-                setPageSize(pageSizeValue);
             } catch (err) {
                 console.error('Failed to load PO snapshot items', err);
                 setError('Failed to load purchase orders');
@@ -119,34 +147,33 @@ export default function POStatusPage() {
                 setLoading(false);
             }
         },
-        [status, poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter]
+        [status, page, pageSize, sortField, sortDirection, poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter, storeIdParam]
     );
 
     useEffect(() => {
-        loadItems(1, pageSize, sortField, sortDirection);
-    }, [loadItems, pageSize, sortField, sortDirection]); // Removed status/filter dependencies as loadItems has them and they trigger updates via loadItems ref change
+        loadItems();
+    }, [loadItems]);
 
     const handleSort = (field: string) => {
         if (sortField === field) {
-            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+            updateParams({ sortDirection: sortDirection === 'asc' ? 'desc' : 'asc' });
         } else {
-            setSortField(field);
-            setSortDirection('desc');
+            updateParams({ sortField: field, sortDirection: 'desc' });
         }
     };
 
     const handlePageChange = (nextPage: number) => {
         const clamped = Math.max(1, Math.min(totalPages, nextPage));
-        loadItems(clamped, pageSize, sortField, sortDirection);
+        updateParams({ page: clamped });
     };
 
     const handlePageSizeChange = (size: number) => {
-        setPageSize(size);
-        setPage(1);
+        updateParams({ pageSize: size, page: 1 });
     };
 
     const fetchAllItemsForDownload = useCallback(async () => {
         const dlPageSize = 100;
+        const effectiveStoreIds = storeIdParam ? [parseInt(storeIdParam)] : storeIdsFilter;
         const baseParams = {
             status,
             pageSize: dlPageSize,
@@ -154,7 +181,7 @@ export default function POStatusPage() {
             sortDirection,
             poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
             releasedDate: releasedDateFilter || undefined,
-            storeIds: storeIdsFilter,
+            storeIds: effectiveStoreIds,
             brandIds: brandIdsFilter,
             supplierIds: supplierIdsFilter,
         };
@@ -404,9 +431,20 @@ export default function POStatusPage() {
                                         </TableCell>
                                         <TableCell className="text-sm text-muted-foreground">{item.store_name || '—'}</TableCell>
                                         <TableCell className="text-sm text-muted-foreground">
-                                            {item.supplier_name ? (
-                                                <span className="font-medium text-foreground/90">{item.supplier_name}</span>
-                                            ) : '—'}
+                                            {item.supplier_name && item.supplier_id ? (
+                                                <a
+                                                    href={`/dashboard/supplier/${item.supplier_id}`}
+                                                    className="font-medium text-foreground/90 hover:underline hover:text-primary transition-colors"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        router.push(`/dashboard/supplier/${item.supplier_id}`);
+                                                    }}
+                                                >
+                                                    {item.supplier_name}
+                                                </a>
+                                            ) : (
+                                                item.supplier_name || '—'
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-right font-mono text-sm">{item.po_qty.toLocaleString('id-ID')}</TableCell>
                                         <TableCell className="text-right font-mono text-sm font-medium text-foreground/90">{formatCurrency(item.total_amount)}</TableCell>

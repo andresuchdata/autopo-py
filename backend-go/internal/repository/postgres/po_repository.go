@@ -261,8 +261,48 @@ func (r *poRepository) GetSupplier(ctx context.Context, id int64) (*domain.Suppl
 	return &supplier, nil
 }
 
-func (r *poRepository) GetSupplierPOs(ctx context.Context, supplierID int64) ([]*domain.PODetail, error) {
-	query := `
+func (r *poRepository) GetSupplierPOs(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, search, status string) ([]*domain.PODetail, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	baseQuery := `
+		FROM purchase_orders po
+		LEFT JOIN suppliers s ON po.supplier_id = s.id
+		LEFT JOIN stores st ON po.store_id = st.id
+		LEFT JOIN brands b ON po.brand_id = b.id
+		WHERE po.supplier_id = $1
+	`
+	args := []interface{}{supplierID}
+
+	if storeID != nil {
+		baseQuery += fmt.Sprintf(" AND po.store_id = $%d", len(args)+1)
+		args = append(args, *storeID)
+	}
+
+	if search != "" {
+		baseQuery += fmt.Sprintf(" AND po.po_number ILIKE $%d", len(args)+1)
+		args = append(args, "%"+search+"%")
+	}
+
+	if status != "" && status != "ALL" {
+		if code, ok := domain.ParsePOStatus(status); ok {
+			baseQuery += fmt.Sprintf(" AND po.status = $%d", len(args)+1)
+			args = append(args, code)
+		}
+	}
+
+	countQuery := "SELECT COUNT(*) " + baseQuery
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
+		return nil, 0, fmt.Errorf("failed to count supplier pos: %w", err)
+	}
+
+	dataQuery := `
 		SELECT 
 			po.po_number,
 			po.supplier_id,
@@ -277,25 +317,21 @@ func (r *poRepository) GetSupplierPOs(ctx context.Context, supplierID int64) ([]
 			TO_CHAR(po.po_received_at, 'YYYY-MM-DD HH24:MI:SS') as po_received_at,
 			po.po_qty,
 			po.received_qty,
-			po.total_amount
-		FROM purchase_orders po
-		LEFT JOIN suppliers s ON po.supplier_id = s.id
-		LEFT JOIN stores st ON po.store_id = st.id
-		LEFT JOIN brands b ON po.brand_id = b.id
-		WHERE po.supplier_id = $1
-		ORDER BY po.po_sent_at DESC NULLS LAST, po.created_at DESC
-	`
+			(SELECT COALESCE(SUM(poi.quantity * poi.price), 0) FROM purchase_order_items poi WHERE poi.po_id = po.id) as total_amount
+	` + baseQuery + fmt.Sprintf(" ORDER BY po.po_sent_at DESC NULLS LAST, po.created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+
+	args = append(args, pageSize, offset)
 
 	var pos []*domain.PODetail
-	if err := sqlx.SelectContext(ctx, r.db, &pos, query, supplierID); err != nil {
-		return nil, fmt.Errorf("failed to get supplier pos: %w", err)
+	if err := sqlx.SelectContext(ctx, r.db, &pos, dataQuery, args...); err != nil {
+		return nil, 0, fmt.Errorf("failed to get supplier pos: %w", err)
 	}
 
 	for _, po := range pos {
 		po.Status = domain.POStatusLabel(po.StatusCode)
 	}
 
-	return pos, nil
+	return pos, total, nil
 }
 
 // UpdatePOItemETA updates the ETA for a specific item (SKU) or all items in a PO

@@ -35,6 +35,13 @@ interface PODashboardFilterContextType {
         brandIds: number[];
         supplierIds: number[];
     }>) => void;
+    setFilters: (filters: {
+        poType: POTypeFilter;
+        releasedDate: string;
+        storeIds: number[];
+        brandIds: number[];
+        supplierIds: number[];
+    }) => void;
     clearFilters: () => void;
 }
 
@@ -81,6 +88,27 @@ export const PODashboardFilterProvider: React.FC<{ children: ReactNode }> = ({ c
         setStoreIdsFilter(newStoreIds);
         setBrandIdsFilter(newBrandIds);
         setSupplierIdsFilter(newSupplierIds);
+    };
+
+    const setFilters = (filters: {
+        poType: POTypeFilter;
+        releasedDate: string;
+        storeIds: number[];
+        brandIds: number[];
+        supplierIds: number[];
+    }) => {
+        // Set both applied and draft
+        setPOTypeFilter(filters.poType);
+        setReleasedDateFilter(filters.releasedDate);
+        setStoreIdsFilter(filters.storeIds);
+        setBrandIdsFilter(filters.brandIds);
+        setSupplierIdsFilter(filters.supplierIds);
+
+        setDraftPOTypeFilter(filters.poType);
+        setDraftReleasedDateFilter(filters.releasedDate);
+        setDraftStoreIdsFilter(filters.storeIds);
+        setDraftBrandIdsFilter(filters.brandIds);
+        setDraftSupplierIdsFilter(filters.supplierIds);
     };
 
     const clearFilters = () => {
@@ -130,6 +158,7 @@ export const PODashboardFilterProvider: React.FC<{ children: ReactNode }> = ({ c
                 // Actions
                 applyFilters,
                 applyFiltersWithOverrides,
+                setFilters,
                 clearFilters,
             }}
         >

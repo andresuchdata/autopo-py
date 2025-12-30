@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -353,19 +354,28 @@ func (s *POService) GetPODetails(ctx context.Context, poNumber string) (*domain.
 }
 
 // GetSupplierDetails returns the supplier info and their PO list
-func (s *POService) GetSupplierDetails(ctx context.Context, supplierID int64) (map[string]interface{}, error) {
+func (s *POService) GetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, search, status string) (map[string]interface{}, error) {
 	supplier, err := s.repo.GetSupplier(ctx, supplierID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get supplier: %w", err)
 	}
 
-	pos, err := s.repo.GetSupplierPOs(ctx, supplierID)
+	pos, total, err := s.repo.GetSupplierPOs(ctx, supplierID, page, pageSize, storeID, search, status)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get supplier pos: %w", err)
 	}
 
+	totalPages := 0
+	if pageSize > 0 {
+		totalPages = int(math.Ceil(float64(total) / float64(pageSize)))
+	}
+
 	return map[string]interface{}{
-		"supplier": supplier,
-		"pos":      pos,
+		"supplier":    supplier,
+		"pos":         pos,
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
+		"total_pages": totalPages,
 	}, nil
 }

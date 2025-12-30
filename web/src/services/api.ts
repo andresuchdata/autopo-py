@@ -320,6 +320,7 @@ export interface POSnapshotItem {
     sku: string;
     product_name: string;
     store_name: string;
+    supplier_id: number;
     supplier_name: string | null;
     unit_price: number;
     total_amount: number;
@@ -533,11 +534,38 @@ export interface SupplierDetailResponse {
         updated_at: string;
     };
     pos: PODetail[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
 }
 
-export const getSupplierDetails = async (supplierId: number) => {
+export interface SupplierDetailsParams {
+    supplierId: number;
+    page?: number;
+    pageSize?: number;
+    storeId?: number;
+    search?: string;
+    status?: string;
+}
+
+export const getSupplierDetails = async ({
+    supplierId,
+    page = 1,
+    pageSize = 20,
+    storeId,
+    search,
+    status,
+}: SupplierDetailsParams) => {
     try {
-        const response = await api.get(`/po/suppliers/${supplierId}`);
+        const query = buildQueryParams({
+            page,
+            page_size: pageSize,
+            store_id: storeId,
+            search,
+            status,
+        });
+        const response = await api.get(`/po/suppliers/${supplierId}`, { params: query });
         return response.data as SupplierDetailResponse;
     } catch (error) {
         console.error(`Error fetching supplier details for ${supplierId}:`, error);

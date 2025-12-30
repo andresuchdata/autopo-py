@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { DollarSign, Filter as FilterIcon, Layers, Package, ShoppingCart, RefreshCw } from 'lucide-react';
 import { POStatusCard } from '@/components/dashboard/POStatusCard';
 import { POFunnelChart } from '@/components/dashboard/POFunnelChart';
@@ -10,7 +10,7 @@ import { POAgingTable } from '@/components/dashboard/POAgingTable';
 import { SupplierPerformanceChart } from '@/components/dashboard/SupplierPerformanceChart';
 import { getDashboardSummary, type DashboardSummaryParams, poService, invalidatePOSnapshotCache } from '@/services/api';
 import { Skeleton } from '@/components/ui/skeleton';
-import { usePODashboardFilter } from '@/contexts/PODashboardFilterContext';
+import { usePODashboardFilter, POTypeFilter } from '@/contexts/PODashboardFilterContext';
 import { PODashboardFilter } from '@/components/dashboard/PODashboardFilter';
 import { formatCurrencyIDR, formatNumberID } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
@@ -37,13 +37,127 @@ function PODashboardContent() {
     const [refreshing, setRefreshing] = useState(false);
 
     const isLoading = loading || refreshing;
-    const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter } = usePODashboardFilter();
+    const {
+        poTypeFilter,
+        releasedDateFilter,
+        storeIdsFilter,
+        brandIdsFilter,
+        supplierIdsFilter,
+        setFilters
+    } = usePODashboardFilter();
+
+    // URL Sync Logic
+    const searchParams = useSearchParams();
+    const pathname = usePathname();
+    const [isInitialized, setIsInitialized] = useState(false);
+
+    // 1. Sync URL -> Context (Initial + PopState)
+    useEffect(() => {
+        // Helper to compare current URL params with context state
+        const parseIds = (param: string | null) =>
+            param ? param.split(',').map(Number).filter(n => !isNaN(n)) : [];
+
+        const urlPOType = (searchParams.get('poType') as POTypeFilter) || 'ALL';
+        const urlReleasedDate = searchParams.get('releasedDate') || '';
+        const urlStoreIds = parseIds(searchParams.get('storeIds'));
+        const urlBrandIds = parseIds(searchParams.get('brandIds'));
+        const urlSupplierIds = parseIds(searchParams.get('supplierIds'));
+
+        // Check if context matches URL to avoid infinite loops/unnecessary updates
+        const isDifferent =
+            poTypeFilter !== urlPOType ||
+            releasedDateFilter !== urlReleasedDate ||
+            storeIdsFilter.length !== urlStoreIds.length ||
+            !storeIdsFilter.every((id, i) => id === urlStoreIds[i]) ||
+            brandIdsFilter.length !== urlBrandIds.length ||
+            !brandIdsFilter.every((id, i) => id === urlBrandIds[i]) ||
+            supplierIdsFilter.length !== urlSupplierIds.length ||
+            !supplierIdsFilter.every((id, i) => id === urlSupplierIds[i]);
+
+        if (isDifferent) {
+            setFilters({
+                poType: urlPOType,
+                releasedDate: urlReleasedDate,
+                storeIds: urlStoreIds,
+                brandIds: urlBrandIds,
+                supplierIds: urlSupplierIds
+            });
+        }
+
+        setIsInitialized(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams]); // Only run when URL changes
+
+    // 2. Sync Context -> URL
+    useEffect(() => {
+        if (!isInitialized) return;
+
+        // Helper to compare current URL params with context state
+        const parseIds = (param: string | null) =>
+            param ? param.split(',').map(Number).filter(n => !isNaN(n)) : [];
+
+        const currentPOType = (searchParams.get('poType') as POTypeFilter) || 'ALL';
+        const currentReleasedDate = searchParams.get('releasedDate') || '';
+        const currentStoreIds = parseIds(searchParams.get('storeIds'));
+        const currentBrandIds = parseIds(searchParams.get('brandIds'));
+        const currentSupplierIds = parseIds(searchParams.get('supplierIds'));
+
+        const isSynced =
+            currentPOType === poTypeFilter &&
+            currentReleasedDate === releasedDateFilter &&
+            currentStoreIds.length === storeIdsFilter.length &&
+            currentStoreIds.every((id, i) => id === storeIdsFilter[i]) &&
+            currentBrandIds.length === brandIdsFilter.length &&
+            currentBrandIds.every((id, i) => id === brandIdsFilter[i]) &&
+            currentSupplierIds.length === supplierIdsFilter.length &&
+            currentSupplierIds.every((id, i) => id === supplierIdsFilter[i]);
+
+        if (isSynced) {
+            return;
+        }
+
+        const params = new URLSearchParams(searchParams.toString());
+
+        const updateParam = (key: string, value: string | undefined) => {
+            if (value) params.set(key, value);
+            else params.delete(key);
+        };
+
+        const updateArrayParam = (key: string, ids: number[]) => {
+            if (ids.length > 0) params.set(key, ids.join(','));
+            else params.delete(key);
+        };
+
+        if (poTypeFilter !== 'ALL') params.set('poType', poTypeFilter);
+        else params.delete('poType');
+
+        updateParam('releasedDate', releasedDateFilter);
+        updateArrayParam('storeIds', storeIdsFilter);
+        updateArrayParam('brandIds', brandIdsFilter);
+        updateArrayParam('supplierIds', supplierIdsFilter);
+
+        const newSearch = params.toString();
+        const newUrl = `${pathname}${newSearch ? `?${newSearch}` : ''}`;
+
+        router.push(newUrl);
+    }, [
+        isInitialized,
+        poTypeFilter,
+        releasedDateFilter,
+        storeIdsFilter,
+        brandIdsFilter,
+        supplierIdsFilter,
+        pathname,
+        router,
+        searchParams
+    ]);
 
     useEffect(() => {
         const controller = new AbortController();
         let isActive = true;
 
         const fetchData = async () => {
+            // ... existing fetchData logic ...
             setLoading(true);
             setError(null);
             try {
@@ -245,7 +359,27 @@ function PODashboardContent() {
                                 avgDays={summary.avg_days}
                                 isActive={false}
                                 onClick={() => {
-                                    router.push(`/dashboard/po/status/${encodeURIComponent(summary.status.toLowerCase())}`);
+                                    const params = new URLSearchParams();
+                                    if (storeIdsFilter.length > 0) {
+                                        // Pass as comma-separated values to support multiple stores
+                                        params.set('store_ids', storeIdsFilter.join(','));
+                                    }
+                                    if (brandIdsFilter.length > 0) {
+                                        params.set('brand_ids', brandIdsFilter.join(','));
+                                    }
+                                    if (supplierIdsFilter.length > 0) {
+                                        params.set('supplier_ids', supplierIdsFilter.join(','));
+                                    }
+                                    if (poTypeFilter !== 'ALL') {
+                                        params.set('po_type', poTypeFilter);
+                                    }
+                                    if (releasedDateFilter) {
+                                        params.set('released_date', releasedDateFilter);
+                                    }
+
+                                    const query = params.toString();
+                                    const url = `/dashboard/po/status/${encodeURIComponent(summary.status.toLowerCase())}${query ? `?${query}` : ''}`;
+                                    router.push(url);
                                 }}
                             />
                         ))}
