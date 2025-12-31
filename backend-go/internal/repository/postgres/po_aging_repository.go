@@ -37,17 +37,12 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
             FROM po_snapshots s
             WHERE s.po_number <> '' %s
         ),
-        latest_day AS (
-            SELECT MAX(time::date) AS latest_date
-            FROM filtered_snapshots
-        ),
         latest_snapshot AS (
             SELECT 
                 po_number,
                 sku,
                 MAX(time) AS latest_time
             FROM filtered_snapshots
-            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         ),
         po_aging AS (

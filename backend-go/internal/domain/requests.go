@@ -1,5 +1,11 @@
 package domain
 
+// ResetETARequest represents the request to reset (clear) ETA for a PO item or all items
+type ResetETARequest struct {
+	PONumber string  `json:"po_number"`
+	SKU      *string `json:"sku"` // If nil, reset all items in PO
+}
+
 // UpdateETARequest represents the request to update ETA for a PO item or all items in a PO
 type UpdateETARequest struct {
 	PONumber string  `json:"po_number"`
@@ -24,9 +30,9 @@ type PODetail struct {
 	POApprovedAt *string          `json:"po_approved_at" db:"po_approved_at"`
 	POArrivedAt  *string          `json:"po_arrived_at" db:"po_arrived_at"`
 	POReceivedAt *string          `json:"po_received_at" db:"po_received_at"`
-	Items       []POSnapshotItem `json:"items"`
-	TotalItems  int              `json:"total_items"`
-	Page        int              `json:"page"`
-	PageSize    int              `json:"page_size"`
-	TotalPages  int              `json:"total_pages"`
+	Items        []POSnapshotItem `json:"items"`
+	TotalItems   int              `json:"total_items"`
+	Page         int              `json:"page"`
+	PageSize     int              `json:"page_size"`
+	TotalPages   int              `json:"total_pages"`
 }

@@ -21,7 +21,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Loader2, ArrowLeft, Calendar as CalendarIcon, Save, Store as StoreIcon, Search, ArrowUpDown, RefreshCw, X } from 'lucide-react';
-import { getPODetails, updatePOETA, PODetail, invalidatePODetailsCache } from '@/services/api';
+import { getPODetails, updatePOETA, resetPOETA, PODetail, invalidatePODetailsCache } from '@/services/api';
 import { getStatusColor } from '@/constants/poStatusColors';
 import {
     Dialog,
@@ -36,18 +36,10 @@ import {
     Pagination,
     PaginationContent,
     PaginationItem,
-    PaginationLink,
     PaginationNext,
     PaginationPrevious,
 } from "@/components/ui/pagination";
-import { format } from 'date-fns';
 import { useDebounce } from 'use-debounce';
-
-interface PODetailPageProps {
-    params: {
-        poNumber: string;
-    };
-}
 
 const formatCurrency = (value: number) =>
     new Intl.NumberFormat('id-ID', {
@@ -157,8 +149,8 @@ export default function PODetailPage() {
             // Clear selection on page/filter change naturally happened if items changes
             setSelectedSkus(new Set());
 
-        } catch (err: any) {
-            setError(err.message || 'Failed to load PO details');
+        } catch (err) {
+            setError((err as Error).message || 'Failed to load PO details');
         } finally {
             setLoading(false);
         }
@@ -188,19 +180,22 @@ export default function PODetailPage() {
 
     const saveSingleETA = async (sku: string) => {
         const eta = editingItems[sku];
-        if (!eta) return;
 
         try {
-            await updatePOETA(poNumber, eta, sku);
+            if (!eta) {
+                // If empty date, call reset endpoint
+                await resetPOETA(poNumber, sku);
+            } else {
+                await updatePOETA(poNumber, eta, sku);
+            }
             // Refresh to ensure consistency
             loadPO();
-        } catch (err: any) {
-            alert(`Failed to update ETA: ${err.message}`);
+        } catch (err) {
+            alert(`Failed to update ETA: ${(err as Error).message}`);
         }
     };
 
     const handleBulkApply = async () => {
-        if (!bulkETA) return;
         setIsBulkUpdating(true);
         try {
             await updatePOETA(poNumber, bulkETA);
@@ -208,8 +203,8 @@ export default function PODetailPage() {
             setIsBulkOpen(false);
             loadPO();
             alert('ETA updated for all items');
-        } catch (err: any) {
-            alert(`Failed to bulk update ETA: ${err.message}`);
+        } catch (err) {
+            alert(`Failed to bulk update ETA: ${(err as Error).message}`);
         } finally {
             setIsBulkUpdating(false);
         }
@@ -220,7 +215,7 @@ export default function PODetailPage() {
         try {
             await invalidatePODetailsCache(poNumber);
             await loadPO();
-        } catch (err: any) {
+        } catch (err) {
             console.error('Failed to refresh PO details:', err);
             // Optionally show a toast here
         } finally {
@@ -228,8 +223,7 @@ export default function PODetailPage() {
         }
     };
 
-    // Selection Logic
-    const items = po?.items || [];
+    const items = useMemo(() => po?.items || [], [po]);
     const isEditable = po && ['Sent', 'Approved'].includes(po.status);
 
     const isAllSelected = useMemo(() => {
@@ -266,7 +260,7 @@ export default function PODetailPage() {
     };
 
     const handlePartialApply = async () => {
-        if (!selectionModeETA || selectedSkus.size === 0) return;
+        if (selectedSkus.size === 0) return;
         setIsBulkUpdating(true);
         try {
             const promises = Array.from(selectedSkus).map(sku => updatePOETA(poNumber, selectionModeETA, sku));
@@ -276,8 +270,8 @@ export default function PODetailPage() {
             setSelectedSkus(new Set()); // Clear selection
             loadPO();
             alert(`ETA updated for ${selectedSkus.size} items`);
-        } catch (err: any) {
-            alert(`Failed to update some items: ${err.message}`);
+        } catch (err) {
+            alert(`Failed to update some items: ${(err as Error).message}`);
             loadPO(); // Reload anyway
         } finally {
             setIsBulkUpdating(false);
@@ -355,11 +349,9 @@ export default function PODetailPage() {
                                 placeholder="Select ETA"
                                 className="w-[140px] h-8 text-xs"
                             />
-                            {selectionModeETA && (
-                                <Button size="sm" onClick={handlePartialApply} disabled={isBulkUpdating} className="h-8">
-                                    {isBulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
-                                </Button>
-                            )}
+                            <Button size="sm" onClick={handlePartialApply} disabled={isBulkUpdating} className="h-8">
+                                {isBulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
+                            </Button>
                             <Button
                                 size="sm"
                                 variant="ghost"
@@ -416,7 +408,7 @@ export default function PODetailPage() {
                                         </div>
                                         <DialogFooter>
                                             <Button variant="outline" onClick={() => setIsBulkOpen(false)}>Cancel</Button>
-                                            <Button onClick={handleBulkApply} disabled={isBulkUpdating || !bulkETA}>
+                                            <Button onClick={handleBulkApply} disabled={isBulkUpdating}>
                                                 {isBulkUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                                 Apply
                                             </Button>

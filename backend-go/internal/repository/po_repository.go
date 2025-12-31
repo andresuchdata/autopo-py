@@ -28,8 +28,9 @@ type PORepository interface {
 	GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.POSnapshotItemsResponse, error)
 	GetSupplierPOItems(ctx context.Context, supplierID int64, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPOItemsResponse, error)
 	GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string, filter *domain.DashboardFilter) (*domain.POAgingResponse, error)
-	GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPerformanceResponse, error)
+	GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.SupplierPerformanceResponse, error)
 	UpdatePOItemETA(ctx context.Context, poNumber string, sku *string, eta string) error
+	ResetPOItemETA(ctx context.Context, poNumber string, sku *string) error
 	GetSupplier(ctx context.Context, id int64) (*domain.Supplier, error)
 	GetSupplierPOs(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string) ([]*domain.PODetail, int, error)
 	GetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string) (*domain.PODetail, error)
