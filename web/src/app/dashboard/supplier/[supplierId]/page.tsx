@@ -147,12 +147,12 @@ export default function SupplierDetailPage() {
             });
 
             setSupplier(data.supplier);
-            setPos(data.pos);
+            setPos(data.pos || []); // Ensure pos is always an array, even if API returns null
             setMetadata({
-                total: data.total,
-                page: data.page,
-                pageSize: data.page_size,
-                totalPages: data.total_pages,
+                total: data.total || 0,
+                page: data.page || 1,
+                pageSize: data.page_size || 20,
+                totalPages: data.total_pages || 0,
             });
             setError(null);
         } catch (err: any) {
@@ -316,7 +316,7 @@ export default function SupplierDetailPage() {
                 </Table>
             </div>
 
-            {metadata.totalPages > 1 && (
+            {metadata && metadata.totalPages > 1 && (
                 <Pagination>
                     <PaginationContent>
                         <PaginationItem>
@@ -326,7 +326,7 @@ export default function SupplierDetailPage() {
                             />
                         </PaginationItem>
 
-                        {Array.from({ length: Math.min(5, metadata.totalPages) }).map((_, i) => {
+                        {Array.from({ length: Math.min(5, metadata.totalPages || 0) }).map((_, i) => {
                             // Logic to show window of pages around current page
                             let p = page;
                             if (metadata.totalPages <= 5) {
