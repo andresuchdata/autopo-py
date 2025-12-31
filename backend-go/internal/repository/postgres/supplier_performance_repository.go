@@ -36,18 +36,26 @@ func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pa
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 1)
 
 	cte := fmt.Sprintf(`
-        WITH valid_pos AS (
+        WITH raw_pos AS (
+            SELECT *
+            FROM po_snapshots
+            WHERE po_number <> ''
+            AND po_sent_at > '2000-01-01' 
+            AND po_arrived_at > '2000-01-01'
+            %s
+        ),
+        latest_day AS (
+            SELECT MAX(time::date) AS latest_date FROM raw_pos
+        ),
+        valid_pos AS (
             SELECT 
                 po_number, 
                 supplier_id, 
                 po_sent_at, 
                 po_arrived_at,
                 ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
-            FROM po_snapshots
-            WHERE po_number <> ''
-            AND po_sent_at > '2000-01-01' 
-            AND po_arrived_at > '2000-01-01'
-            %s
+            FROM raw_pos
+            WHERE time::date = (SELECT latest_date FROM latest_day)
         ),
         latest_pos AS (
             SELECT DISTINCT ON (po_number)
@@ -153,17 +161,25 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
 	orderClause := fmt.Sprintf("ORDER BY %s %s", sortColumn, sortDirection)
 
 	query := fmt.Sprintf(`
-        WITH latest_snapshot AS (
-            SELECT
-                po_number,
-                sku,
-                MAX(time) AS latest_time
+        WITH raw_snapshots AS (
+            SELECT *
             FROM po_snapshots
             WHERE supplier_id = $1
               AND po_sent_at IS NOT NULL
               AND po_arrived_at IS NOT NULL
               AND po_sent_at > '2000-01-01'
               AND po_arrived_at > '2000-01-01'
+        ),
+        latest_day AS (
+            SELECT MAX(time::date) AS latest_date FROM raw_snapshots
+        ),
+        latest_snapshot AS (
+            SELECT
+                po_number,
+                sku,
+                MAX(time) AS latest_time
+            FROM raw_snapshots
+            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         )
         SELECT
@@ -179,7 +195,7 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
             TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') AS po_arrived_at,
             TO_CHAR(s.po_received_at, 'YYYY-MM-DD HH24:MI:SS') AS po_received_at,
             NULL AS eta
-        FROM po_snapshots s
+        FROM raw_snapshots s
         JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
         LEFT JOIN brands b ON s.brand_id = b.id
         LEFT JOIN suppliers sup ON s.supplier_id = sup.id
@@ -192,21 +208,29 @@ func (r *poRepository) GetSupplierPOItems(ctx context.Context, supplierID int64,
     `, orderClause)
 
 	countQuery := `
-        WITH latest_snapshot AS (
-            SELECT
-                po_number,
-                sku,
-                MAX(time) AS latest_time
+        WITH raw_snapshots AS (
+            SELECT *
             FROM po_snapshots
             WHERE supplier_id = $1
               AND po_sent_at IS NOT NULL
               AND po_arrived_at IS NOT NULL
               AND po_sent_at > '2000-01-01'
               AND po_arrived_at > '2000-01-01'
+        ),
+        latest_day AS (
+            SELECT MAX(time::date) AS latest_date FROM raw_snapshots
+        ),
+        latest_snapshot AS (
+            SELECT
+                po_number,
+                sku,
+                MAX(time) AS latest_time
+            FROM raw_snapshots
+            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         )
         SELECT COUNT(*)
-        FROM po_snapshots s
+        FROM raw_snapshots s
         JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
         WHERE s.po_sent_at IS NOT NULL
           AND s.po_arrived_at IS NOT NULL
@@ -258,7 +282,18 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
 
 	query := fmt.Sprintf(`
-            WITH valid_pos AS (
+            WITH raw_pos AS (
+                SELECT *
+                FROM po_snapshots s
+                WHERE s.po_number <> '' 
+                  AND s.po_sent_at > '2000-01-01' 
+                  AND s.po_arrived_at > '2000-01-01'
+                  %s
+            ),
+            latest_day AS (
+                SELECT MAX(time::date) AS latest_date FROM raw_pos
+            ),
+            valid_pos AS (
                 SELECT
                     po_number,
                     sku,
@@ -266,11 +301,8 @@ func (r *poRepository) getSupplierPerformanceWithFilter(ctx context.Context, fil
                     po_sent_at,
                     po_arrived_at,
                     ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
-                FROM po_snapshots s
-                WHERE s.po_number <> '' 
-                  AND s.po_sent_at > '2000-01-01' 
-                  AND s.po_arrived_at > '2000-01-01'
-                  %s
+                FROM raw_pos
+                WHERE time::date = (SELECT latest_date FROM latest_day)
             ),
             po_level AS (
                 SELECT

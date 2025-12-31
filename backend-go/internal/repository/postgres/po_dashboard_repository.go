@@ -184,12 +184,17 @@ func (r *poRepository) getLatestSnapshotTotals(ctx context.Context, filter *doma
             FROM po_snapshots s
             WHERE s.po_number <> '' %s
         ),
+        latest_day AS (
+            SELECT MAX(time::date) AS latest_date
+            FROM filtered_snapshots
+        ),
         latest_snapshot AS (
             SELECT 
                 po_number,
                 sku,
                 MAX(time) AS latest_time
             FROM filtered_snapshots
+            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         ),
         current_snapshots AS (
@@ -389,12 +394,17 @@ func (r *poRepository) getStatusSummariesByStatusColumnV2(ctx context.Context, f
             FROM po_snapshots s
             WHERE s.po_number <> '' %s
         ),
+        latest_day AS (
+            SELECT MAX(time::date) AS latest_date
+            FROM filtered_snapshots
+        ),
         latest_snapshot AS (
             SELECT 
                 po_number,
                 sku,
                 MAX(time) AS latest_time
             FROM filtered_snapshots
+            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         ),
         po_values AS (
@@ -573,12 +583,17 @@ func (r *poRepository) getPOAgingWithFilterV2(ctx context.Context, filter *domai
             FROM po_snapshots s
             WHERE s.po_number <> '' %s
         ),
+        latest_day AS (
+            SELECT MAX(time::date) AS latest_date
+            FROM filtered_snapshots
+        ),
         latest_snapshot AS (
             SELECT 
                 po_number,
                 sku,
                 MAX(time) AS latest_time
             FROM filtered_snapshots
+            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         ),
         po_aging AS (
@@ -789,14 +804,19 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			FROM po_snapshots s
 			WHERE s.po_number <> '' %s
 		),
-		latest_snapshot AS (
-			SELECT 
-				po_number,
-				sku,
-				MAX(time) AS latest_time
-			FROM filtered_snapshots s
-			GROUP BY po_number, sku
-		),
+        latest_day AS (
+            SELECT MAX(time::date) AS latest_date
+            FROM filtered_snapshots
+        ),
+        latest_snapshot AS (
+            SELECT 
+                po_number,
+                sku,
+                MAX(time) AS latest_time
+            FROM filtered_snapshots s
+            WHERE time::date = (SELECT latest_date FROM latest_day)
+            GROUP BY po_number, sku
+        ),
 		paginated_items AS (
 			SELECT
 				s.po_number,
@@ -851,20 +871,26 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 
 	var countQuery string
 	countQuery = fmt.Sprintf(`
-		WITH latest_snapshot AS (
+		WITH latest_day AS (
+			SELECT MAX(time::date) AS latest_date
+			FROM po_snapshots s
+			WHERE s.po_number <> '' %s
+		),
+		latest_snapshot AS (
 			SELECT 
 				po_number,
 				sku,
 				MAX(time) AS latest_time
 			FROM po_snapshots s
 			WHERE s.po_number <> '' %s
+			  AND time::date = (SELECT latest_date FROM latest_day)
 			GROUP BY po_number, sku
 		)
 		SELECT COUNT(*)
 		FROM po_snapshots s
 		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
 		WHERE (%s) = $1%s
-	`, filterClause, statusExpr, filterClause)
+	`, filterClause, filterClause, statusExpr, filterClause)
 
 	countArgs := []interface{}{statusCode}
 	countArgs = append(countArgs, filterArgs...)
@@ -886,12 +912,17 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 			FROM po_snapshots s
 			WHERE s.po_number <> '' %s
 		),
+		latest_day AS (
+			SELECT MAX(time::date) AS latest_date
+			FROM filtered_snapshots
+		),
 		latest_snapshot AS (
 			SELECT 
 				po_number,
 				sku,
 				MAX(time) AS latest_time
 			FROM filtered_snapshots s
+			WHERE time::date = (SELECT latest_date FROM latest_day)
 			GROUP BY po_number, sku
 		)
 		SELECT 
