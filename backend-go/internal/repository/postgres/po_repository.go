@@ -380,6 +380,47 @@ func (r *poRepository) UpdatePOItemETA(ctx context.Context, poNumber string, sku
 	return nil
 }
 
+// ResetPOItemETA resets (clears) the ETA for a specific item (SKU) or all items in a PO
+func (r *poRepository) ResetPOItemETA(ctx context.Context, poNumber string, sku *string) error {
+	var query string
+	var args []interface{}
+
+	if sku != nil && *sku != "" {
+		// Update specific SKU
+		query = `
+			UPDATE purchase_order_items poi
+			SET eta = NULL, updated_at = NOW()
+			FROM purchase_orders po
+			WHERE poi.po_id = po.id AND po.po_number = $1 AND poi.sku = $2
+		`
+		args = []interface{}{poNumber, *sku}
+	} else {
+		// Update all items in PO
+		query = `
+			UPDATE purchase_order_items poi
+			SET eta = NULL, updated_at = NOW()
+			FROM purchase_orders po
+			WHERE poi.po_id = po.id AND po.po_number = $1
+		`
+		args = []interface{}{poNumber}
+	}
+
+	result, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to reset eta: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("no items updated, po not found or sku mismatch")
+	}
+
+	return nil
+}
+
 // GetPODetails retrieves detailed information for a PO including its items
 // GetPODetails retrieves detailed information for a PO including its items with pagination/search/sort
 func (r *poRepository) GetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string) (*domain.PODetail, error) {

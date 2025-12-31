@@ -562,6 +562,16 @@ export const updatePOETA = async (poNumber: string, eta: string, sku?: string) =
     }
 };
 
+export const resetPOETA = async (poNumber: string, sku?: string) => {
+    try {
+        const response = await api.post('/po/eta/reset', { po_number: poNumber, sku });
+        return response.data;
+    } catch (error) {
+        console.error('Error resetting PO ETA:', error);
+        throw error;
+    }
+};
+
 export interface PODetail {
     po_number: string;
     supplier_id: number;

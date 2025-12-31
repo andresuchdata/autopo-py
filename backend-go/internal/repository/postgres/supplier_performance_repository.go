@@ -12,7 +12,7 @@ import (
 
 const defaultSupplierPerformanceLimit = 10
 
-func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPerformanceResponse, error) {
+func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.SupplierPerformanceResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -33,7 +33,9 @@ func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pa
 		sortDirection = "asc"
 	}
 
-	cte := `
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "", 1)
+
+	cte := fmt.Sprintf(`
         WITH valid_pos AS (
             SELECT 
                 po_number, 
@@ -45,6 +47,7 @@ func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pa
             WHERE po_number <> ''
             AND po_sent_at > '2000-01-01' 
             AND po_arrived_at > '2000-01-01'
+            %s
         ),
         latest_pos AS (
             SELECT DISTINCT ON (po_number)
@@ -55,7 +58,7 @@ func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pa
             FROM valid_pos
             WHERE rn = 1
         )
-    `
+    `, filterClause)
 
 	countQuery := cte + `
         SELECT COUNT(DISTINCT s.id)
@@ -76,15 +79,16 @@ func (r *poRepository) GetSupplierPerformanceItems(ctx context.Context, page, pa
         GROUP BY s.id, s.name
         ORDER BY %s %s, s.name ASC
         LIMIT $%d OFFSET $%d
-    `, sortCol, sortDirection, 1, 2)
+    `, sortCol, sortDirection, len(filterArgs)+1, len(filterArgs)+2)
 
 	var total int
-	if err := r.db.GetContext(ctx, &total, countQuery); err != nil {
+	if err := r.db.GetContext(ctx, &total, countQuery, filterArgs...); err != nil {
 		return nil, err
 	}
 
+	args := append(filterArgs, pageSize, offset)
 	var rows []domain.SupplierPerformance
-	if err := sqlx.SelectContext(ctx, r.db, &rows, query, pageSize, offset); err != nil {
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query, args...); err != nil {
 		return nil, err
 	}
 

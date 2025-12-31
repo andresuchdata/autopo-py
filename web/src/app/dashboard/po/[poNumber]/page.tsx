@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
     Select,
     SelectContent,
@@ -19,8 +20,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ArrowLeft, Calendar as CalendarIcon, Save, Store as StoreIcon, Search, ArrowUpDown, RefreshCw } from 'lucide-react';
-import { getPODetails, updatePOETA, PODetail, invalidatePODetailsCache } from '@/services/api';
+import { Loader2, ArrowLeft, Calendar as CalendarIcon, Save, Store as StoreIcon, Search, ArrowUpDown, RefreshCw, X } from 'lucide-react';
+import { getPODetails, updatePOETA, resetPOETA, PODetail, invalidatePODetailsCache } from '@/services/api';
 import { getStatusColor } from '@/constants/poStatusColors';
 import {
     Dialog,
@@ -35,18 +36,10 @@ import {
     Pagination,
     PaginationContent,
     PaginationItem,
-    PaginationLink,
     PaginationNext,
     PaginationPrevious,
 } from "@/components/ui/pagination";
-import { format } from 'date-fns';
 import { useDebounce } from 'use-debounce';
-
-interface PODetailPageProps {
-    params: {
-        poNumber: string;
-    };
-}
 
 const formatCurrency = (value: number) =>
     new Intl.NumberFormat('id-ID', {
@@ -66,6 +59,40 @@ const formatDate = (value: string | null) => {
     });
 };
 
+// Simple Checkbox Component
+const Checkbox = ({
+    checked,
+    indeterminate,
+    onChange,
+    disabled = false
+}: {
+    checked: boolean;
+    indeterminate?: boolean;
+    onChange: (checked: boolean) => void;
+    disabled?: boolean;
+}) => {
+    const ref = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (ref.current) {
+            ref.current.indeterminate = !!indeterminate;
+        }
+    }, [indeterminate]);
+
+    return (
+        <div className="flex items-center justify-center p-1">
+            <input
+                type="checkbox"
+                ref={ref}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                checked={checked}
+                onChange={(e) => onChange(e.target.checked)}
+                disabled={disabled}
+            />
+        </div>
+    );
+};
+
 export default function PODetailPage() {
     const params = useParams();
     const poNumber = params.poNumber as string;
@@ -78,6 +105,10 @@ export default function PODetailPage() {
     const [isBulkOpen, setIsBulkOpen] = useState(false);
     const [editingItems, setEditingItems] = useState<Record<string, string>>({}); // sku -> eta
     const [refreshing, setRefreshing] = useState(false);
+
+    // Selection State
+    const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
+    const [selectionModeETA, setSelectionModeETA] = useState('');
 
     // Pagination & Filter state
     const [page, setPage] = useState(1);
@@ -115,8 +146,11 @@ export default function PODetailPage() {
             });
             setEditingItems(initialEdits);
 
-        } catch (err: any) {
-            setError(err.message || 'Failed to load PO details');
+            // Clear selection on page/filter change naturally happened if items changes
+            setSelectedSkus(new Set());
+
+        } catch (err) {
+            setError((err as Error).message || 'Failed to load PO details');
         } finally {
             setLoading(false);
         }
@@ -146,19 +180,22 @@ export default function PODetailPage() {
 
     const saveSingleETA = async (sku: string) => {
         const eta = editingItems[sku];
-        if (!eta) return;
 
         try {
-            await updatePOETA(poNumber, eta, sku);
+            if (!eta) {
+                // If empty date, call reset endpoint
+                await resetPOETA(poNumber, sku);
+            } else {
+                await updatePOETA(poNumber, eta, sku);
+            }
             // Refresh to ensure consistency
             loadPO();
-        } catch (err: any) {
-            alert(`Failed to update ETA: ${err.message}`);
+        } catch (err) {
+            alert(`Failed to update ETA: ${(err as Error).message}`);
         }
     };
 
     const handleBulkApply = async () => {
-        if (!bulkETA) return;
         setIsBulkUpdating(true);
         try {
             await updatePOETA(poNumber, bulkETA);
@@ -166,8 +203,8 @@ export default function PODetailPage() {
             setIsBulkOpen(false);
             loadPO();
             alert('ETA updated for all items');
-        } catch (err: any) {
-            alert(`Failed to bulk update ETA: ${err.message}`);
+        } catch (err) {
+            alert(`Failed to bulk update ETA: ${(err as Error).message}`);
         } finally {
             setIsBulkUpdating(false);
         }
@@ -178,11 +215,66 @@ export default function PODetailPage() {
         try {
             await invalidatePODetailsCache(poNumber);
             await loadPO();
-        } catch (err: any) {
+        } catch (err) {
             console.error('Failed to refresh PO details:', err);
             // Optionally show a toast here
         } finally {
             setRefreshing(false);
+        }
+    };
+
+    const items = useMemo(() => po?.items || [], [po]);
+    const isEditable = po && ['Sent', 'Approved'].includes(po.status);
+
+    const isAllSelected = useMemo(() => {
+        if (items.length === 0) return false;
+        return items.every(item => selectedSkus.has(item.sku));
+    }, [items, selectedSkus]);
+
+    const isIndeterminate = useMemo(() => {
+        if (items.length === 0) return false;
+        const selectedCount = items.filter(item => selectedSkus.has(item.sku)).length;
+        return selectedCount > 0 && selectedCount < items.length;
+    }, [items, selectedSkus]);
+
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            const newSet = new Set(selectedSkus);
+            items.forEach(item => newSet.add(item.sku));
+            setSelectedSkus(newSet);
+        } else {
+            const newSet = new Set(selectedSkus);
+            items.forEach(item => newSet.delete(item.sku));
+            setSelectedSkus(newSet);
+        }
+    };
+
+    const handleSelectRow = (sku: string, checked: boolean) => {
+        const newSet = new Set(selectedSkus);
+        if (checked) {
+            newSet.add(sku);
+        } else {
+            newSet.delete(sku);
+        }
+        setSelectedSkus(newSet);
+    };
+
+    const handlePartialApply = async () => {
+        if (selectedSkus.size === 0) return;
+        setIsBulkUpdating(true);
+        try {
+            const promises = Array.from(selectedSkus).map(sku => updatePOETA(poNumber, selectionModeETA, sku));
+            await Promise.all(promises);
+
+            setSelectionModeETA('');
+            setSelectedSkus(new Set()); // Clear selection
+            loadPO();
+            alert(`ETA updated for ${selectedSkus.size} items`);
+        } catch (err) {
+            alert(`Failed to update some items: ${(err as Error).message}`);
+            loadPO(); // Reload anyway
+        } finally {
+            setIsBulkUpdating(false);
         }
     };
 
@@ -206,8 +298,6 @@ export default function PODetailPage() {
     }
 
     const statusColor = getStatusColor(po.status);
-    const isEditable = ['Sent', 'Approved'].includes(po.status);
-    const items = po.items || [];
     const totalPages = po.total_pages || 1;
     const totalItems = po.total_items || items.length;
 
@@ -246,57 +336,87 @@ export default function PODetailPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <div className="relative w-full md:w-[300px]">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Search SKU or product..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="pl-9 h-9"
-                        />
-                    </div>
-                    <Button
-                        onClick={handleRefresh}
-                        disabled={refreshing || loading}
-                        variant="outline"
-                        size="sm"
-                        className="gap-2 h-9"
-                    >
-                        <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                        {refreshing ? 'Refreshing...' : 'Refresh Data'}
-                    </Button>
-                    {isEditable && (
-                        <Dialog open={isBulkOpen} onOpenChange={setIsBulkOpen}>
-                            <DialogTrigger asChild>
-                                <Button size="sm" className="whitespace-nowrap h-9">
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    Bulk ETA
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[400px]">
-                                <DialogHeader>
-                                    <DialogTitle>Bulk Apply ETA</DialogTitle>
-                                    <DialogDescription>
-                                        Set ETA for all items in this PO.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <div className="py-4">
-                                    <Input
-                                        type="date"
-                                        value={bulkETA}
-                                        onChange={(e) => setBulkETA(e.target.value)}
-                                    />
-                                </div>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setIsBulkOpen(false)}>Cancel</Button>
-                                    <Button onClick={handleBulkApply} disabled={isBulkUpdating || !bulkETA}>
-                                        {isBulkUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Apply
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
+                <div className="flex items-center gap-3 w-full md:w-auto h-9">
+                    {/* Header Actions - Switch based on selection */}
+                    {selectedSkus.size > 0 ? (
+                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4 duration-300 bg-primary/5 rounded-md p-1 px-2 border border-primary/20">
+                            <div className="text-sm font-medium text-primary whitespace-nowrap px-2 border-r border-primary/20 mr-2">
+                                {selectedSkus.size} Selected
+                            </div>
+                            <DatePicker
+                                value={selectionModeETA}
+                                onChange={(val) => setSelectionModeETA(val)}
+                                placeholder="Select ETA"
+                                className="w-[140px] h-8 text-xs"
+                            />
+                            <Button size="sm" onClick={handlePartialApply} disabled={isBulkUpdating} className="h-8">
+                                {isBulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setSelectedSkus(new Set())}
+                                className="h-8 px-2 hover:bg-primary/10 text-muted-foreground hover:text-primary"
+                                title="Clear Selection"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="relative w-full md:w-[300px]">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search SKU or product..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
+                            <Button
+                                onClick={handleRefresh}
+                                disabled={refreshing || loading}
+                                variant="outline"
+                                size="sm"
+                                className="gap-2 h-9"
+                            >
+                                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                                {refreshing ? 'Refreshing...' : 'Refresh Data'}
+                            </Button>
+                            {isEditable && (
+                                <Dialog open={isBulkOpen} onOpenChange={setIsBulkOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button size="sm" className="whitespace-nowrap h-9">
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            Bulk ETA
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-[400px]">
+                                        <DialogHeader>
+                                            <DialogTitle>Bulk Apply ETA</DialogTitle>
+                                            <DialogDescription>
+                                                Set ETA for all items in this PO.
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="py-4">
+                                            <DatePicker
+                                                value={bulkETA}
+                                                onChange={(val) => setBulkETA(val)}
+                                                placeholder="Select ETA"
+                                                className="w-full"
+                                            />
+                                        </div>
+                                        <DialogFooter>
+                                            <Button variant="outline" onClick={() => setIsBulkOpen(false)}>Cancel</Button>
+                                            <Button onClick={handleBulkApply} disabled={isBulkUpdating}>
+                                                {isBulkUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                                Apply
+                                            </Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
@@ -331,6 +451,15 @@ export default function PODetailPage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            <TableHead className="w-[40px] text-center">
+                                {isEditable && (
+                                    <Checkbox
+                                        checked={isAllSelected}
+                                        indeterminate={isIndeterminate}
+                                        onChange={handleSelectAll}
+                                    />
+                                )}
+                            </TableHead>
                             <TableHead
                                 className="cursor-pointer hover:bg-muted/50 transition-colors w-[150px]"
                                 onClick={() => handleSort('sku')}
@@ -367,13 +496,21 @@ export default function PODetailPage() {
                     <TableBody>
                         {items.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={isEditable ? 7 : 6} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={isEditable ? 8 : 7} className="h-32 text-center text-muted-foreground">
                                     {search ? 'No items match your search.' : 'No items found.'}
                                 </TableCell>
                             </TableRow>
                         ) : (
                             items.map((item) => (
-                                <TableRow key={item.sku}>
+                                <TableRow key={item.sku} data-state={selectedSkus.has(item.sku) ? "selected" : undefined}>
+                                    <TableCell className="text-center">
+                                        {isEditable && (
+                                            <Checkbox
+                                                checked={selectedSkus.has(item.sku)}
+                                                onChange={(checked) => handleSelectRow(item.sku, checked)}
+                                            />
+                                        )}
+                                    </TableCell>
                                     <TableCell className="font-medium text-xs">{item.sku}</TableCell>
                                     <TableCell className="text-sm max-w-[300px]" title={item.product_name}>
                                         <div className="truncate">{item.product_name}</div>
@@ -383,11 +520,11 @@ export default function PODetailPage() {
                                     <TableCell className="text-right text-sm font-medium">{formatCurrency(item.total_amount)}</TableCell>
                                     {isEditable && (
                                         <TableCell>
-                                            <Input
-                                                type="date"
+                                            <DatePicker
                                                 value={editingItems[item.sku] || ''}
-                                                onChange={(e) => handleETAChange(item.sku, e.target.value)}
-                                                className="h-8 text-xs"
+                                                onChange={(val) => handleETAChange(item.sku, val)}
+                                                placeholder="Set ETA"
+                                                className="h-8 w-[140px] text-xs px-2"
                                             />
                                         </TableCell>
                                     )}

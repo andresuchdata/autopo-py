@@ -37,17 +37,12 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
             FROM po_snapshots s
             WHERE s.po_number <> '' %s
         ),
-        latest_day AS (
-            SELECT MAX(time::date) AS latest_date
-            FROM filtered_snapshots
-        ),
         latest_snapshot AS (
             SELECT 
                 po_number,
                 sku,
                 MAX(time) AS latest_time
             FROM filtered_snapshots
-            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         ),
         po_aging AS (
@@ -58,7 +53,15 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
                 COALESCE(fs.supplier_id, 0) as supplier_id,
                 COALESCE(SUM(fs.quantity_ordered), 0) as po_qty,
                 COALESCE(SUM(fs.total_amount), 0) as total_amount,
-                COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - fs.time))/86400)::int, 0) as days_in_status,
+                COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - CASE 
+                    WHEN COALESCE(fs.status, -1) = 0 THEN COALESCE(fs.po_released_at, fs.time)
+                    WHEN COALESCE(fs.status, -1) = 1 THEN COALESCE(fs.po_approved_at, fs.time)
+                    WHEN COALESCE(fs.status, -1) = 2 THEN COALESCE(fs.po_approved_at, fs.time)
+                    WHEN COALESCE(fs.status, -1) = 3 THEN COALESCE(fs.po_received_at, fs.time)
+                    WHEN COALESCE(fs.status, -1) = 4 THEN COALESCE(fs.po_sent_at, fs.time)
+                    WHEN COALESCE(fs.status, -1) = 5 THEN COALESCE(fs.po_arrived_at, fs.time)
+                    ELSE fs.time
+                END))/86400)::int, 0) as days_in_status,
                 MAX(fs.po_released_at) as po_released_at,
                 MAX(fs.po_sent_at) as po_sent_at,
                 MAX(fs.po_arrived_at) as po_arrived_at,
@@ -137,7 +140,7 @@ func (r *poRepository) getPOAgingWithFilter(ctx context.Context, filter *domain.
 	return results, nil
 }
 
-func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string) (*domain.POAgingResponse, error) {
+func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string, filter *domain.DashboardFilter) (*domain.POAgingResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -163,43 +166,82 @@ func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, 
 		sortDirection = "desc"
 	}
 
+	// Capture filter args
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 1)
+
 	var statusClause string
-	var args []interface{}
-	idx := 1
+	// Start args index after filterArgs
+	idx := len(filterArgs) + 1
+	var statusArgs []interface{}
+
 	if status != "" && status != "ALL" {
 		statusClause = fmt.Sprintf("AND pd.status_code = $%d", idx)
 		sc, _ := domain.ParsePOStatus(status)
-		args = append(args, sc)
+		statusArgs = append(statusArgs, sc)
 		idx++
 	}
 
-	cte := `
-        WITH latest_snapshot AS (
-            SELECT po_number, sku, status, quantity_ordered, COALESCE(total_amount, 0) as total_amount, 
-                   po_released_at, po_sent_at, po_approved_at, po_arrived_at, po_received_at, supplier_id, NULL::timestamptz as eta,
-                   GREATEST(COALESCE(po_released_at, 'epoch'), COALESCE(po_sent_at, 'epoch'), COALESCE(po_approved_at, 'epoch'), 
-                            COALESCE(po_arrived_at, 'epoch'), COALESCE(po_received_at, 'epoch'), time) as last_status_change_at
-            FROM (
-                SELECT *, ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY time DESC) as rn
-                FROM po_snapshots WHERE po_number <> ''
-            ) s WHERE rn = 1
+	cte := fmt.Sprintf(`
+        WITH filtered_snapshots AS (
+            SELECT *
+            FROM po_snapshots s
+            WHERE s.po_number <> '' %s
+        ),
+        latest_snapshot AS (
+            SELECT 
+                po_number, 
+                sku, 
+                MAX(time) as latest_time
+            FROM filtered_snapshots
+            GROUP BY po_number, sku
+        ),
+        current_snapshots AS (
+            SELECT fs.* 
+            FROM filtered_snapshots fs
+            JOIN latest_snapshot ls ON fs.po_number = ls.po_number AND fs.sku = ls.sku AND fs.time = ls.latest_time
         ),
         po_aggregate AS (
-            SELECT po_number, MAX(status) as status_code, SUM(quantity_ordered) as po_qty, SUM(total_amount) as total_amount,
-                   MAX(po_released_at) as po_released_at, MAX(po_sent_at) as po_sent_at, MAX(po_approved_at) as po_approved_at, 
-                   MAX(po_arrived_at) as po_arrived_at, MAX(po_received_at) as po_received_at, MAX(last_status_change_at) as last_status_change_at,
-                   MAX(supplier_id) as supplier_id, MAX(eta) as eta
-            FROM latest_snapshot GROUP BY po_number
+            SELECT 
+                po_number, 
+                COALESCE(MAX(status), -1) as status_code, 
+                SUM(quantity_ordered) as po_qty, 
+                SUM(total_amount) as total_amount,
+                MAX(po_released_at) as po_released_at, 
+                MAX(po_sent_at) as po_sent_at, 
+                MAX(po_approved_at) as po_approved_at, 
+                MAX(po_arrived_at) as po_arrived_at, 
+                MAX(po_received_at) as po_received_at, 
+                MAX(time) as latest_snapshot_time,
+                MAX(supplier_id) as supplier_id, 
+                MAX(eta) as eta
+            FROM current_snapshots 
+            GROUP BY po_number
         ),
         po_days AS (
-            SELECT po_number, status_code, supplier_id, po_qty, total_amount,
-                   po_released_at, po_sent_at, po_arrived_at, po_received_at, eta,
-                   COALESCE(EXTRACT(DAY FROM (NOW() - COALESCE(CASE status_code  
-                        WHEN 2 THEN po_released_at WHEN 3 THEN po_sent_at WHEN 4 THEN po_approved_at 
-                        WHEN 5 THEN po_arrived_at WHEN 6 THEN po_received_at ELSE last_status_change_at END, last_status_change_at, NOW()))), 0)::int as days_in_status
-            FROM po_aggregate WHERE status_code < 6
+            SELECT 
+                po_number, 
+                status_code, 
+                supplier_id, 
+                po_qty, 
+                total_amount,
+                po_released_at, 
+                po_sent_at, 
+                po_arrived_at, 
+                po_received_at, 
+                eta,
+                COALESCE(EXTRACT(DAY FROM (NOW() - CASE 
+                    WHEN status_code = 0 THEN COALESCE(po_released_at, latest_snapshot_time)
+                    WHEN status_code = 1 THEN COALESCE(po_approved_at, latest_snapshot_time)
+                    WHEN status_code = 2 THEN COALESCE(po_approved_at, latest_snapshot_time)
+                    WHEN status_code = 3 THEN COALESCE(po_received_at, latest_snapshot_time)
+                    WHEN status_code = 4 THEN COALESCE(po_sent_at, latest_snapshot_time)
+                    WHEN status_code = 5 THEN COALESCE(po_arrived_at, latest_snapshot_time)
+                    ELSE latest_snapshot_time
+                END)), 0)::int as days_in_status
+            FROM po_aggregate 
+            WHERE status_code IN (0,1,2,3,4,5,9)
         )
-    `
+    `, filterClause)
 
 	countQuery := cte + fmt.Sprintf(` SELECT COUNT(*) FROM po_days pd WHERE 1=1 %s`, statusClause)
 
@@ -213,12 +255,19 @@ func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, 
         LIMIT $%d OFFSET $%d
     `, statusClause, sortCol, sortDirection, idx, idx+1)
 
+	// Combine args: filterArgs + statusArgs + limit + offset
+	// For count: filterArgs + statusArgs
+	countAllArgs := append(filterArgs, statusArgs...)
+
 	var total int
-	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
+	if err := r.db.GetContext(ctx, &total, countQuery, countAllArgs...); err != nil {
 		return nil, err
 	}
 
-	qArgs := append(args, pageSize, offset)
+	queryAllArgs := append(countAllArgs, pageSize, offset)
+
+	// ... rest of function remains same
+
 	type rowType struct {
 		poAgingRow
 		SupplierName string     `db:"supplier_name"`
@@ -229,7 +278,7 @@ func (r *poRepository) GetPOAgingItems(ctx context.Context, page, pageSize int, 
 		ETA          *time.Time `db:"eta"`
 	}
 	var rows []rowType
-	if err := sqlx.SelectContext(ctx, r.db, &rows, query, qArgs...); err != nil {
+	if err := sqlx.SelectContext(ctx, r.db, &rows, query, queryAllArgs...); err != nil {
 		return nil, err
 	}
 

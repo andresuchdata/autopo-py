@@ -363,6 +363,7 @@ func runStockHealthPipeline(c *cli.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to list local files: %w", err)
 		}
+		log.Printf("Found %d existing files locally", len(localFiles))
 	} else {
 		// Drive mode: download from Google Drive
 		folderID := c.String("drive-folder-id")
@@ -396,6 +397,7 @@ func runStockHealthPipeline(c *cli.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to download files from Drive: %w", err)
 		}
+		log.Printf("Downloaded %d files from Google Drive", len(localFiles))
 	}
 
 	if len(localFiles) == 0 {
@@ -417,8 +419,6 @@ func runStockHealthPipeline(c *cli.Context) error {
 		}
 		localFiles = filtered
 	}
-
-	log.Printf("Downloaded %d files from Google Drive", len(localFiles))
 
 	// Load special SKUs that are top 100 per store
 	dataRoot := filepath.Join("data", "pipeline", "stock_health")

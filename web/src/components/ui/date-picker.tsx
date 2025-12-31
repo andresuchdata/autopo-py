@@ -11,6 +11,7 @@ interface DatePickerProps {
   onChange: (value: string | "") => void;
   placeholder?: string;
   labelFormatter?: (date: Date) => string;
+  className?: string;
 }
 
 const formatDateLabel = (date: Date) => {
@@ -21,7 +22,7 @@ const formatDateLabel = (date: Date) => {
   });
 };
 
-export function DatePicker({ value, onChange, placeholder = "Select date", labelFormatter = formatDateLabel }: DatePickerProps) {
+export function DatePicker({ value, onChange, placeholder = "Select date", labelFormatter = formatDateLabel, className }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const [month, setMonth] = React.useState<Date>(() => {
     if (value) {
@@ -105,7 +106,7 @@ export function DatePicker({ value, onChange, placeholder = "Select date", label
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className="w-44 justify-between h-10 px-3 bg-background border-border hover:bg-muted/50 rounded-lg font-normal"
+          className={cn("w-44 justify-between h-10 px-3 bg-background border-border hover:bg-muted/50 rounded-lg font-normal", className)}
         >
           <span className={cn(!selectedDate && "text-muted-foreground")}>{triggerLabel}</span>
           <div className="flex items-center gap-1">

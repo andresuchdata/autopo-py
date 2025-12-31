@@ -294,7 +294,7 @@ func (h *POHandler) GetPOAging(c *gin.Context) {
 		sortDirection := c.DefaultQuery("sort_direction", "desc")
 		status := c.Query("status")
 
-		response, err := h.poService.GetPOAgingItems(c.Request.Context(), page, pageSize, sortField, sortDirection, status)
+		response, err := h.poService.GetPOAgingItems(c.Request.Context(), page, pageSize, sortField, sortDirection, status, h.parseDashboardFilter(c))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch aging items"})
 			return
@@ -323,7 +323,7 @@ func (h *POHandler) GetSupplierPerformance(c *gin.Context) {
 		sortField := c.DefaultQuery("sort_field", "avg_lead_time")
 		sortDirection := c.DefaultQuery("sort_direction", "asc")
 
-		response, err := h.poService.GetSupplierPerformanceItems(c.Request.Context(), page, pageSize, sortField, sortDirection)
+		response, err := h.poService.GetSupplierPerformanceItems(c.Request.Context(), page, pageSize, sortField, sortDirection, h.parseDashboardFilter(c))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier performance items"})
 			return
@@ -425,6 +425,27 @@ func (h *POHandler) UpdatePOItemETA(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "eta updated successfully"})
+}
+
+// ResetPOItemETA resets the ETA for a PO item
+func (h *POHandler) ResetPOItemETA(c *gin.Context) {
+	var req domain.ResetETARequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if req.PONumber == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "po_number is required"})
+		return
+	}
+
+	if err := h.poService.ResetPOItemETA(c.Request.Context(), req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to reset eta", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "eta reset successfully"})
 }
 
 // GetPODetails returns the detailed view of a PO

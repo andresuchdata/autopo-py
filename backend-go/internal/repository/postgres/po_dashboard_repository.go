@@ -184,17 +184,12 @@ func (r *poRepository) getLatestSnapshotTotals(ctx context.Context, filter *doma
             FROM po_snapshots s
             WHERE s.po_number <> '' %s
         ),
-        latest_day AS (
-            SELECT MAX(time::date) AS latest_date
-            FROM filtered_snapshots
-        ),
         latest_snapshot AS (
             SELECT 
                 po_number,
                 sku,
                 MAX(time) AS latest_time
             FROM filtered_snapshots
-            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         ),
         current_snapshots AS (
@@ -394,17 +389,12 @@ func (r *poRepository) getStatusSummariesByStatusColumnV2(ctx context.Context, f
             FROM po_snapshots s
             WHERE s.po_number <> '' %s
         ),
-        latest_day AS (
-            SELECT MAX(time::date) AS latest_date
-            FROM filtered_snapshots
-        ),
         latest_snapshot AS (
             SELECT 
                 po_number,
                 sku,
                 MAX(time) AS latest_time
             FROM filtered_snapshots
-            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         ),
         po_values AS (
@@ -583,17 +573,12 @@ func (r *poRepository) getPOAgingWithFilterV2(ctx context.Context, filter *domai
             FROM po_snapshots s
             WHERE s.po_number <> '' %s
         ),
-        latest_day AS (
-            SELECT MAX(time::date) AS latest_date
-            FROM filtered_snapshots
-        ),
         latest_snapshot AS (
             SELECT 
                 po_number,
                 sku,
                 MAX(time) AS latest_time
             FROM filtered_snapshots
-            WHERE time::date = (SELECT latest_date FROM latest_day)
             GROUP BY po_number, sku
         ),
         po_aging AS (
@@ -788,7 +773,6 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 
 	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 2)
 	statusExpr := "COALESCE(s.status, -1)"
-	useLatestDay := filter == nil || filter.ReleasedDate == ""
 
 	if filterClause != "" {
 		log.Debug().
@@ -799,136 +783,64 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	}
 
 	var query string
-	if useLatestDay {
-		query = fmt.Sprintf(`
-			WITH filtered_snapshots AS (
-				SELECT *
-				FROM po_snapshots s
-				WHERE s.po_number <> '' %s
-			),
-			latest_day AS (
-			    SELECT MAX(time::date) AS latest_date
-			    FROM filtered_snapshots
-			),
-			latest_snapshot AS (
-				SELECT 
-					po_number,
-					sku,
-					MAX(time) AS latest_time
-				FROM filtered_snapshots s
-				WHERE s.time::date = (SELECT latest_date FROM latest_day)
-				GROUP BY po_number, sku
-			)
-			SELECT
-				s.po_number,
-				COALESCE(b.name, '') as brand_name,
-				COALESCE(s.supplier_id, 0) as supplier_id,
-				COALESCE(sup.name, '') as supplier_name,
-				s.sku,
-				s.product_name,
-				COALESCE(st.name, '') as store_name,
-				s.unit_price,
-				s.total_amount,
-				s.quantity_ordered as po_qty,
-				s.quantity_received as received_qty,
-				TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
-				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
-				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
-				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
-				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
-				TO_CHAR(s.eta, 'YYYY-MM-DD') as eta
+	query = fmt.Sprintf(`
+		WITH filtered_snapshots AS (
+			SELECT *
 			FROM po_snapshots s
-			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			LEFT JOIN brands b ON s.brand_id = b.id
-			LEFT JOIN suppliers sup ON s.supplier_id = sup.id
-			LEFT JOIN stores st ON s.store_id = st.id
-			WHERE (%s) = $1%s
-			ORDER BY %s %s
-			LIMIT $%d OFFSET $%d
-		`, filterClause, statusExpr, filterClause, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
-	} else {
-		query = fmt.Sprintf(`
-			WITH filtered_snapshots AS (
-				SELECT *
-				FROM po_snapshots s
-				WHERE s.po_number <> '' %s
-			),
-			latest_snapshot AS (
-				SELECT 
-					po_number,
-					sku,
-					MAX(time) AS latest_time
-				FROM filtered_snapshots s
-				GROUP BY po_number, sku
-			)
-			SELECT
-				s.po_number,
-				COALESCE(b.name, '') as brand_name,
-				COALESCE(s.supplier_id, 0) as supplier_id,
-				COALESCE(sup.name, '') as supplier_name,
-				s.sku,
-				s.product_name,
-				COALESCE(st.name, '') as store_name,
-				s.unit_price,
-				s.total_amount,
-				s.quantity_ordered as po_qty,
-				s.quantity_received as received_qty,
-				TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
-				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
-				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
-				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
-				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
-				TO_CHAR(s.eta, 'YYYY-MM-DD') as eta
-			FROM po_snapshots s
-			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			LEFT JOIN brands b ON s.brand_id = b.id
-			LEFT JOIN suppliers sup ON s.supplier_id = sup.id
-			LEFT JOIN stores st ON s.store_id = st.id
-			WHERE (%s) = $1%s
-			ORDER BY %s %s
-			LIMIT $%d OFFSET $%d
-		`, filterClause, statusExpr, filterClause, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
-	}
+			WHERE s.po_number <> '' %s
+		),
+		latest_snapshot AS (
+			SELECT 
+				po_number,
+				sku,
+				MAX(time) AS latest_time
+			FROM filtered_snapshots s
+			GROUP BY po_number, sku
+		)
+		SELECT
+			s.po_number,
+			COALESCE(b.name, '') as brand_name,
+			COALESCE(s.supplier_id, 0) as supplier_id,
+			COALESCE(sup.name, '') as supplier_name,
+			s.sku,
+			s.product_name,
+			COALESCE(st.name, '') as store_name,
+			s.unit_price,
+			s.total_amount,
+			s.quantity_ordered as po_qty,
+			s.quantity_received as received_qty,
+			TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
+			TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
+			TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
+			TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
+			TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
+			TO_CHAR(s.eta, 'YYYY-MM-DD') as eta
+		FROM po_snapshots s
+		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+		LEFT JOIN brands b ON s.brand_id = b.id
+		LEFT JOIN suppliers sup ON s.supplier_id = sup.id
+		LEFT JOIN stores st ON s.store_id = st.id
+		WHERE (%s) = $1%s
+		ORDER BY %s %s
+		LIMIT $%d OFFSET $%d
+	`, filterClause, statusExpr, filterClause, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
 
 	var countQuery string
-	if useLatestDay {
-		countQuery = fmt.Sprintf(`
-			WITH latest_day AS (
-			    SELECT MAX(time::date) AS latest_date
-			    FROM po_snapshots
-			),
-			latest_snapshot AS (
-				SELECT 
-					po_number,
-					sku,
-					MAX(time) AS latest_time
-				FROM po_snapshots s
-				JOIN latest_day d ON s.time::date = d.latest_date
-				WHERE s.po_number <> '' %s
-				GROUP BY po_number, sku
-			)
-			SELECT COUNT(*)
+	countQuery = fmt.Sprintf(`
+		WITH latest_snapshot AS (
+			SELECT 
+				po_number,
+				sku,
+				MAX(time) AS latest_time
 			FROM po_snapshots s
-			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE (%s) = $1%s
-		`, filterClause, statusExpr, filterClause)
-	} else {
-		countQuery = fmt.Sprintf(`
-			WITH latest_snapshot AS (
-				SELECT 
-					po_number,
-					sku,
-					MAX(time) AS latest_time
-				FROM po_snapshots s
-				WHERE s.po_number <> '' %s
-				GROUP BY po_number, sku
-			)
-			SELECT COUNT(*)
-			FROM po_snapshots s
-			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE (%s) = $1%s
-		`, filterClause, statusExpr, filterClause)
-	}
+			WHERE s.po_number <> '' %s
+			GROUP BY po_number, sku
+		)
+		SELECT COUNT(*)
+		FROM po_snapshots s
+		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+		WHERE (%s) = $1%s
+	`, filterClause, statusExpr, filterClause)
 
 	countArgs := []interface{}{statusCode}
 	countArgs = append(countArgs, filterArgs...)
@@ -944,62 +856,30 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	queryArgs = append(queryArgs, pageSize, offset)
 
 	var totalsQuery string
-	if useLatestDay {
-		totalsQuery = fmt.Sprintf(`
-			WITH filtered_snapshots AS (
-				SELECT *
-				FROM po_snapshots s
-				WHERE s.po_number <> '' %s
-			),
-			latest_day AS (
-			    SELECT MAX(time::date) AS latest_date
-			    FROM filtered_snapshots
-			),
-			latest_snapshot AS (
-				SELECT 
-					po_number,
-					sku,
-					MAX(time) AS latest_time
-				FROM filtered_snapshots s
-				WHERE s.time::date = (SELECT latest_date FROM latest_day)
-				GROUP BY po_number, sku
-			)
-			SELECT 
-				COUNT(*) as total_items,
-				COUNT(DISTINCT s.po_number) as total_pos,
-				COALESCE(SUM(s.quantity_ordered), 0) as total_qty,
-				COALESCE(SUM(s.total_amount), 0) as total_value,
-				COUNT(DISTINCT s.sku) as total_skus
+	totalsQuery = fmt.Sprintf(`
+		WITH filtered_snapshots AS (
+			SELECT *
 			FROM po_snapshots s
-			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-			WHERE (%s) = $1 %s
-		`, filterClause, statusExpr, filterClause)
-	} else {
-		totalsQuery = fmt.Sprintf(`
-			WITH filtered_snapshots AS (
-				SELECT *
-				FROM po_snapshots s
-				WHERE s.po_number <> '' %s
-			),
-			latest_snapshot AS (
-				SELECT 
-					po_number,
-					sku,
-					MAX(time) AS latest_time
-				FROM filtered_snapshots s
-				GROUP BY po_number, sku
-			)
+			WHERE s.po_number <> '' %s
+		),
+		latest_snapshot AS (
 			SELECT 
-				COUNT(*) as total_items,
-				COUNT(DISTINCT s.po_number) as total_pos,
-				COALESCE(SUM(s.quantity_ordered), 0) as total_qty,
-				COALESCE(SUM(s.total_amount), 0) as total_value,
-				COUNT(DISTINCT s.sku) as total_skus
-			FROM po_snapshots s
-			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-		    WHERE (%s) = $1 %s
-		`, filterClause, statusExpr, filterClause)
-	}
+				po_number,
+				sku,
+				MAX(time) AS latest_time
+			FROM filtered_snapshots s
+			GROUP BY po_number, sku
+		)
+		SELECT 
+			COUNT(*) as total_items,
+			COUNT(DISTINCT s.po_number) as total_pos,
+			COALESCE(SUM(s.quantity_ordered), 0) as total_qty,
+			COALESCE(SUM(s.total_amount), 0) as total_value,
+			COUNT(DISTINCT s.sku) as total_skus
+		FROM po_snapshots s
+		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+		WHERE (%s) = $1 %s
+	`, filterClause, statusExpr, filterClause)
 
 	var totals poSnapshotTotals
 	if err := r.db.GetContext(ctx, &totals, totalsQuery, countArgs...); err != nil {

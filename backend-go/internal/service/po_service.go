@@ -385,8 +385,8 @@ func (s *POService) GetPOSnapshotItems(ctx context.Context, statusCode int, page
 }
 
 // GetPOAgingItems returns paginated aging items
-func (s *POService) GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string) (*domain.POAgingResponse, error) {
-	return s.repo.GetPOAgingItems(ctx, page, pageSize, sortField, sortDirection, status)
+func (s *POService) GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string, filter *domain.DashboardFilter) (*domain.POAgingResponse, error) {
+	return s.repo.GetPOAgingItems(ctx, page, pageSize, sortField, sortDirection, status, filter)
 }
 
 // GetSupplierPOItems returns PO entries filtered by supplier
@@ -395,13 +395,24 @@ func (s *POService) GetSupplierPOItems(ctx context.Context, supplierID int64, pa
 }
 
 // GetSupplierPerformanceItems returns paginated supplier performance items
-func (s *POService) GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPerformanceResponse, error) {
-	return s.repo.GetSupplierPerformanceItems(ctx, page, pageSize, sortField, sortDirection)
+func (s *POService) GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.SupplierPerformanceResponse, error) {
+	return s.repo.GetSupplierPerformanceItems(ctx, page, pageSize, sortField, sortDirection, filter)
 }
 
 // UpdatePOItemETA updates the ETA for a PO item
 func (s *POService) UpdatePOItemETA(ctx context.Context, req domain.UpdateETARequest) error {
-	return s.repo.UpdatePOItemETA(ctx, req.PONumber, req.SKU, req.ETA)
+	if err := s.repo.UpdatePOItemETA(ctx, req.PONumber, req.SKU, req.ETA); err != nil {
+		return err
+	}
+	return s.dashboardCache.InvalidatePODetails(ctx, req.PONumber)
+}
+
+// ResetPOItemETA resets the ETA for a PO item
+func (s *POService) ResetPOItemETA(ctx context.Context, req domain.ResetETARequest) error {
+	if err := s.repo.ResetPOItemETA(ctx, req.PONumber, req.SKU); err != nil {
+		return err
+	}
+	return s.dashboardCache.InvalidatePODetails(ctx, req.PONumber)
 }
 
 // GetPODetails returns the detailed view of a PO
