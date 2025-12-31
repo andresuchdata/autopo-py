@@ -59,6 +59,8 @@ export default function POStatusPage() {
     const searchParams = useSearchParams();
     const pathname = usePathname();
 
+    const currentUrl = searchParams.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
+
     const status = decodeURIComponent(params.status as string);
     const displayStatus = status ? status.charAt(0).toUpperCase() + status.slice(1).toLowerCase() : '';
     const { poTypeFilter, releasedDateFilter, storeIdsFilter, brandIdsFilter, supplierIdsFilter } = usePODashboardFilter();
@@ -118,6 +120,18 @@ export default function POStatusPage() {
                     effectiveStoreIds = [parseInt(storeIdParam)];
                 }
 
+                let effectiveSupplierIds = supplierIdsFilter;
+                const supplierIdsParam = searchParams.get('supplier_ids');
+                if (supplierIdsParam) {
+                    effectiveSupplierIds = supplierIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+                }
+
+                let effectiveBrandIds = brandIdsFilter;
+                const brandIdsParam = searchParams.get('brand_ids');
+                if (brandIdsParam) {
+                    effectiveBrandIds = brandIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+                }
+
                 const response = await getPOSnapshotItems({
                     status,
                     page,
@@ -127,8 +141,8 @@ export default function POStatusPage() {
                     poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
                     releasedDate: releasedDateFilter || undefined,
                     storeIds: effectiveStoreIds,
-                    brandIds: brandIdsFilter,
-                    supplierIds: supplierIdsFilter,
+                    brandIds: effectiveBrandIds,
+                    supplierIds: effectiveSupplierIds,
                 });
                 setItems(response.items ?? []);
                 setTotal(response.total ?? 0);
@@ -173,7 +187,27 @@ export default function POStatusPage() {
 
     const fetchAllItemsForDownload = useCallback(async () => {
         const dlPageSize = 100;
-        const effectiveStoreIds = storeIdParam ? [parseInt(storeIdParam)] : storeIdsFilter;
+
+        let effectiveStoreIds = storeIdsFilter;
+        const storeIdsParam = searchParams.get('store_ids');
+        if (storeIdsParam) {
+            effectiveStoreIds = storeIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+        } else if (storeIdParam) {
+            effectiveStoreIds = [parseInt(storeIdParam)];
+        }
+
+        let effectiveSupplierIds = supplierIdsFilter;
+        const supplierIdsParam = searchParams.get('supplier_ids');
+        if (supplierIdsParam) {
+            effectiveSupplierIds = supplierIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+        }
+
+        let effectiveBrandIds = brandIdsFilter;
+        const brandIdsParam = searchParams.get('brand_ids');
+        if (brandIdsParam) {
+            effectiveBrandIds = brandIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+        }
+
         const baseParams = {
             status,
             pageSize: dlPageSize,
@@ -182,8 +216,8 @@ export default function POStatusPage() {
             poType: poTypeFilter !== 'ALL' ? poTypeFilter : undefined,
             releasedDate: releasedDateFilter || undefined,
             storeIds: effectiveStoreIds,
-            brandIds: brandIdsFilter,
-            supplierIds: supplierIdsFilter,
+            brandIds: effectiveBrandIds,
+            supplierIds: effectiveSupplierIds,
         };
 
         const firstResponse = await getPOSnapshotItems({ ...baseParams, page: 1 });
@@ -364,7 +398,7 @@ export default function POStatusPage() {
                                     <SortableHead field="sku" label="SKU" className="w-[120px] font-semibold text-foreground/80" />
                                     <SortableHead field="product_name" label="Product" className="min-w-[200px] font-semibold text-foreground/80" />
                                     <SortableHead field="store_name" label="Store" className="min-w-[150px] font-semibold text-foreground/80" />
-                                    <TableHead className="min-w-[160px] font-semibold text-foreground/80">Supplier</TableHead>
+                                    <SortableHead field="supplier_name" label="Supplier" className="min-w-[160px] font-semibold text-foreground/80" />
                                     <SortableHead field="po_qty" label="Qty" align="right" className="text-right font-semibold text-foreground/80" />
                                     <SortableHead field="total_amount" label="Total" align="right" className="text-right font-semibold text-foreground/80" />
                                     <SortableHead field="po_released_at" label="Released" align="right" className="text-right font-semibold text-foreground/80" />
@@ -433,11 +467,11 @@ export default function POStatusPage() {
                                         <TableCell className="text-sm text-muted-foreground">
                                             {item.supplier_name && item.supplier_id ? (
                                                 <a
-                                                    href={`/dashboard/supplier/${item.supplier_id}?returnTo=${encodeURIComponent(pathname)}`}
+                                                    href={`/dashboard/supplier/${item.supplier_id}?returnTo=${encodeURIComponent(currentUrl)}`}
                                                     className="font-medium text-foreground/90 hover:underline hover:text-primary transition-colors"
                                                     onClick={(e) => {
                                                         e.preventDefault();
-                                                        router.push(`/dashboard/supplier/${item.supplier_id}?returnTo=${encodeURIComponent(pathname)}`);
+                                                        router.push(`/dashboard/supplier/${item.supplier_id}?returnTo=${encodeURIComponent(currentUrl)}`);
                                                     }}
                                                 >
                                                     {item.supplier_name}

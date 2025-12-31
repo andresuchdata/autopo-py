@@ -796,34 +796,58 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 				MAX(time) AS latest_time
 			FROM filtered_snapshots s
 			GROUP BY po_number, sku
+		),
+		paginated_items AS (
+			SELECT
+				s.po_number,
+				COALESCE(b.name, '') as brand_name,
+				COALESCE(s.supplier_id, 0) as supplier_id,
+				COALESCE(sup.name, '') as supplier_name,
+				s.sku,
+				s.product_name,
+				COALESCE(st.name, '') as store_name,
+				s.unit_price,
+				s.total_amount,
+				s.quantity_ordered as po_qty,
+				s.quantity_received as received_qty,
+				TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
+				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
+				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
+				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
+				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
+				s.eta as snapshot_eta
+			FROM po_snapshots s
+			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+			LEFT JOIN brands b ON s.brand_id = b.id
+			LEFT JOIN suppliers sup ON s.supplier_id = sup.id
+			LEFT JOIN stores st ON s.store_id = st.id
+			WHERE (%s) = $1%s
+			ORDER BY %s %s
+			LIMIT $%d OFFSET $%d
 		)
 		SELECT
-			s.po_number,
-			COALESCE(b.name, '') as brand_name,
-			COALESCE(s.supplier_id, 0) as supplier_id,
-			COALESCE(sup.name, '') as supplier_name,
-			s.sku,
-			s.product_name,
-			COALESCE(st.name, '') as store_name,
-			s.unit_price,
-			s.total_amount,
-			s.quantity_ordered as po_qty,
-			s.quantity_received as received_qty,
-			TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
-			TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
-			TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
-			TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
-			TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
-			TO_CHAR(s.eta, 'YYYY-MM-DD') as eta
-		FROM po_snapshots s
-		JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
-		LEFT JOIN brands b ON s.brand_id = b.id
-		LEFT JOIN suppliers sup ON s.supplier_id = sup.id
-		LEFT JOIN stores st ON s.store_id = st.id
-		WHERE (%s) = $1%s
+			pi.po_number,
+			pi.brand_name,
+			pi.supplier_id,
+			pi.supplier_name,
+			pi.sku,
+			pi.product_name,
+			pi.store_name,
+			pi.unit_price,
+			pi.total_amount,
+			pi.po_qty,
+			pi.received_qty,
+			pi.po_released_at,
+			pi.po_sent_at,
+			pi.po_approved_at,
+			pi.po_arrived_at,
+			pi.snapshot_time,
+			TO_CHAR(COALESCE(poi.eta, pi.snapshot_eta), 'YYYY-MM-DD') as eta
+		FROM paginated_items pi
+		LEFT JOIN purchase_orders po ON TRIM(pi.po_number) = TRIM(po.po_number)
+		LEFT JOIN purchase_order_items poi ON po.id = poi.po_id AND TRIM(pi.sku) = TRIM(poi.sku)
 		ORDER BY %s %s
-		LIMIT $%d OFFSET $%d
-	`, filterClause, statusExpr, filterClause, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3)
+	`, filterClause, statusExpr, filterClause, sortField, sortDirection, len(filterArgs)+2, len(filterArgs)+3, sortField, sortDirection)
 
 	var countQuery string
 	countQuery = fmt.Sprintf(`

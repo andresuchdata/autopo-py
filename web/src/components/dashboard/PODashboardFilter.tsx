@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PODashboardFilterProvider, usePODashboardFilter } from "@/contexts/PODashboardFilterContext";
 import { useSupplierOptions } from "@/hooks/useSupplierOptions";
@@ -269,7 +270,7 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           }}
           disabled={loading}
         >
-          <SelectTrigger id="po-type-select" className="w-full sm:w-40 h-10 bg-background border-border rounded-lg">
+          <SelectTrigger id="po-type-select" className="w-full sm:w-[100px] h-10 bg-background border-border rounded-lg">
             <SelectValue placeholder="Select type" />
           </SelectTrigger>
           <SelectContent>
@@ -395,17 +396,26 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
           <Tag className="h-3 w-3 text-primary/70" /> Supplier
         </Label>
         <Popover open={supplierPopoverOpen} onOpenChange={setSupplierPopoverOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              id="supplier-popover-trigger"
-              variant="outline"
-              className="w-full sm:w-52 justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
-              disabled={loading || supplierSearchLoading}
-            >
-              <span className="truncate text-left text-sm">{selectedSuppliersLabel}</span>
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="supplier-popover-trigger"
+                    variant="outline"
+                    className="w-full sm:w-[280px] justify-between h-10 px-3 bg-background border-border rounded-lg font-normal"
+                    disabled={loading || supplierSearchLoading}
+                  >
+                    <span className="truncate text-left text-sm">{selectedSuppliersLabel}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{selectedSuppliersLabel}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <PopoverContent className="w-64 p-0" align="end">
             <Command shouldFilter={false}>
               <CommandInput

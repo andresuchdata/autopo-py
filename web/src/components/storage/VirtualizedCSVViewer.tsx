@@ -796,7 +796,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
                                 <Filter className="w-3 h-3" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-64 max-h-[450px] p-0 flex flex-col overflow-hidden shadow-xl border-gray-200 dark:border-gray-700 animate-in fade-in zoom-in-95 duration-200">
+                            <DropdownMenuContent align="start" className="w-64 max-h-[450px] p-0 flex flex-col overflow-hidden shadow-xl border-gray-200 dark:border-gray-700 animate-in fade-in zoom-in-95 duration-200 z-[200]">
                               <div className="flex-1 flex flex-col min-h-[300px]">
                                 {calculatingFilters === header ? (
                                   <div className="flex-1 flex flex-col items-center justify-center p-8 gap-2 bg-card">
