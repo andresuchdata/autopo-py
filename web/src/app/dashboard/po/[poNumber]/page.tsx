@@ -12,6 +12,13 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Loader2, ArrowLeft, Calendar as CalendarIcon, Save, Store as StoreIcon } from 'lucide-react';
 import { getPODetails, updatePOETA, PODetail, POSnapshotItem } from '@/services/api';
 import { getStatusColor } from '@/constants/poStatusColors';
@@ -325,9 +332,55 @@ export default function PODetailPage() {
                 </Table>
             </div>
 
-            {totalPages > 1 && (
-                <div className="mt-4">
-                    <Pagination>
+            <div className="flex items-center justify-between border-t border-border/40 pt-4 mt-4">
+                <div className="flex items-center gap-6 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                        <span>Rows per page</span>
+                        <Select
+                            value={String(pageSize)}
+                            onValueChange={(val) => {
+                                setPageSize(Number(val));
+                                setPage(1);
+                            }}
+                        >
+                            <SelectTrigger className="h-8 w-[70px]">
+                                <SelectValue placeholder={String(pageSize)} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {[10, 20, 50, 100].map((size) => (
+                                    <SelectItem key={size} value={String(size)}>
+                                        {size}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <span className="hidden sm:inline-block w-px h-4 bg-border/60" />
+                    <div>
+                        Showing {Math.min(shownItems.length, pageSize)} of {allItems.length} items
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Page</span>
+                        <Input
+                            type="number"
+                            min={1}
+                            max={totalPages || 1}
+                            value={page}
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (!isNaN(val) && val >= 1 && val <= (totalPages || 1)) {
+                                    setPage(val);
+                                }
+                            }}
+                            className="h-8 w-16 text-center"
+                        />
+                        <span className="text-sm text-muted-foreground">of {totalPages || 1}</span>
+                    </div>
+
+                    <Pagination className="w-auto mx-0">
                         <PaginationContent>
                             <PaginationItem>
                                 <PaginationPrevious
@@ -335,23 +388,16 @@ export default function PODetailPage() {
                                     className={page === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
                                 />
                             </PaginationItem>
-
-                            <PaginationItem>
-                                <div className="flex items-center px-4 text-sm font-medium">
-                                    Page {page} of {totalPages}
-                                </div>
-                            </PaginationItem>
-
                             <PaginationItem>
                                 <PaginationNext
-                                    onClick={() => setPage(Math.min(totalPages, page + 1))}
-                                    className={page === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                    onClick={() => setPage(Math.min(totalPages || 1, page + 1))}
+                                    className={page >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
                                 />
                             </PaginationItem>
                         </PaginationContent>
                     </Pagination>
                 </div>
-            )}
+            </div>
         </div>
     );
 }

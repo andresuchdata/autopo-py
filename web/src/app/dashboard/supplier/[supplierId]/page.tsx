@@ -77,6 +77,7 @@ export default function SupplierDetailPage() {
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const storeId = searchParams.get('store_id') ? Number(searchParams.get('store_id')) : undefined;
+    const returnTo = searchParams.get('returnTo') || '/dashboard/po';
 
     // Local state for inputs to allow debouncing/controlled components
     const [searchTerm, setSearchTerm] = useState(search);
@@ -171,7 +172,7 @@ export default function SupplierDetailPage() {
         return (
             <div className="p-8 text-center text-destructive">
                 <p>Error: {error}</p>
-                <Button variant="outline" onClick={() => router.back()} className="mt-4">
+                <Button variant="outline" onClick={() => router.push(returnTo)} className="mt-4">
                     <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
                 </Button>
             </div>
@@ -181,7 +182,7 @@ export default function SupplierDetailPage() {
     return (
         <div className="container mx-auto py-8 space-y-6">
             <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                <Button variant="ghost" size="icon" onClick={() => router.push(returnTo)}>
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div>

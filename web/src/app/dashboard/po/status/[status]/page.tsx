@@ -433,11 +433,11 @@ export default function POStatusPage() {
                                         <TableCell className="text-sm text-muted-foreground">
                                             {item.supplier_name && item.supplier_id ? (
                                                 <a
-                                                    href={`/dashboard/supplier/${item.supplier_id}`}
+                                                    href={`/dashboard/supplier/${item.supplier_id}?returnTo=${encodeURIComponent(pathname)}`}
                                                     className="font-medium text-foreground/90 hover:underline hover:text-primary transition-colors"
                                                     onClick={(e) => {
                                                         e.preventDefault();
-                                                        router.push(`/dashboard/supplier/${item.supplier_id}`);
+                                                        router.push(`/dashboard/supplier/${item.supplier_id}?returnTo=${encodeURIComponent(pathname)}`);
                                                     }}
                                                 >
                                                     {item.supplier_name}
