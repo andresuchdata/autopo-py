@@ -217,11 +217,11 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
   const handleStoreClear = useCallback(() => {
     if (!loading) {
       setDraftStoreIdsFilter([]);
-      applyFilters();
+      applyFiltersWithOverrides({ storeIds: [] });
       setStorePopoverOpen(false);
       setStoreSearch("");
     }
-  }, [loading, applyFilters, setDraftStoreIdsFilter, setStorePopoverOpen, setStoreSearch]);
+  }, [loading, applyFiltersWithOverrides, setDraftStoreIdsFilter, setStorePopoverOpen, setStoreSearch]);
 
   const handleBrandApply = useCallback(() => {
     if (!loading) {
@@ -233,11 +233,11 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
   const handleBrandClear = useCallback(() => {
     if (!loading) {
       setDraftBrandIdsFilter([]);
-      applyFilters();
+      applyFiltersWithOverrides({ brandIds: [] });
       setBrandPopoverOpen(false);
       setBrandSearch("");
     }
-  }, [loading, applyFilters, setDraftBrandIdsFilter, setBrandPopoverOpen, setBrandSearch]);
+  }, [loading, applyFiltersWithOverrides, setDraftBrandIdsFilter, setBrandPopoverOpen, setBrandSearch]);
 
   const handleSupplierApply = useCallback(() => {
     if (!loading) {
@@ -249,11 +249,11 @@ export const PODashboardFilter: React.FC<PODashboardFilterProps> = ({ loading })
   const handleSupplierClear = useCallback(() => {
     if (!loading) {
       setDraftSupplierIdsFilter([]);
-      applyFilters();
+      applyFiltersWithOverrides({ supplierIds: [] });
       setSupplierPopoverOpen(false);
       setSupplierSearch("");
     }
-  }, [loading, applyFilters, setDraftSupplierIdsFilter, setSupplierPopoverOpen, setSupplierSearch]);
+  }, [loading, applyFiltersWithOverrides, setDraftSupplierIdsFilter, setSupplierPopoverOpen, setSupplierSearch]);
 
   return (
     <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
