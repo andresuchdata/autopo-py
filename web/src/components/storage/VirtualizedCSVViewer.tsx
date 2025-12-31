@@ -287,6 +287,14 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
     startWidth: number;
   } | null>(null);
 
+  const headerRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (headerRef.current) {
+      headerRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  }, []);
+
   const hasActiveFilters = useMemo(() => {
     return Object.values(columnFilters).some((s) => s && s.size > 0);
   }, [columnFilters]);
@@ -633,6 +641,32 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
   }, []);
 
   const handleDownload = () => {
+    const isIndonesia = typeof navigator !== 'undefined' && navigator.language.startsWith('id');
+
+    // If Indonesia locale and we have the full dataset, generate CSV with semicolon
+    if (isIndonesia && isComplete && rowsRef.current.length > 0) {
+      try {
+        const csv = Papa.unparse({
+          fields: headers,
+          data: rowsRef.current
+        }, { delimiter: ";" });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      } catch (err) {
+        console.error("Failed to generate semicolon CSV:", err);
+        // Fallback to default download
+      }
+    }
+
     const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8080/api/v1';
     window.open(`${apiUrl}/storage/download?key=${encodeURIComponent(fileKey)}`, '_blank');
   };
@@ -642,7 +676,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
   return (
     <div
       data-csv-viewer={fileKey}
-      className="flex flex-col h-full bg-card rounded-lg border border-border overflow-hidden"
+      className="flex flex-col h-full min-h-0 bg-card rounded-lg border border-border overflow-hidden"
     >
       <div className="flex items-center justify-between p-4 border-b border-border bg-muted/50 shrink-0">
         <div className="flex-1 min-w-0">
@@ -690,7 +724,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
         {error ? (
           <div className="h-full flex flex-col items-center justify-center p-8 text-center text-red-500">
             <AlertCircle className="w-12 h-12 mb-4" />
@@ -703,19 +737,20 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
             <p className="text-sm text-gray-500">Loading CSV...</p>
           </div>
         ) : (
-          <div ref={parentRef} className="h-full overflow-auto outline-none">
+          <>
+            {/* 1. TABLE HEADER (Synced Scroll) */}
             <div
-              style={{
-                height: `${rowVirtualizer.getTotalSize() + 50}px`,
-                width: `${columnVirtualizer.getTotalSize() + 48}px`, // Match # column width
-                position: 'relative',
-              }}
+              ref={headerRef}
+              className="flex-none overflow-hidden border-b border-border bg-muted z-20"
+              style={{ height: '50px' }}
             >
               <div
-                className="sticky top-0 z-20 bg-muted border-b border-border flex"
-                style={{ height: '50px', width: '100%' }}
+                className="flex items-center h-full relative"
+                style={{
+                  width: `${columnVirtualizer.getTotalSize() + 48}px`,
+                }}
               >
-                <div className="w-12 shrink-0 sticky left-0 z-30 bg-muted flex items-center justify-center border-r border-border text-xs font-bold text-muted-foreground">
+                <div className="w-12 shrink-0 sticky left-0 z-30 bg-muted flex items-center justify-center border-r border-border text-xs font-bold text-muted-foreground h-full shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
                   #
                 </div>
 
@@ -795,11 +830,19 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
                   );
                 })}
               </div>
+            </div>
 
+            {/* 2. TABLE BODY (Main Scroll) */}
+            <div
+              ref={parentRef}
+              className="flex-1 overflow-auto outline-none"
+              onScroll={handleScroll}
+            >
               <div
-                className="relative"
                 style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  width: `${columnVirtualizer.getTotalSize() + 48}px`,
+                  position: 'relative',
                 }}
               >
                 {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -820,7 +863,7 @@ export function VirtualizedCSVViewer({ fileKey, fileName, onClose }: Virtualized
                 })}
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>

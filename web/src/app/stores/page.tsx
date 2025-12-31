@@ -174,7 +174,7 @@ export default function StoresPage() {
           }}
         >
           <DialogContent
-            className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 gap-0"
+            className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 gap-0 z-[100]"
             aria-describedby={undefined}
             showCloseButton={false}
           >
