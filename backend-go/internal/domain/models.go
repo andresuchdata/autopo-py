@@ -199,3 +199,24 @@ type DailyStockData struct {
 	DailyStockCover           float64   `json:"daily_stock_cover" db:"daily_stock_cover"`
 	CreatedAt                 time.Time `json:"created_at" db:"created_at"`
 }
+
+// User represents a user in the system
+type User struct {
+	ID           string    `json:"id" db:"id"`
+	EmployeeID   *string   `json:"employee_id" db:"employee_id"`
+	Username     string    `json:"username" db:"username"`
+	PasswordHash string    `json:"-" db:"password_hash"`
+	Role         string    `json:"role" db:"role"`
+	Phone        *string   `json:"phone" db:"phone"`
+	Email        *string   `json:"email" db:"email"`
+	IsActive     bool      `json:"is_active" db:"is_active"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// UserStore represents the many-to-many relationship between users and stores
+type UserStore struct {
+	UserID    int64     `json:"user_id" db:"user_id"`
+	StoreID   int64     `json:"store_id" db:"store_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+}
