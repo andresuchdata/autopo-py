@@ -294,7 +294,7 @@ func (h *POHandler) GetPOAging(c *gin.Context) {
 		sortDirection := c.DefaultQuery("sort_direction", "desc")
 		status := c.Query("status")
 
-		response, err := h.poService.GetPOAgingItems(c.Request.Context(), page, pageSize, sortField, sortDirection, status)
+		response, err := h.poService.GetPOAgingItems(c.Request.Context(), page, pageSize, sortField, sortDirection, status, h.parseDashboardFilter(c))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch aging items"})
 			return

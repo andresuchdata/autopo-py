@@ -385,8 +385,8 @@ func (s *POService) GetPOSnapshotItems(ctx context.Context, statusCode int, page
 }
 
 // GetPOAgingItems returns paginated aging items
-func (s *POService) GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string) (*domain.POAgingResponse, error) {
-	return s.repo.GetPOAgingItems(ctx, page, pageSize, sortField, sortDirection, status)
+func (s *POService) GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string, filter *domain.DashboardFilter) (*domain.POAgingResponse, error) {
+	return s.repo.GetPOAgingItems(ctx, page, pageSize, sortField, sortDirection, status, filter)
 }
 
 // GetSupplierPOItems returns PO entries filtered by supplier

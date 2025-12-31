@@ -196,7 +196,7 @@ export const POAgingTable: React.FC<POAgingTableProps> = ({ initialItems }) => {
                     <Button variant="outline" size="sm" onClick={handleExport} disabled={loading || isDownloading}>
                         <Download className="mr-2 h-4 w-4" /> Export CSV
                     </Button>
-                    <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setPage(1); }}>
+                    <Select value={statusFilter} onValueChange={(val) => { enableInteractive(); setStatusFilter(val); setPage(1); }}>
                         <SelectTrigger className="w-[180px] h-8">
                             <SelectValue placeholder="Status" />
                         </SelectTrigger>
