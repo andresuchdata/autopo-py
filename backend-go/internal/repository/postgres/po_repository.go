@@ -261,7 +261,7 @@ func (r *poRepository) GetSupplier(ctx context.Context, id int64) (*domain.Suppl
 	return &supplier, nil
 }
 
-func (r *poRepository) GetSupplierPOs(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, search, status string) ([]*domain.PODetail, int, error) {
+func (r *poRepository) GetSupplierPOs(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string) ([]*domain.PODetail, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -282,6 +282,11 @@ func (r *poRepository) GetSupplierPOs(ctx context.Context, supplierID int64, pag
 	if storeID != nil {
 		baseQuery += fmt.Sprintf(" AND po.store_id = $%d", len(args)+1)
 		args = append(args, *storeID)
+	}
+
+	if brandID != nil {
+		baseQuery += fmt.Sprintf(" AND po.brand_id = $%d", len(args)+1)
+		args = append(args, *brandID)
 	}
 
 	if search != "" {
@@ -376,8 +381,9 @@ func (r *poRepository) UpdatePOItemETA(ctx context.Context, poNumber string, sku
 }
 
 // GetPODetails retrieves detailed information for a PO including its items
-func (r *poRepository) GetPODetails(ctx context.Context, poNumber string) (*domain.PODetail, error) {
-	// 1. Get PO Header info
+// GetPODetails retrieves detailed information for a PO including its items with pagination/search/sort
+func (r *poRepository) GetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string) (*domain.PODetail, error) {
+	// 1. Get PO Header info with totals
 	queryHeader := `
 		SELECT 
 			po.po_number,
@@ -390,7 +396,10 @@ func (r *poRepository) GetPODetails(ctx context.Context, poNumber string) (*doma
 			TO_CHAR(po.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
 			TO_CHAR(po.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
 			TO_CHAR(po.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
-			TO_CHAR(po.po_received_at, 'YYYY-MM-DD HH24:MI:SS') as po_received_at
+			TO_CHAR(po.po_received_at, 'YYYY-MM-DD HH24:MI:SS') as po_received_at,
+			po.po_qty,
+			po.received_qty,
+			(SELECT COALESCE(SUM(poi.quantity * poi.price), 0) FROM purchase_order_items poi WHERE poi.po_id = po.id) as total_amount
 		FROM purchase_orders po
 		LEFT JOIN suppliers s ON po.supplier_id = s.id
 		LEFT JOIN stores st ON po.store_id = st.id
@@ -405,7 +414,38 @@ func (r *poRepository) GetPODetails(ctx context.Context, poNumber string) (*doma
 
 	header.Status = domain.POStatusLabel(header.StatusCode)
 
-	// 2. Get Items
+	// 2. Build Items Query with Filters
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	baseQuery := `
+		FROM purchase_orders po
+		JOIN purchase_order_items poi ON po.id = poi.po_id
+		LEFT JOIN brands b ON po.brand_id = b.id
+		LEFT JOIN suppliers s ON po.supplier_id = s.id
+		LEFT JOIN stores st ON po.store_id = st.id
+		WHERE po.po_number = $1
+	`
+	args := []interface{}{poNumber}
+
+	if search != "" {
+		baseQuery += fmt.Sprintf(" AND (poi.sku ILIKE $%d OR poi.product_name ILIKE $%d)", len(args)+1, len(args)+1)
+		args = append(args, "%"+search+"%")
+	}
+
+	// 3. Count Total Matching Items
+	countQuery := "SELECT COUNT(*) " + baseQuery
+	var totalItems int
+	if err := r.db.GetContext(ctx, &totalItems, countQuery, args...); err != nil {
+		return nil, fmt.Errorf("failed to count po items: %w", err)
+	}
+
+	// 4. Get Paginated Items
 	queryItems := `
 		SELECT 
 			po.po_number,
@@ -419,39 +459,42 @@ func (r *poRepository) GetPODetails(ctx context.Context, poNumber string) (*doma
 			poi.quantity as po_qty,
 			poi.received_quantity as received_qty,
 			TO_CHAR(poi.eta, 'YYYY-MM-DD') as eta
-		FROM purchase_orders po
-		JOIN purchase_order_items poi ON po.id = poi.po_id
-		LEFT JOIN brands b ON po.brand_id = b.id
-		LEFT JOIN suppliers s ON po.supplier_id = s.id
-		LEFT JOIN stores st ON po.store_id = st.id
-		WHERE po.po_number = $1
-		ORDER BY poi.sku
-	`
+	` + baseQuery
+
+	// Sorting
+	validSortFields := map[string]string{
+		"sku":          "poi.sku",
+		"product_name": "poi.product_name",
+		"total_amount": "poi.amount",
+		"po_qty":       "poi.quantity",
+		"unit_price":   "poi.price",
+	}
+
+	dbSortField, ok := validSortFields[sortField]
+	if !ok {
+		dbSortField = "poi.sku"
+	}
+	if strings.ToUpper(sortDirection) != "DESC" {
+		sortDirection = "ASC"
+	}
+
+	queryItems += fmt.Sprintf(" ORDER BY %s %s LIMIT $%d OFFSET $%d", dbSortField, sortDirection, len(args)+1, len(args)+2)
+	args = append(args, pageSize, offset)
 
 	var items []domain.POSnapshotItem
-	// We map the result to POSnapshotItem but some fields will be empty/default since we don't query them (like timestamps from items, we use PO level or item level specific)
-	// Actually POSnapshotItem struct is convenient here.
-	if err := sqlx.SelectContext(ctx, r.db, &items, queryItems, poNumber); err != nil {
+	if err := sqlx.SelectContext(ctx, r.db, &items, queryItems, args...); err != nil {
 		return nil, fmt.Errorf("failed to get po items: %w", err)
 	}
 
-	// Calculate totals for header
-	var totalQty int
-	var receivedQty int
-	var totalAmount float64
-
-	for i := range items {
-		totalQty += items[i].POQty
-		if items[i].ReceivedQty != nil {
-			receivedQty += *items[i].ReceivedQty
-		}
-		totalAmount += items[i].TotalAmount
-	}
-
 	header.Items = items
-	header.POQty = totalQty
-	header.ReceivedQty = receivedQty
-	header.TotalAmount = totalAmount
+	// Populate pagination metadata
+	header.TotalItems = totalItems
+	header.Page = page
+	header.PageSize = pageSize
+	header.TotalPages = (totalItems + pageSize - 1) / pageSize
+
+	// Note: TotalQty and TotalAmount in header now come from direct DB query on PO level (or subquery aggregation),
+	// ensuring accuracy even when items are paginated/filtered.
 
 	return &header, nil
 }

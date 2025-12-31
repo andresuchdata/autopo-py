@@ -24,5 +24,9 @@ type PODetail struct {
 	POApprovedAt *string          `json:"po_approved_at" db:"po_approved_at"`
 	POArrivedAt  *string          `json:"po_arrived_at" db:"po_arrived_at"`
 	POReceivedAt *string          `json:"po_received_at" db:"po_received_at"`
-	Items        []POSnapshotItem `json:"items"` // Reusing POSnapshotItem for simplicity as it has all needed fields
+	Items       []POSnapshotItem `json:"items"`
+	TotalItems  int              `json:"total_items"`
+	Page        int              `json:"page"`
+	PageSize    int              `json:"page_size"`
+	TotalPages  int              `json:"total_pages"`
 }

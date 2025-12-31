@@ -38,11 +38,17 @@ type DashboardCache interface {
 	SetAging(ctx context.Context, filter *domain.DashboardFilter, items []domain.POAging) error
 	GetSupplierPerformance(ctx context.Context, filter *domain.DashboardFilter) ([]domain.SupplierPerformance, bool, error)
 	SetSupplierPerformance(ctx context.Context, filter *domain.DashboardFilter, items []domain.SupplierPerformance) error
-	// Granular methods
 	GetStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, bool, error)
 	SetStatusSummary(ctx context.Context, filter *domain.DashboardFilter, summary []domain.POStatusSummary) error
 	GetTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, bool, error)
 	SetTotals(ctx context.Context, filter *domain.DashboardFilter, totals *domain.PODashboardTotals) error
+	GetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string) (*domain.PODetail, bool, error)
+	SetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string, details *domain.PODetail) error
+	GetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string) (*domain.SupplierDetailsResponse, bool, error)
+	SetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string, details *domain.SupplierDetailsResponse) error
+	GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.POSnapshotItemsResponse, bool, error)
+	SetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter, items *domain.POSnapshotItemsResponse) error
+	InvalidatePODetails(ctx context.Context, poNumber string) error
 	InvalidateAll(ctx context.Context) error
 }
 
@@ -288,6 +294,95 @@ func (c *redisDashboardCache) SetTotals(ctx context.Context, filter *domain.Dash
 	return nil
 }
 
+func (c *redisDashboardCache) GetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string) (*domain.PODetail, bool, error) {
+	key := buildPODetailsKey(poNumber, page, pageSize, search, sortField, sortDirection)
+	payload, err := c.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("redis get failed: %w", err)
+	}
+	var details domain.PODetail
+	if err := json.Unmarshal(payload, &details); err != nil {
+		return nil, false, fmt.Errorf("decode po details cache: %w", err)
+	}
+	return &details, true, nil
+}
+
+func (c *redisDashboardCache) SetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string, details *domain.PODetail) error {
+	key := buildPODetailsKey(poNumber, page, pageSize, search, sortField, sortDirection)
+	payload, err := json.Marshal(details)
+	if err != nil {
+		return fmt.Errorf("encode po details cache: %w", err)
+	}
+	if err := c.client.Set(ctx, key, payload, c.ttl).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
+	return nil
+}
+
+func (c *redisDashboardCache) GetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string) (*domain.SupplierDetailsResponse, bool, error) {
+	key := buildSupplierDetailsKey(supplierID, page, pageSize, storeID, brandID, search, status)
+	payload, err := c.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("redis get failed: %w", err)
+	}
+	var details domain.SupplierDetailsResponse
+	if err := json.Unmarshal(payload, &details); err != nil {
+		return nil, false, fmt.Errorf("decode supplier details cache: %w", err)
+	}
+	return &details, true, nil
+}
+
+func (c *redisDashboardCache) SetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string, details *domain.SupplierDetailsResponse) error {
+	key := buildSupplierDetailsKey(supplierID, page, pageSize, storeID, brandID, search, status)
+	payload, err := json.Marshal(details)
+	if err != nil {
+		return fmt.Errorf("encode supplier details cache: %w", err)
+	}
+	if err := c.client.Set(ctx, key, payload, c.ttl).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
+	return nil
+}
+
+func (c *redisDashboardCache) InvalidatePODetails(ctx context.Context, poNumber string) error {
+	prefix := fmt.Sprintf("dashboard:po_details:%s", poNumber)
+	return c.deleteKeysWithPrefix(ctx, prefix)
+}
+
+func (c *redisDashboardCache) GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.POSnapshotItemsResponse, bool, error) {
+	key := buildPOSnapshotItemsKey(statusCode, page, pageSize, sortField, sortDirection, filter)
+	payload, err := c.client.Get(ctx, key).Bytes()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("redis get failed: %w", err)
+	}
+	var items domain.POSnapshotItemsResponse
+	if err := json.Unmarshal(payload, &items); err != nil {
+		return nil, false, fmt.Errorf("decode snapshot items cache: %w", err)
+	}
+	return &items, true, nil
+}
+
+func (c *redisDashboardCache) SetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter, items *domain.POSnapshotItemsResponse) error {
+	key := buildPOSnapshotItemsKey(statusCode, page, pageSize, sortField, sortDirection, filter)
+	payload, err := json.Marshal(items)
+	if err != nil {
+		return fmt.Errorf("encode snapshot items cache: %w", err)
+	}
+	if err := c.client.Set(ctx, key, payload, c.ttl).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
+	return nil
+}
+
 func (c *redisDashboardCache) InvalidateAll(ctx context.Context) error {
 	prefixes := []string{
 		dashboardSummaryKeyPrefix,
@@ -297,6 +392,10 @@ func (c *redisDashboardCache) InvalidateAll(ctx context.Context) error {
 		dashboardTrendKeyPrefix,
 		dashboardAgingKeyPrefix,
 		dashboardSupplierPerformancePrefix,
+		dashboardSupplierPerformancePrefix,
+		"dashboard:po_details",
+		"dashboard:supplier_details",
+		"dashboard:snapshot_items",
 	}
 
 	for _, prefix := range prefixes {
@@ -391,6 +490,34 @@ func (n *noopDashboardCache) SetTotals(ctx context.Context, filter *domain.Dashb
 	return nil
 }
 
+func (n *noopDashboardCache) GetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string) (*domain.PODetail, bool, error) {
+	return nil, false, nil
+}
+
+func (n *noopDashboardCache) SetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string, details *domain.PODetail) error {
+	return nil
+}
+
+func (n *noopDashboardCache) GetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string) (*domain.SupplierDetailsResponse, bool, error) {
+	return nil, false, nil
+}
+
+func (n *noopDashboardCache) SetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string, details *domain.SupplierDetailsResponse) error {
+	return nil
+}
+
+func (n *noopDashboardCache) InvalidatePODetails(ctx context.Context, poNumber string) error {
+	return nil
+}
+
+func (n *noopDashboardCache) GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.POSnapshotItemsResponse, bool, error) {
+	return nil, false, nil
+}
+
+func (n *noopDashboardCache) SetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter, items *domain.POSnapshotItemsResponse) error {
+	return nil
+}
+
 func buildDashboardSummaryKey(filter *domain.DashboardFilter) string {
 	return fmt.Sprintf("%s:%s", dashboardSummaryKeyPrefix, buildFilterHash(filter))
 }
@@ -417,6 +544,41 @@ func buildAgingKey(filter *domain.DashboardFilter) string {
 
 func buildSupplierPerformanceKey(filter *domain.DashboardFilter) string {
 	return fmt.Sprintf("%s:%s", dashboardSupplierPerformancePrefix, buildFilterHash(filter))
+}
+
+func buildPODetailsKey(poNumber string, page, pageSize int, search, sortField, sortDirection string) string {
+	parts := []string{
+		fmt.Sprintf("page=%d", page),
+		fmt.Sprintf("page_size=%d", pageSize),
+		fmt.Sprintf("search=%s", strings.TrimSpace(search)),
+		fmt.Sprintf("sort_field=%s", sortField),
+		fmt.Sprintf("sort_direction=%s", sortDirection),
+	}
+	sort.Strings(parts)
+	raw := strings.Join(parts, "|")
+	hash := sha1.Sum([]byte(raw))
+	hashStr := hex.EncodeToString(hash[:])
+	return fmt.Sprintf("dashboard:po_details:%s:%s", poNumber, hashStr)
+}
+
+func buildSupplierDetailsKey(supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string) string {
+	parts := []string{
+		fmt.Sprintf("page=%d", page),
+		fmt.Sprintf("page_size=%d", pageSize),
+		fmt.Sprintf("search=%s", strings.TrimSpace(search)),
+		fmt.Sprintf("status=%s", strings.TrimSpace(status)),
+	}
+	if storeID != nil {
+		parts = append(parts, fmt.Sprintf("store_id=%d", *storeID))
+	}
+	if brandID != nil {
+		parts = append(parts, fmt.Sprintf("brand_id=%d", *brandID))
+	}
+	sort.Strings(parts)
+	raw := strings.Join(parts, "|")
+	hash := sha1.Sum([]byte(raw))
+	hashStr := hex.EncodeToString(hash[:])
+	return fmt.Sprintf("dashboard:supplier_details:%d:%s", supplierID, hashStr)
 }
 
 func buildFilterHash(filter *domain.DashboardFilter) string {
@@ -449,6 +611,10 @@ func buildFilterHash(filter *domain.DashboardFilter) string {
 	raw := strings.Join(parts, "|")
 	hash := sha1.Sum([]byte(raw))
 	return hex.EncodeToString(hash[:])
+}
+
+func buildPOSnapshotItemsKey(statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) string {
+	return fmt.Sprintf("dashboard:snapshot_items:%d:%d:%d:%s:%s:%s", statusCode, page, pageSize, sortField, sortDirection, buildFilterHash(filter))
 }
 
 func sanitizeInterval(interval string) string {

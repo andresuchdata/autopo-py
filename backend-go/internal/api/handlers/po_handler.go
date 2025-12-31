@@ -435,7 +435,13 @@ func (h *POHandler) GetPODetails(c *gin.Context) {
 		return
 	}
 
-	details, err := h.poService.GetPODetails(c.Request.Context(), poNumber)
+	page := parsePositiveIntWithDefault(c.Query("page"), 1)
+	pageSize := parsePositiveIntWithDefault(c.Query("page_size"), 20)
+	search := c.Query("search")
+	sortField := c.DefaultQuery("sort_field", "sku")
+	sortDirection := c.DefaultQuery("sort_direction", "asc")
+
+	details, err := h.poService.GetPODetails(c.Request.Context(), poNumber, page, pageSize, search, sortField, sortDirection)
 	if err != nil {
 		if strings.Contains(err.Error(), "no rows in result set") {
 			c.JSON(http.StatusOK, nil)
@@ -473,14 +479,37 @@ func (h *POHandler) GetSupplierDetails(c *gin.Context) {
 		}
 	}
 
+	var brandID *int64
+	if brandIDStr := c.Query("brand_id"); brandIDStr != "" {
+		if id, err := strconv.ParseInt(brandIDStr, 10, 64); err == nil {
+			brandID = &id
+		}
+	}
+
 	search := c.Query("search")
 	status := c.Query("status")
 
-	details, err := h.poService.GetSupplierDetails(c.Request.Context(), supplierID, page, pageSize, storeID, search, status)
+	details, err := h.poService.GetSupplierDetails(c.Request.Context(), supplierID, page, pageSize, storeID, brandID, search, status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch supplier details", "details": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, details)
+}
+
+// InvalidatePODetailsCache invalidates the cache for a specific PO
+func (h *POHandler) InvalidatePODetailsCache(c *gin.Context) {
+	poNumber := c.Param("po_number")
+	if poNumber == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "po_number is required"})
+		return
+	}
+
+	if err := h.poService.InvalidatePODetails(c.Request.Context(), poNumber); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to invalidate cache", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "cache invalidated successfully"})
 }

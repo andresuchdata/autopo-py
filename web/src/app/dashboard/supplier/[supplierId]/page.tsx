@@ -71,12 +71,14 @@ export default function SupplierDetailPage() {
         totalPages: 0,
     });
     const [stores, setStores] = useState<{ id: number; name: string }[]>([]);
+    const [brands, setBrands] = useState<{ id: number; name: string }[]>([]);
 
     // Get filters from URL
     const page = Number(searchParams.get('page')) || 1;
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const storeId = searchParams.get('store_id') ? Number(searchParams.get('store_id')) : undefined;
+    const brandId = searchParams.get('brand_id') ? Number(searchParams.get('brand_id')) : undefined;
     const returnTo = searchParams.get('returnTo') || '/dashboard/po';
 
     // Local state for inputs to allow debouncing/controlled components
@@ -110,17 +112,21 @@ export default function SupplierDetailPage() {
         router.push(`${pathname}${query}`);
     }, [searchParams, pathname, router]);
 
-    // Load stores for filter
+    // Load stores and brands for filter
     useEffect(() => {
-        const fetchStores = async () => {
+        const fetchFilters = async () => {
             try {
-                const data = await poService.getStores();
-                setStores(data);
+                const [storesData, brandsData] = await Promise.all([
+                    poService.getStores(),
+                    poService.getBrands()
+                ]);
+                setStores(storesData);
+                setBrands(brandsData);
             } catch (err) {
-                console.error('Failed to load stores', err);
+                console.error('Failed to load filter options', err);
             }
         };
-        fetchStores();
+        fetchFilters();
     }, []);
 
     // Effect to update URL when debounced search changes
@@ -143,6 +149,7 @@ export default function SupplierDetailPage() {
                 page,
                 pageSize: 20,
                 storeId,
+                brandId,
                 search,
                 status: status !== 'ALL' ? status : undefined,
             });
@@ -162,7 +169,7 @@ export default function SupplierDetailPage() {
         } finally {
             setLoading(false);
         }
-    }, [supplierId, page, storeId, search, status]);
+    }, [supplierId, page, storeId, brandId, search, status]);
 
     useEffect(() => {
         loadData();
@@ -192,8 +199,8 @@ export default function SupplierDetailPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex flex-col md:flex-row gap-4 p-4 rounded-lg border bg-card items-start md:items-center">
-                <div className="relative flex-1 max-w-sm">
+            <div className="flex flex-col md:flex-row gap-4 p-4 rounded-lg border bg-card items-start md:items-center flex-wrap">
+                <div className="relative flex-1 min-w-[250px]">
                     <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Search PO number..."
@@ -223,13 +230,25 @@ export default function SupplierDetailPage() {
                     </Select>
                 </div>
 
-                <div className="w-full md:w-[250px]">
+                <div className="w-full md:w-[200px]">
                     <GenericFilter
                         mode="single"
                         selected={storeId ? String(storeId) : null}
                         onChange={(val) => updateFilters({ store_id: val ? Number(val) : null })}
                         options={stores.map(s => ({ id: String(s.id), label: s.name }))}
                         placeholder="Filter by Store"
+                        searchable={true}
+                        triggerClassName="h-10 min-h-0"
+                    />
+                </div>
+
+                <div className="w-full md:w-[200px]">
+                    <GenericFilter
+                        mode="single"
+                        selected={brandId ? String(brandId) : null}
+                        onChange={(val) => updateFilters({ brand_id: val ? Number(val) : null })}
+                        options={brands.map(b => ({ id: String(b.id), label: b.name }))}
+                        placeholder="Filter by Brand"
                         searchable={true}
                         triggerClassName="h-10 min-h-0"
                     />
@@ -242,7 +261,7 @@ export default function SupplierDetailPage() {
                             setSearchTerm('');
                             router.push(`${pathname}`);
                         }}
-                        disabled={!search && !status && !storeId}
+                        disabled={!search && !status && !storeId && !brandId}
                     >
                         Reset Filters
                     </Button>
@@ -261,6 +280,7 @@ export default function SupplierDetailPage() {
                         <TableRow>
                             <TableHead>PO Number</TableHead>
                             <TableHead>Store</TableHead>
+                            <TableHead>Brand</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Total Qty</TableHead>
                             <TableHead className="text-right">Total Amount</TableHead>
@@ -273,7 +293,7 @@ export default function SupplierDetailPage() {
                     <TableBody>
                         {!loading && pos.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                                     No purchase orders found matching your filters.
                                 </TableCell>
                             </TableRow>
@@ -286,6 +306,7 @@ export default function SupplierDetailPage() {
                                         </a>
                                     </TableCell>
                                     <TableCell>{po.store_name || '-'}</TableCell>
+                                    <TableCell>{po.brand_name || '-'}</TableCell>
                                     <TableCell>
                                         <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent 
                                             ${po.status === 'Released' ? 'bg-blue-100 text-blue-800' :

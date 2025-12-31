@@ -94,6 +94,7 @@ func NewRouter(services *Services, allowedOrigins []string) *gin.Engine {
 
 				// Detail and Action routes
 				poGroup.GET("/:po_number", poHandler.GetPODetails)
+				poGroup.POST("/:po_number/cache/invalidate", poHandler.InvalidatePODetailsCache)
 				poGroup.POST("/eta", poHandler.UpdatePOItemETA)
 			}
 		}

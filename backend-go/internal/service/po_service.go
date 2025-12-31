@@ -237,27 +237,42 @@ func (s *POService) GetDashboardSummary(ctx context.Context, filter *domain.Dash
 
 // GetDashboardStatusSummary returns status summaries with caching
 func (s *POService) GetDashboardStatusSummary(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POStatusSummary, error) {
-	// Re-use the existing cache method for raw status summaries if compatible,
-	// or implement a new one. Here we use a distinct method to avoid confusion.
-	// For now, let's assume we want a specific cache key for this V2 summary.
-	// Since cache interface might not have a specific method for this V2 structure yet,
-	// we'll stick to direct repo call first, then add cache.
-	// Wait, we can reuse SetStatusSummaryRaw if the structure aligns.
-	// domain.POStatusSummary is the same struct.
+	if summary, ok, err := s.dashboardCache.GetStatusSummary(ctx, filter); err == nil && ok {
+		return summary, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard status summary cache get failed")
+	}
 
-	// BUT, StatusSummaryRaw is different from StatusSummary (which has AvgDays).
-	// Let's implement caching properly. For now to save time/complexity and since
-	// the user wants granularity, we will verify if DashboardCache has methods or if we need to extend it.
-	// Extending DashboardCache interface requires editing another file (internal/cache/dashboard_cache.go).
-	// Let's check that file first or proceed without cache for this step and add it in next step.
-	// Strategy: Implement repo call first, then check cache file.
+	summary, err := s.repo.GetDashboardStatusSummary(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
 
-	return s.repo.GetDashboardStatusSummary(ctx, filter)
+	if err := s.dashboardCache.SetStatusSummary(ctx, filter, summary); err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard status summary cache set failed")
+	}
+
+	return summary, nil
 }
 
 // GetDashboardTotals returns dashboard totals with caching
 func (s *POService) GetDashboardTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, error) {
-	return s.repo.GetDashboardTotals(ctx, filter)
+	if totals, ok, err := s.dashboardCache.GetTotals(ctx, filter); err == nil && ok {
+		return totals, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard totals cache get failed")
+	}
+
+	totals, err := s.repo.GetDashboardTotals(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.dashboardCache.SetTotals(ctx, filter, totals); err != nil {
+		log.Warn().Err(err).Msg("po service: dashboard totals cache set failed")
+	}
+
+	return totals, nil
 }
 
 // GetPOSnapshotStatusSummaryRaw returns PO snapshot summaries grouped directly by stored status
@@ -349,8 +364,24 @@ func (s *POService) GetSupplierPerformance(ctx context.Context, filter *domain.D
 }
 
 // GetPOSnapshotItems returns PO snapshot items filtered by status with pagination and sorting
+// GetPOSnapshotItems returns PO snapshot items filtered by status with pagination and sorting
 func (s *POService) GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.POSnapshotItemsResponse, error) {
-	return s.repo.GetPOSnapshotItems(ctx, statusCode, page, pageSize, sortField, sortDirection, filter)
+	if items, ok, err := s.dashboardCache.GetPOSnapshotItems(ctx, statusCode, page, pageSize, sortField, sortDirection, filter); err == nil && ok {
+		return items, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: snapshot items cache get failed")
+	}
+
+	items, err := s.repo.GetPOSnapshotItems(ctx, statusCode, page, pageSize, sortField, sortDirection, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.dashboardCache.SetPOSnapshotItems(ctx, statusCode, page, pageSize, sortField, sortDirection, filter, items); err != nil {
+		log.Warn().Err(err).Msg("po service: snapshot items cache set failed")
+	}
+
+	return items, nil
 }
 
 // GetPOAgingItems returns paginated aging items
@@ -374,18 +405,39 @@ func (s *POService) UpdatePOItemETA(ctx context.Context, req domain.UpdateETAReq
 }
 
 // GetPODetails returns the detailed view of a PO
-func (s *POService) GetPODetails(ctx context.Context, poNumber string) (*domain.PODetail, error) {
-	return s.repo.GetPODetails(ctx, poNumber)
+func (s *POService) GetPODetails(ctx context.Context, poNumber string, page, pageSize int, search, sortField, sortDirection string) (*domain.PODetail, error) {
+	if details, ok, err := s.dashboardCache.GetPODetails(ctx, poNumber, page, pageSize, search, sortField, sortDirection); err == nil && ok {
+		return details, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: po details cache get failed")
+	}
+
+	details, err := s.repo.GetPODetails(ctx, poNumber, page, pageSize, search, sortField, sortDirection)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.dashboardCache.SetPODetails(ctx, poNumber, page, pageSize, search, sortField, sortDirection, details); err != nil {
+		log.Warn().Err(err).Msg("po service: po details cache set failed")
+	}
+
+	return details, nil
 }
 
 // GetSupplierDetails returns the supplier info and their PO list
-func (s *POService) GetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, search, status string) (map[string]interface{}, error) {
+func (s *POService) GetSupplierDetails(ctx context.Context, supplierID int64, page, pageSize int, storeID *int64, brandID *int64, search, status string) (*domain.SupplierDetailsResponse, error) {
+	if details, ok, err := s.dashboardCache.GetSupplierDetails(ctx, supplierID, page, pageSize, storeID, brandID, search, status); err == nil && ok {
+		return details, nil
+	} else if err != nil {
+		log.Warn().Err(err).Msg("po service: supplier details cache get failed")
+	}
+
 	supplier, err := s.repo.GetSupplier(ctx, supplierID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get supplier: %w", err)
 	}
 
-	pos, total, err := s.repo.GetSupplierPOs(ctx, supplierID, page, pageSize, storeID, search, status)
+	pos, total, err := s.repo.GetSupplierPOs(ctx, supplierID, page, pageSize, storeID, brandID, search, status)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get supplier pos: %w", err)
 	}
@@ -395,12 +447,23 @@ func (s *POService) GetSupplierDetails(ctx context.Context, supplierID int64, pa
 		totalPages = int(math.Ceil(float64(total) / float64(pageSize)))
 	}
 
-	return map[string]interface{}{
-		"supplier":    supplier,
-		"pos":         pos,
-		"total":       total,
-		"page":        page,
-		"page_size":   pageSize,
-		"total_pages": totalPages,
-	}, nil
+	response := &domain.SupplierDetailsResponse{
+		Supplier:   supplier,
+		POs:        pos,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}
+
+	if err := s.dashboardCache.SetSupplierDetails(ctx, supplierID, page, pageSize, storeID, brandID, search, status, response); err != nil {
+		log.Warn().Err(err).Msg("po service: supplier details cache set failed")
+	}
+
+	return response, nil
+}
+
+// InvalidatePODetails invalidates the cache for a specific PO
+func (s *POService) InvalidatePODetails(ctx context.Context, poNumber string) error {
+	return s.dashboardCache.InvalidatePODetails(ctx, poNumber)
 }

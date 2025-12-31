@@ -578,14 +578,45 @@ export interface PODetail {
     po_arrived_at: string | null;
     po_received_at: string | null;
     items: POSnapshotItem[];
+    // Pagination fields
+    total_items?: number;
+    page?: number;
+    page_size?: number;
+    total_pages?: number;
 }
 
-export const getPODetails = async (poNumber: string) => {
+export interface PODetailParams {
+    poNumber: string;
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sortField?: string;
+    sortDirection?: 'asc' | 'desc';
+}
+
+export const getPODetails = async ({ poNumber, page = 1, pageSize = 20, search, sortField, sortDirection }: PODetailParams) => {
     try {
-        const response = await api.get(`/po/${poNumber}`);
+        const query = buildQueryParams({
+            page,
+            page_size: pageSize,
+            search,
+            sort_field: sortField,
+            sort_direction: sortDirection,
+        });
+        const response = await api.get(`/po/${poNumber}`, { params: query });
         return response.data as PODetail;
     } catch (error) {
         console.error(`Error fetching PO details for ${poNumber}:`, error);
+        throw error;
+    }
+};
+
+export const invalidatePODetailsCache = async (poNumber: string) => {
+    try {
+        const response = await api.post(`/po/${poNumber}/cache/invalidate`);
+        return response.data;
+    } catch (error) {
+        console.error(`Error invalidating cache for PO ${poNumber}:`, error);
         throw error;
     }
 };
@@ -609,6 +640,7 @@ export interface SupplierDetailsParams {
     page?: number;
     pageSize?: number;
     storeId?: number;
+    brandId?: number;
     search?: string;
     status?: string;
 }
@@ -618,6 +650,7 @@ export const getSupplierDetails = async ({
     page = 1,
     pageSize = 20,
     storeId,
+    brandId,
     search,
     status,
 }: SupplierDetailsParams) => {
@@ -626,6 +659,7 @@ export const getSupplierDetails = async ({
             page,
             page_size: pageSize,
             store_id: storeId,
+            brand_id: brandId,
             search,
             status,
         });

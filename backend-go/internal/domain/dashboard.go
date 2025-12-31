@@ -163,3 +163,13 @@ type POSnapshotItemsResponse struct {
 	TotalValue float64          `json:"total_value"`
 	TotalSKUs  int              `json:"total_skus"`
 }
+
+// SupplierDetailsResponse represents the response for supplier details page
+type SupplierDetailsResponse struct {
+	Supplier   *Supplier   `json:"supplier"`
+	POs        []*PODetail `json:"pos"`
+	Total      int         `json:"total"`
+	Page       int         `json:"page"`
+	PageSize   int         `json:"page_size"`
+	TotalPages int         `json:"total_pages"`
+}
