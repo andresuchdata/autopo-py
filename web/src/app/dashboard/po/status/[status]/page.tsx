@@ -318,7 +318,7 @@ export default function POStatusPage() {
             {/* Header */}
             <div className="flex-none p-4 pb-2 border-b border-border/40 bg-background/95 backdrop-blur z-10 sticky top-0">
                 <div className="max-w-[1600px] mx-auto w-full">
-                    <Button variant="ghost" size="sm" onClick={() => router.back()} className="mb-2 text-muted-foreground hover:text-foreground h-8 px-2 -ml-2">
+                    <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/po')} className="mb-2 text-muted-foreground hover:text-foreground h-8 px-2 -ml-2">
                         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
                     </Button>
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
