@@ -13,6 +13,12 @@ wait_for_postgres() {
 
 # Function to run migrations
 run_migrations() {
+  # Check if schema_migrations exists and has a 'version' column (golang-migrate style)
+  if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "\d schema_migrations" 2>/dev/null | grep -q "version"; then
+    echo "Detected golang-migrate style schema_migrations table. Skipping custom entrypoint migrations."
+    return
+  fi
+
   echo "Ensuring schema_migrations table exists..."
   PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" <<'SQL'
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -50,7 +56,10 @@ fi
 
 # Otherwise, run normal startup flow
 wait_for_postgres
-run_migrations
+
+if [ "$SKIP_MIGRATIONS" != "true" ]; then
+  run_migrations
+fi
 
 # Check if we should run seed data
 if [ "$RUN_SEED_DATA" = "true" ]; then

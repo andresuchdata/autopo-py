@@ -384,6 +384,12 @@ func (s *POService) GetPOSnapshotItems(ctx context.Context, statusCode int, page
 	return items, nil
 }
 
+// GetPOSnapshotItemsForExport returns all PO snapshot items for export (no pagination)
+func (s *POService) GetPOSnapshotItemsForExport(ctx context.Context, statusCode int, sortField, sortDirection string, filter *domain.DashboardFilter) ([]domain.POSnapshotItem, error) {
+	// No caching for export for now as it can be large
+	return s.repo.GetPOSnapshotItemsForExport(ctx, statusCode, sortField, sortDirection, filter)
+}
+
 // GetPOAgingItems returns paginated aging items
 func (s *POService) GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string, filter *domain.DashboardFilter) (*domain.POAgingResponse, error) {
 	return s.repo.GetPOAgingItems(ctx, page, pageSize, sortField, sortDirection, status, filter)

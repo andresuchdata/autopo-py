@@ -2,15 +2,18 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/andresuchdata/autopo-py/backend-go/internal/domain"
 	"github.com/andresuchdata/autopo-py/backend-go/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
+	"github.com/xuri/excelize/v2"
 )
 
 type POHandler struct {
@@ -372,6 +375,203 @@ func (h *POHandler) GetPOSnapshotItems(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// DownloadPOSnapshotItems handles downloading PO snapshot items as CSV or Excel
+func (h *POHandler) DownloadPOSnapshotItems(c *gin.Context) {
+	status := c.Query("status")
+	if status == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "status parameter is required"})
+		return
+	}
+
+	statusCode, ok := domain.ParsePOStatus(status)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status value"})
+		return
+	}
+
+	page := parsePositiveIntWithDefault(c.Query("page"), 1)
+	pageSize := parsePositiveIntWithDefault(c.Query("page_size"), 20)
+	sortField := c.DefaultQuery("sort_field", "po_number")
+	sortDirection := c.DefaultQuery("sort_direction", "asc")
+	downloadAll := c.Query("download_all") == "true"
+	format := strings.ToLower(c.DefaultQuery("format", "csv"))
+
+	// Parse optional filter parameters
+	filter := h.parseDashboardFilter(c)
+
+	var items []domain.POSnapshotItem
+	var err error
+
+	if downloadAll {
+		items, err = h.poService.GetPOSnapshotItemsForExport(c.Request.Context(), statusCode, sortField, sortDirection, filter)
+	} else {
+		// Re-use paginated fetch but extract items
+		var response *domain.POSnapshotItemsResponse
+		response, err = h.poService.GetPOSnapshotItems(c.Request.Context(), statusCode, page, pageSize, sortField, sortDirection, filter)
+		if response != nil {
+			items = response.Items
+		}
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch items for download"})
+		return
+	}
+
+	filename := fmt.Sprintf("po_snapshot_%s_%s", status, time.Now().Format("20060102_150405"))
+
+	if format == "xlsx" || format == "excel" {
+		writeExcel(c, items, filename)
+	} else {
+		writeIDLocaleCSV(c, items, filename)
+	}
+}
+
+func writeIDLocaleCSV(c *gin.Context, items []domain.POSnapshotItem, filename string) {
+	c.Header("Content-Type", "text/csv")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s.csv", filename))
+
+	writer := c.Writer
+	// BOM for Excel to recognize UTF-8
+	writer.Write([]byte{0xEF, 0xBB, 0xBF})
+
+	// Header
+	header := []string{
+		"Snapshot Time", "PO Number", "SKU", "Product Name", "Brand", "Store", "Supplier",
+		"Qty", "Total Amount", "Released", "Sent", "Approved", "ETA", "Arrived", "Received",
+	}
+	fmt.Fprintf(writer, "%s\n", strings.Join(header, ";"))
+
+	// Data
+	for _, item := range items {
+		record := []string{
+			formatDateNullable(item.SnapshotTime),
+			escapeCSV(item.PONumber),
+			escapeCSV(item.SKU),
+			escapeCSV(item.ProductName),
+			escapeCSV(item.BrandName),
+			escapeCSV(item.StoreName),
+			escapeCSV(item.SupplierName),
+			fmt.Sprintf("%d", item.POQty),
+			formatNumberID(item.TotalAmount),
+			formatDateNullable(item.POReleasedAt),
+			formatDateNullable(item.POSentAt),
+			formatDateNullable(item.POApprovedAt),
+			formatDateNullable(item.ETA),
+			formatDateNullable(item.POArrivedAt),
+			formatDateNullable(item.POReceivedAt),
+		}
+		fmt.Fprintf(writer, "%s\n", strings.Join(record, ";"))
+	}
+}
+
+func writeExcel(c *gin.Context, items []domain.POSnapshotItem, filename string) {
+	f := excelize.NewFile()
+	sheetName := "PO Items"
+	index, _ := f.NewSheet(sheetName)
+	f.SetActiveSheet(index)
+	f.DeleteSheet("Sheet1")
+
+	headers := []string{
+		"Snapshot Time", "PO Number", "SKU", "Product Name", "Brand", "Store", "Supplier",
+		"Qty", "Total Amount", "Released", "Sent", "Approved", "ETA", "Arrived", "Received",
+	}
+
+	// Style for header
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"#E0E0E0"}, Pattern: 1},
+	})
+
+	// Style for numbers (comma decimal, dot thousands - though Excel might respect local user settings, usually safest to send raw numbers and let Excel format, OR send strings.
+	// User requested ID locale format. "Comma for decimal, dot for thousand".
+	// If we send raw numbers, Excel uses user's system locale.
+	// If we send strings, it stays as is. Given specific requirement, strings might be safer or custom format string.)
+	// Let's use custom number format string like "#.##0,00" but Excel format strings usually use standard US notation in code (e.g. "#,##0.00") and Excel displays it according to locale.
+	// HOWEVER, user requested "Indonesian locale settings (semicolon separator, decimal comma...)". This strongly implies CSV structure.
+	// For Excel, it's a binary format. The "locale" is mostly presentation.
+	// I will just dump values. For "Total Amount", I will use Number type. For dates, I will use string to ensure "DD MMM YYYY".
+
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheetName, cell, h)
+		f.SetCellStyle(sheetName, cell, cell, headerStyle)
+	}
+
+	for i, item := range items {
+		row := i + 2
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), formatDateNullable(item.SnapshotTime))
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), item.PONumber)
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), item.SKU)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), item.ProductName)
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), item.BrandName)
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), item.StoreName)
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), item.SupplierName)
+		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), item.POQty)
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), item.TotalAmount) // Number
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), formatDateNullable(item.POReleasedAt))
+		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), formatDateNullable(item.POSentAt))
+		f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), formatDateNullable(item.POApprovedAt))
+		f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), formatDateNullable(item.ETA))
+		f.SetCellValue(sheetName, fmt.Sprintf("N%d", row), formatDateNullable(item.POArrivedAt))
+		f.SetCellValue(sheetName, fmt.Sprintf("O%d", row), formatDateNullable(item.POReceivedAt))
+	}
+
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s.xlsx", filename))
+	if err := f.Write(c.Writer); err != nil {
+		log.Error().Err(err).Msg("failed to write excel file")
+	}
+}
+
+func formatDateNullable(s *string) string {
+	if s == nil || *s == "" {
+		return "-"
+	}
+	// Try parsing standard SQL format if needed, or if it's already string.
+	// The DB repo uses TO_CHAR(..., 'YYYY-MM-DD HH24:MI:SS') or similar.
+	// We want DD MMM YYYY.
+	t, err := time.Parse("2006-01-02 15:04:05", *s)
+	if err != nil {
+		// Try date only
+		t, err = time.Parse("2006-01-02", *s)
+	}
+	if err == nil {
+		return t.Format("02 Jan 2006")
+	}
+	return *s
+}
+
+func formatNumberID(f float64) string {
+	// 1000.50 -> "1.000,50"
+	s := fmt.Sprintf("%.2f", f)         // "1000.50"
+	s = strings.Replace(s, ".", ",", 1) // "1000,50"
+
+	// Add thousand separators
+	parts := strings.Split(s, ",")
+	integerPart := parts[0]
+	decimalPart := parts[1]
+
+	var result []byte
+	count := 0
+	for i := len(integerPart) - 1; i >= 0; i-- {
+		if count > 0 && count%3 == 0 {
+			result = append([]byte{'.'}, result...)
+		}
+		result = append([]byte{integerPart[i]}, result...)
+		count++
+	}
+
+	return string(result) + "," + decimalPart
+}
+
+func escapeCSV(s string) string {
+	if strings.ContainsAny(s, ";\"\n\r") {
+		return fmt.Sprintf("\"%s\"", strings.ReplaceAll(s, "\"", "\"\""))
+	}
+	return s
 }
 
 // GetSupplierPOItems returns PO entries filtered by supplier

@@ -26,6 +26,7 @@ type PORepository interface {
 	GetPOAging(ctx context.Context, filter *domain.DashboardFilter) ([]domain.POAging, error)
 	GetSupplierPerformance(ctx context.Context, filter *domain.DashboardFilter) ([]domain.SupplierPerformance, error)
 	GetPOSnapshotItems(ctx context.Context, statusCode int, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.POSnapshotItemsResponse, error)
+	GetPOSnapshotItemsForExport(ctx context.Context, statusCode int, sortField, sortDirection string, filter *domain.DashboardFilter) ([]domain.POSnapshotItem, error)
 	GetSupplierPOItems(ctx context.Context, supplierID int64, page, pageSize int, sortField, sortDirection string) (*domain.SupplierPOItemsResponse, error)
 	GetPOAgingItems(ctx context.Context, page, pageSize int, sortField, sortDirection, status string, filter *domain.DashboardFilter) (*domain.POAgingResponse, error)
 	GetSupplierPerformanceItems(ctx context.Context, page, pageSize int, sortField, sortDirection string, filter *domain.DashboardFilter) (*domain.SupplierPerformanceResponse, error)

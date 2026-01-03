@@ -976,6 +976,127 @@ func (r *poRepository) GetPOSnapshotItems(ctx context.Context, statusCode int, p
 	return resp, nil
 }
 
+// GetPOSnapshotItemsForExport gets all matching items without pagination
+func (r *poRepository) GetPOSnapshotItemsForExport(ctx context.Context, statusCode int, sortField, sortDirection string, filter *domain.DashboardFilter) ([]domain.POSnapshotItem, error) {
+	validSortFields := map[string]bool{
+		"snapshot_time": true,
+		"po_number":     true,
+		"brand_name":    true,
+		"supplier_name": true,
+		"sku":           true,
+		"product_name":  true,
+		"store_name":    true,
+		"unit_price":    true,
+		"total_amount":  true,
+		"po_qty":        true,
+	}
+	if !validSortFields[sortField] {
+		sortField = "po_number"
+	}
+
+	if sortDirection != "asc" && sortDirection != "desc" {
+		sortDirection = "asc"
+	}
+
+	filterClause, filterArgs := buildDashboardFilterClause(filter, "s.", 2)
+	statusExpr := "COALESCE(s.status, -1)"
+
+	if filterClause != "" {
+		log.Debug().
+			Str("filter_clause", filterClause).
+			Interface("filter_args", filterArgs).
+			Int("status_code", statusCode).
+			Msg("po dashboard: snapshot export items applying filter")
+	}
+
+	var query string
+	query = fmt.Sprintf(`
+		WITH filtered_snapshots AS (
+			SELECT *
+			FROM po_snapshots s
+			WHERE s.po_number <> '' %s
+		),
+        latest_day AS (
+            SELECT MAX(time::date) AS latest_date
+            FROM filtered_snapshots
+        ),
+        latest_snapshot AS (
+            SELECT 
+                po_number,
+                sku,
+                MAX(time) AS latest_time
+            FROM filtered_snapshots s
+            WHERE time::date = (SELECT latest_date FROM latest_day)
+            GROUP BY po_number, sku
+        ),
+		raw_items AS (
+			SELECT
+				s.po_number,
+				COALESCE(b.name, '') as brand_name,
+				COALESCE(s.supplier_id, 0) as supplier_id,
+				COALESCE(sup.name, '') as supplier_name,
+				s.sku,
+				s.product_name,
+				COALESCE(st.name, '') as store_name,
+				s.unit_price,
+				s.total_amount,
+				s.quantity_ordered as po_qty,
+				s.quantity_received as received_qty,
+				TO_CHAR(s.po_released_at, 'YYYY-MM-DD HH24:MI:SS') as po_released_at,
+				TO_CHAR(s.po_sent_at, 'YYYY-MM-DD HH24:MI:SS') as po_sent_at,
+				TO_CHAR(s.po_approved_at, 'YYYY-MM-DD HH24:MI:SS') as po_approved_at,
+				TO_CHAR(s.po_arrived_at, 'YYYY-MM-DD HH24:MI:SS') as po_arrived_at,
+				TO_CHAR(s.time, 'YYYY-MM-DD HH24:MI:SS') as snapshot_time,
+				s.eta as snapshot_eta
+			FROM po_snapshots s
+			JOIN latest_snapshot ls ON s.po_number = ls.po_number AND s.sku = ls.sku AND s.time = ls.latest_time
+			LEFT JOIN brands b ON s.brand_id = b.id
+			LEFT JOIN suppliers sup ON s.supplier_id = sup.id
+			LEFT JOIN stores st ON s.store_id = st.id
+			WHERE (%s) = $1%s
+			ORDER BY %s %s
+		)
+		SELECT
+			pi.po_number,
+			pi.brand_name,
+			pi.supplier_id,
+			pi.supplier_name,
+			pi.sku,
+			pi.product_name,
+			pi.store_name,
+			pi.unit_price,
+			pi.total_amount,
+			pi.po_qty,
+			pi.received_qty,
+			pi.po_released_at,
+			pi.po_sent_at,
+			pi.po_approved_at,
+			pi.po_arrived_at,
+			pi.snapshot_time,
+			TO_CHAR(COALESCE(poi.eta, pi.snapshot_eta), 'YYYY-MM-DD') as eta
+		FROM raw_items pi
+		LEFT JOIN purchase_orders po ON TRIM(pi.po_number) = TRIM(po.po_number)
+		LEFT JOIN purchase_order_items poi ON po.id = poi.po_id AND TRIM(pi.sku) = TRIM(poi.sku)
+		ORDER BY %s %s
+	`, filterClause, statusExpr, filterClause, sortField, sortDirection, sortField, sortDirection)
+
+	queryArgs := []interface{}{statusCode}
+	queryArgs = append(queryArgs, filterArgs...)
+
+	var items []domain.POSnapshotItem
+	if err := sqlx.SelectContext(ctx, r.db, &items, query, queryArgs...); err != nil {
+		log.Error().Err(err).Int("status_code", statusCode).Msg("failed to fetch PO snapshot items for export")
+		return nil, fmt.Errorf("failed to fetch items for export: %w", err)
+	}
+
+	log.Debug().
+		Int("status_code", statusCode).
+		Int("items", len(items)).
+		Msg("po dashboard: snapshot export items fetched")
+
+	return items, nil
+}
+
 // GetDashboardTotals returns aggregated totals from the latest snapshot
 func (r *poRepository) GetDashboardTotals(ctx context.Context, filter *domain.DashboardFilter) (*domain.PODashboardTotals, error) {
 	return r.getLatestSnapshotTotals(ctx, filter)
