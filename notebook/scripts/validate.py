@@ -837,6 +837,72 @@ def _truthy_flag_series(s: pd.Series) -> pd.Series:
     return s2.isin(["1", "true", "y", "yes", "t"])
 
 
+def _build_hpp_nol_df(df_out: pd.DataFrame, compare_config: dict | None = None) -> pd.DataFrame:
+    def _col(name: str, candidates: list[str]) -> str | None:
+        if name in df_out.columns:
+            return name
+        return _find_col(df_out, candidates)
+
+    out_cols = [
+        "Brand",
+        "Kategori Brand",
+        "SKU",
+        "Nama",
+        "Toko",
+        "Stok",
+        "Daily Sales",
+        "Max. Daily Sales",
+        "Lead Time",
+        "Max. Lead Time",
+        "Min. Order",
+        "Sedang PO",
+        "HPP",
+        "Harga",
+        "is_top_100_sku",
+        "is_open_po",
+        "emergency_po_qty",
+        "final_updated_regular_po_qty",
+        "emergency_po_cost",
+        "final_updated_regular_po_cost",
+    ]
+
+    col_map: dict[str, str | None] = {
+        "Brand": _col("Brand", ["brand", "Brand"]),
+        "Kategori Brand": _col("Kategori Brand", ["Kategori Brand", "Kategori", "Category"]),
+        "SKU": _col("SKU", ["SKU", "Sku"]),
+        "Nama": _col("Nama", ["Nama", "Name", "Product", "Produk"]),
+        "Toko": _col("Toko", ["Toko", "Store", "Outlet"]),
+        "Stok": _col("Stok", ["Stok", "Stock"]),
+        "Daily Sales": _col("Daily Sales", ["Daily Sales"]),
+        "Max. Daily Sales": _col("Max. Daily Sales", ["Max. Daily Sales"]),
+        "Lead Time": _col("Lead Time", ["Lead Time"]),
+        "Max. Lead Time": _col("Max. Lead Time", ["Max. Lead Time"]),
+        "Min. Order": _col("Min. Order", ["Min. Order", "Min Order", "MOQ"]),
+        "Sedang PO": _col("Sedang PO", ["Sedang PO", "On PO", "Sedang Po"]),
+        "HPP": _col("HPP", ["HPP", "Hpp", "COGS", "Cogs"]),
+        "Harga": _col("Harga", ["Harga", "Price", "Selling Price"]),
+        "is_top_100_sku": _col("is_top_100_sku", ["is_top_100_sku"]),
+        "is_open_po": _col("is_open_po", ["is_open_po"]),
+        "emergency_po_qty": _col("emergency_po_qty", ["emergency_po_qty"]),
+        "final_updated_regular_po_qty": _col("final_updated_regular_po_qty", ["final_updated_regular_po_qty"]),
+        "emergency_po_cost": _col("emergency_po_cost", ["emergency_po_cost"]),
+        "final_updated_regular_po_cost": _col("final_updated_regular_po_cost", ["final_updated_regular_po_cost"]),
+    }
+
+    tmp = pd.DataFrame(index=df_out.index)
+    for out_name in out_cols:
+        src = col_map.get(out_name)
+        tmp[out_name] = df_out[src] if src and src in df_out.columns else ""
+
+    if "HPP" not in tmp.columns:
+        return tmp.iloc[0:0]
+
+    hpp_num = _to_number_series(tmp["HPP"], compare_config=compare_config)
+    daily_sales_num = _to_number_series(tmp["Daily Sales"], compare_config=compare_config)
+    mask = hpp_num.fillna(0).le(0) & daily_sales_num.fillna(0).gt(0)
+    return tmp.loc[mask, out_cols].copy()
+
+
 def _build_top100_comparison_df(
     in_file: Path,
     out_file: Path,
@@ -1099,6 +1165,7 @@ def _export_store_xlsx(
     mismatches_df: pd.DataFrame,
     metrics_df: pd.DataFrame,
     top100_cmp_df: pd.DataFrame,
+    hpp_nol_df: pd.DataFrame,
 ):
     result_xlsx_path = Path(result_xlsx_path)
     result_xlsx_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1118,7 +1185,12 @@ def _export_store_xlsx(
             metrics_df.to_excel(writer, index=False, sheet_name="metrics")
             ws3 = writer.sheets["metrics"]
             ws3.auto_filter.ref = ws3.cell(row=1, column=1).coordinate + ":" + ws3.cell(row=ws3.max_row, column=ws3.max_column).coordinate
-            
+
+            # Master data validation: HPP <= 0
+            hpp_nol_df.to_excel(writer, index=False, sheet_name="hpp nol")
+            ws_hpp = writer.sheets["hpp nol"]
+            ws_hpp.auto_filter.ref = ws_hpp.cell(row=1, column=1).coordinate + ":" + ws_hpp.cell(row=ws_hpp.max_row, column=ws_hpp.max_column).coordinate
+
             # Apply formatting to metrics sheet
             # Column 1 = metric name, Column 2 = value
             for row in range(2, ws3.max_row + 1):
@@ -1247,6 +1319,8 @@ def run_validation_for_date(
 
                 if export_xlsx_per_store:
                     result_xlsx_path = results_dir / f"{in_file.stem}.xlsx"
+
+                    hpp_nol_df = _build_hpp_nol_df(df_out, compare_config=compare_config)
                     fut = executor.submit(
                         _export_store_xlsx,
                         result_xlsx_path,
@@ -1254,6 +1328,7 @@ def run_validation_for_date(
                         mismatches_df,
                         metrics_df,
                         top100_cmp_df,
+                        hpp_nol_df,
                     )
                     export_futures.append((in_file.name, store_name, fut, str(result_xlsx_path)))
                     export_status = "scheduled"
@@ -1361,6 +1436,13 @@ def run_validation_for_date(
 
         ws = writer.sheets["index"]
         ws.auto_filter.ref = ws.cell(row=1, column=1).coordinate + ":" + ws.cell(row=ws.max_row, column=ws.max_column).coordinate
+
+        # Ensure No column is treated as numeric in Excel
+        for col_idx, col_name in enumerate(summary_df.columns, 1):
+            if col_name == "No":
+                col_letter = openpyxl.utils.get_column_letter(col_idx)
+                for row in range(2, ws.max_row + 1):
+                    ws[f"{col_letter}{row}"].number_format = "#,##0"
 
         cost_cols = ["sum_emergency_po_cost", "sum_final_updated_po_cost"]
         for col_idx, col_name in enumerate(summary_df.columns, 1):
