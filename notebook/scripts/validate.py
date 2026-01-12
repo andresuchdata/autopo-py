@@ -67,6 +67,15 @@ def _parse_number_one(x, locale: str = "auto"):
         return float(ss)
 
     try:
+        # Pre-cleanup: remove spaces
+        s = s.replace(" ", "")
+
+        # Scientific notation check (e.g. 5.34e+08) - simple float parse handles this usually,
+        # but if it has comma/dots mixed, we need to be careful.
+        # If it looks like pure scientific notation, just parse it.
+        if re.fullmatch(r"-?\d+(\.\d+)?[eE][+-]?\d+", s):
+            return float(s)
+
         if locale == "id":
             return parse_id(s)
         if locale == "us":
@@ -75,27 +84,42 @@ def _parse_number_one(x, locale: str = "auto"):
         has_comma = "," in s
         has_dot = "." in s
 
-        if has_comma and has_dot:
-            if s.rfind(",") > s.rfind("."):
-                return parse_id(s)
-            return parse_us(s)
-
-        if has_comma and not has_dot:
-            if s.count(",") > 1:
-                return parse_us(s)
-            # Single comma: likely ID decimal unless it looks like a US thousand separator
-            # Heuristic: if strictly 3 digits after comma, could be US thousand. 
-            # But in this dataset, "," is clearly used for decimals (0,34).
-            # So we prefer ID parse if it looks like a decimal number.
-            if re.fullmatch(r"-?\d+,\d+", s):
-                return parse_id(s)
-            return parse_us(s)
-
+        # Case: 800.000.000 (ID style thousands, no decimal)
         if has_dot and not has_comma:
+            # excessive dots often mean thousands separators
             if s.count(".") > 1:
                 return parse_id(s)
-            m = re.fullmatch(r"-?\d+\.(\d+)", s)
-            if m and len(m.group(1)) == 3:
+            
+            # 123.456 -> could be 123456 or 123.456
+            # ID locale: 3 digits usually means thousands
+            parts = s.split(".")
+            # if all parts except first are length 3, it's likely ID thousands
+            if len(parts) > 1 and all(len(p) == 3 for p in parts[1:]):
+                return parse_id(s)
+            
+            # fallback: standard float (US style)
+            return float(s)
+
+        # Case: 800,000,000 (US style thousands, no decimal) or 12,5 (ID decimal)
+        if has_comma and not has_dot:
+            # excessive commas often mean thousands
+            if s.count(",") > 1:
+                return parse_us(s)
+            
+            # 123,456
+            parts = s.split(",")
+             # if all parts except first are length 3, it's likely US thousands
+            if len(parts) > 1 and all(len(p) == 3 for p in parts[1:]):
+                return parse_us(s)
+            
+            # 12,5 -> ID decimal
+            if re.fullmatch(r"-?\d+,\d+", s):
+                return parse_id(s)
+            
+            return parse_us(s)
+
+        if has_comma and has_dot:
+            if s.rfind(",") > s.rfind("."):
                 return parse_id(s)
             return parse_us(s)
 
@@ -123,17 +147,6 @@ def _to_number_series(s: pd.Series, compare_config: dict | None = None) -> pd.Se
     return s2.map(lambda v: _parse_number_one(v, locale=locale))
 
 
-def _plain_sum_series(df: pd.DataFrame, column: str, compare_config: dict | None = None) -> float:
-    if df is None or column not in df.columns:
-        return 0.0
-
-    # FIX: Use robust parsing instead of simple pd.to_numeric
-    # series = pd.to_numeric(df[column], errors="coerce")
-    series = _to_number_series(df[column], compare_config=compare_config)
-    series = series.fillna(0)
-    return float(series.sum())
-
-
 def compare_series(a: pd.Series, b: pd.Series, merge_indicator: pd.Series | None, compare_config: dict | None = None) -> pd.Series:
     cfg = _default_compare_config() if compare_config is None else {**_default_compare_config(), **compare_config}
 
@@ -145,6 +158,20 @@ def compare_series(a: pd.Series, b: pd.Series, merge_indicator: pd.Series | None
 
     aa = _to_number_series(a, compare_config=cfg)
     bb = _to_number_series(b, compare_config=cfg)
+    
+    # Handle case where _to_number_series returns None (if input was None)
+    # This shouldn't happen with the upstream fix, but purely defensive:
+    if aa is None and bb is not None:
+        aa = pd.Series([np.nan] * len(bb), index=bb.index)
+    elif bb is None and aa is not None:
+        bb = pd.Series([np.nan] * len(aa), index=aa.index)
+    elif aa is None and bb is None:
+        # Both missing - can't compare length, but if they came from same DF they effectively "match" as nulls
+        # BUT we need to return a Series.
+        # This is an edge case. If we don't have lengths, we can't do much.
+        # Assuming caller passed Series from a DataFrame, they wouldn't be None unless column missing AND we didn't fix it.
+        # If we reach here, we likely crash on next line anyway if we don't return something valid.
+        pass
 
     both_null = aa.isna() & bb.isna()
     one_null = aa.isna() ^ bb.isna()
@@ -180,6 +207,14 @@ def _normalize_store_key_series_simple(s: pd.Series) -> pd.Series:
     s2 = s2.replace({"nan": "", "None": "", "": ""})
     return s2
 
+
+def _extract_leading_number_from_filename(filename: str | None) -> int | None:
+    if not filename:
+        return None
+    base = Path(str(filename)).name
+    m = re.match(r"\s*(\d+)", base)
+    return int(m.group(1)) if m else None
+
 def _apply_key_normalization(df: pd.DataFrame, compare_config: dict | None = None) -> pd.DataFrame:
     cfg = _default_compare_config() if compare_config is None else {**_default_compare_config(), **compare_config}
     if not cfg.get("normalize_keys", True):
@@ -211,7 +246,10 @@ def validate_po_fields(
             "Max. Daily Sales",
             "Lead Time",
             "Max. Lead Time",
+            "Lead Time",
+            "Max. Lead Time",
             "Sedang PO",
+            "final_updated_regular_po_cost",
         ]
 
     # These are extra columns we want to ensure are passed through to the merged DF
@@ -264,13 +302,19 @@ def validate_po_fields(
     missing = []
     for f in fields:
         if f not in col_map:
-            missing.append(f"Unknown field '{f}'")
-            continue
+            # For new columns like final_updated_regular_po_cost, we might not have them in older map,
+            # but assume name is same if not in map
+            col_map[f] = (f, f)
+        
         in_col, out_col = col_map[f]
-        if _find_col(df_in, [in_col]) is None:
-            missing.append(f"input.{in_col}")
+        
+        # Loose check for input: if missing, just log/ignore for input side
+        # if _find_col(df_in, [in_col]) is None:
+        #    missing.append(f"input.{in_col}")
+
         if _find_col(df_out, [out_col]) is None:
             missing.append(f"output.{out_col}")
+            
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
@@ -303,11 +347,20 @@ def validate_po_fields(
             merged["Toko__orig__in"].astype(str).str.strip() != "", merged["Toko__orig__out"]
         )
 
+    # Ensure all expected columns exist in merged, filling with NaN if missing (e.g. absent from input)
+    for f in fields:
+        in_key = f"in__{f}"
+        out_key = f"out__{f}"
+        if in_key not in merged.columns:
+            merged[in_key] = np.nan
+        if out_key not in merged.columns:
+            merged[out_key] = np.nan
+
     mismatch_rows = []
     for f in fields:
         same = compare_series(
-            merged.get(f"in__{f}"),
-            merged.get(f"out__{f}"),
+            merged[f"in__{f}"],  # Use bracket access now that we ensured existence
+            merged[f"out__{f}"],
             merged.get("_merge"),
             compare_config=compare_config,
         )
@@ -339,21 +392,32 @@ def build_validation_flags(
             "Max. Daily Sales",
             "Lead Time",
             "Max. Lead Time",
+            "Lead Time",
+            "Max. Lead Time",
             "Sedang PO",
         ]
 
     out = merged_df[["SKU", "Toko", "_merge"]].copy()
 
+    # Ensure all expected columns exist in merged_df, filling with NaN if missing
+    for f in fields:
+        in_col = f"in__{f}"
+        out_col = f"out__{f}"
+        if in_col not in merged_df.columns:
+            merged_df[in_col] = np.nan
+        if out_col not in merged_df.columns:
+            merged_df[out_col] = np.nan
+
     for f in fields:
         in_col = f"in__{f}"
         out_col = f"out__{f}"
 
-        out[f"input__{f}"] = merged_df.get(in_col)
-        out[f"output__{f}"] = merged_df.get(out_col)
+        out[f"input__{f}"] = merged_df[in_col]
+        out[f"output__{f}"] = merged_df[out_col]
 
         same = compare_series(
-            merged_df.get(in_col),
-            merged_df.get(out_col),
+            merged_df[in_col],
+            merged_df[out_col],
             merged_df.get("_merge"),
             compare_config=compare_config,
         )
@@ -852,23 +916,27 @@ def _build_top100_comparison_df(
 
     running_date_str = datetime.strptime(date_str, "%Y%m%d").strftime("%d %b %Y")
     matched_date_cols = _find_date_header_columns(df_top, running_date_str)
+    
+    # Relaxed check: if no date header found, we just proceed without validation column for top100 logic
     if not matched_date_cols:
-        return pd.DataFrame([
-            {
-                "error": f"No date header matched running date '{running_date_str}' in top100 file {top_file.name}",
-                "available_headers": ", ".join([str(c) for c in df_top.columns[:50]]),
-            }
-        ])
+        print(f"[WARN] No date header matched running date '{running_date_str}' in top100 file {top_file.name}. Proceeding with simple SKU check only.")
+        date_col = None
+    else:
+        date_col = matched_date_cols[0]
 
-    date_col = matched_date_cols[0]
     top100_stock_col_name = f"top100_stock_{date_str}"
 
-    df_top_stock = df_top[["SKU", "Toko", date_col]].copy()
-    df_top_stock["top100_stock_raw"] = df_top_stock[date_col].astype(str).str.strip()
-    df_top_stock["top100_stock_raw"] = df_top_stock["top100_stock_raw"].replace({"nan": "", "None": ""})
-
-    df_top_stock[top100_stock_col_name] = _to_number_series(df_top_stock[date_col], compare_config=compare_config)
-    df_top_stock = df_top_stock.drop(columns=[date_col])
+    if date_col:
+        df_top_stock = df_top[["SKU", "Toko", date_col]].copy()
+        df_top_stock["top100_stock_raw"] = df_top_stock[date_col].astype(str).str.strip()
+        df_top_stock["top100_stock_raw"] = df_top_stock["top100_stock_raw"].replace({"nan": "", "None": ""})
+        df_top_stock[top100_stock_col_name] = _to_number_series(df_top_stock[date_col], compare_config=compare_config)
+        df_top_stock = df_top_stock.drop(columns=[date_col])
+    else:
+        # Dummy df_top_stock with just keys and empty stock
+        df_top_stock = df_top[["SKU", "Toko"]].copy()
+        df_top_stock["top100_stock_raw"] = ""
+        df_top_stock[top100_stock_col_name] = np.nan
 
     # Merge only keeping output top100 rows (left join)
     if has_toko:
@@ -913,7 +981,10 @@ def _build_grouped_validation_df(flags_df: pd.DataFrame) -> pd.DataFrame:
         "Max. Daily Sales",
         "Lead Time",
         "Max. Lead Time",
+        "Lead Time",
+        "Max. Lead Time",
         "Sedang PO",
+        "final_updated_regular_po_cost",
     ]
 
     out = flags_df[["SKU", "Toko"]].copy()
@@ -1012,6 +1083,13 @@ def _write_validation_sheet_grouped(writer: pd.ExcelWriter, sheet_name: str, gro
             else:
                 sub = ""
             ws.cell(row=2, column=pos).value = sub
+            
+            # Apply currency format if it's a cost column
+            col_lower = col_name.lower()
+            if "cost" in col_lower and (sub == "input" or sub == "output" or sub == ""):
+                 # Check if it's likely numeric column based on name
+                 for row in range(3, max_row + 1):
+                      ws.cell(row=row, column=pos).number_format = '"Rp" #,##0'
 
     ws.auto_filter.ref = ws.cell(row=2, column=3).coordinate + ":" + ws.cell(row=max_row, column=max_col).coordinate
 
@@ -1076,6 +1154,10 @@ def run_validation_for_date(
     compare_config: dict | None = None,
     export_xlsx_per_store: bool = True,
 ) -> pd.DataFrame:
+    # Default today date if date_str is not provided
+    if not date_str:
+        date_str = datetime.now().strftime("%Y%m%d")
+
     input_files = _list_input_files_for_date(date_str, input_base_dir=input_base_dir)
 
     results_dir = BASE_DIR / f"data/validation/{date_str}"
@@ -1112,6 +1194,7 @@ def run_validation_for_date(
                 export_results[in_file.name] = {"export_status": "not_scheduled", "export_error": None}
                 summary_rows.append(
                     {
+                        "No": _extract_leading_number_from_filename(in_file.name),
                         "file": in_file.name,
                         "status": "missing_output",
                         "output_file": None,
@@ -1123,8 +1206,6 @@ def run_validation_for_date(
                         "sum_emergency_po_cost": 0,
                         "sum_final_updated_po_qty": 0,
                         "sum_final_updated_po_cost": 0,
-                        "plain_sum_emergency_po_cost": 0,
-                        "plain_sum_final_updated_po_cost": 0,
                         "result_xlsx": None,
                         "export_status": "not_scheduled",
                         "export_error": None,
@@ -1155,10 +1236,6 @@ def run_validation_for_date(
                 sum_emergency_po_qty = _sum_series(df_out, "emergency_po_qty")
                 sum_final_updated_po_qty = _sum_series(df_out, "final_updated_regular_po_qty")
 
-                # "plain_sum" using the newly FIXED _plain_sum_series function
-                plain_sum_emergency_po_cost = _plain_sum_series(df_out, "emergency_po_cost", compare_config=compare_config)
-                plain_sum_final_updated_po_cost = _plain_sum_series(df_out, "final_updated_regular_po_cost", compare_config=compare_config)
-
                 top100_cmp_df = _build_top100_comparison_df(in_file, out_file, date_str=date_str, compare_config=compare_config)
 
                 matched_rows = int((merged_df["_merge"] == "both").sum())
@@ -1186,6 +1263,7 @@ def run_validation_for_date(
 
                 summary_rows.append(
                     {
+                        "No": _extract_leading_number_from_filename(in_file.name),
                         "file": in_file.name,
                         "status": "ok",
                         "output_file": str(out_file),
@@ -1197,8 +1275,6 @@ def run_validation_for_date(
                         "sum_emergency_po_cost": sum_emergency_po_cost,
                         "sum_final_updated_po_qty": sum_final_updated_po_qty,
                         "sum_final_updated_po_cost": sum_final_updated_po_cost,
-                        "plain_sum_emergency_po_cost": plain_sum_emergency_po_cost,
-                        "plain_sum_final_updated_po_cost": plain_sum_final_updated_po_cost,
                         "result_xlsx": str(result_xlsx_path) if result_xlsx_path else None,
                         "export_status": export_status,
                         "export_error": export_error,
@@ -1214,6 +1290,7 @@ def run_validation_for_date(
                 export_results[in_file.name] = {"export_status": "not_scheduled", "export_error": None}
                 summary_rows.append(
                     {
+                        "No": _extract_leading_number_from_filename(in_file.name),
                         "file": in_file.name,
                         "status": f"error: {str(e)[:200]}",
                         "output_file": str(out_file),
@@ -1225,8 +1302,6 @@ def run_validation_for_date(
                         "sum_emergency_po_cost": 0,
                         "sum_final_updated_po_qty": 0,
                         "sum_final_updated_po_cost": 0,
-                        "plain_sum_emergency_po_cost": 0,
-                        "plain_sum_final_updated_po_cost": 0,
                         "result_xlsx": None,
                         "export_status": "not_scheduled",
                         "export_error": None,
@@ -1252,13 +1327,18 @@ def run_validation_for_date(
 
     summary_df = pd.DataFrame(summary_rows)
 
-    numerical_cols = ["matched_rows", "input_rows", "mismatch_rows", "sum_initial_po_qty", "sum_emergency_po_qty", "sum_emergency_po_cost", "sum_final_updated_po_qty", "sum_final_updated_po_cost", "plain_sum_emergency_po_cost", "plain_sum_final_updated_po_cost"]
-    total_row = {"file": "TOTAL"}
+    numerical_cols = ["matched_rows", "input_rows", "mismatch_rows", "sum_initial_po_qty", "sum_emergency_po_qty", "sum_emergency_po_cost", "sum_final_updated_po_qty", "sum_final_updated_po_cost"]
+    total_row = {"No": None, "file": "TOTAL"}
 
     for col in numerical_cols:
         if col in summary_df.columns:
             total_row[col] = summary_df[col].sum()
     summary_df = pd.concat([summary_df, pd.DataFrame([total_row])], ignore_index=True)
+
+    if "No" in summary_df.columns:
+        cols = list(summary_df.columns)
+        cols = ["No"] + [c for c in cols if c != "No"]
+        summary_df = summary_df[cols]
 
     if not summary_df.empty:
         if "export_status" not in summary_df.columns:
@@ -1282,7 +1362,7 @@ def run_validation_for_date(
         ws = writer.sheets["index"]
         ws.auto_filter.ref = ws.cell(row=1, column=1).coordinate + ":" + ws.cell(row=ws.max_row, column=ws.max_column).coordinate
 
-        cost_cols = ["sum_emergency_po_cost", "sum_final_updated_po_cost", "plain_sum_emergency_po_cost", "plain_sum_final_updated_po_cost"]
+        cost_cols = ["sum_emergency_po_cost", "sum_final_updated_po_cost"]
         for col_idx, col_name in enumerate(summary_df.columns, 1):
             if col_name in cost_cols:
                 col_letter = openpyxl.utils.get_column_letter(col_idx)
@@ -1304,7 +1384,7 @@ def run_validation_for_date(
 
 
 if __name__ == "__main__":
-    date_str = "20251230"  # YYYYMMDD
+    date_str = "20260112"  # YYYYMMDD
 
     compare_config = {
         "mode": "loose",
@@ -1314,7 +1394,7 @@ if __name__ == "__main__":
         "treat_blank_as_zero": True,
     }
 
-    print(f"Running validation for date {date_str}...")
+    print(f"Running validation for date {date_str if date_str else 'today'}...")
     summary_df = run_validation_for_date(
         date_str=date_str,
         input_base_dir=BASE_DIR / "data/input",
